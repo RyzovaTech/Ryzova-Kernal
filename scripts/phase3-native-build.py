@@ -192,7 +192,7 @@ runtime_commands=[
     "mkdir -p /tmp/ryzova-9p; ramfs -m /tmp/ryzova-9p; echo RYZOVA_RUNTIME_STAGE_0",
     "echo RYZOVA_9P_DATA > /tmp/ryzova-9p/probe; grep RYZOVA_9P_DATA /tmp/ryzova-9p/probe > /dev/null && echo RYZOVA_9P_OK; echo RYZOVA_RUNTIME_STAGE_1",
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
-    "ip/ipconfig -d ether /net/ether0; webfs; echo RYZOVA_RUNTIME_STAGE_3",
+    "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_DONE",
 ]
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,runtime_test=False,runtime_stage=-1)
