@@ -1362,7 +1362,7 @@ i225pci(void)
 		c->portmmio = vmap(c->port, p->mem[0].size);
 		if (c->portmmio == nil) {
 			print("i225: no memory for ctlr mmio");
-			vunmap(c->portmmio, p->mem[0].size);
+			/* Mapping failed; no address was acquired to unmap. */
 			free(c);
 			continue;
 		}
