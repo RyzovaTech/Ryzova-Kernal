@@ -1,10 +1,12 @@
 # Ryzova Kernel
 
+[![Ryzova-owned code: AGPLv3](https://img.shields.io/badge/Ryzova--owned%20code-AGPLv3-blue)](LICENSES/AGPL-3.0-only.txt) [![9front: MIT + exceptions](https://img.shields.io/badge/9front-MIT%20%2B%20exceptions-orange)](lib/legal/NOTICE) [![Commercial alternative: Ryzova rights only](https://img.shields.io/badge/commercial%20alternative-Ryzova%20rights%20only-lightgrey)](COMMERCIAL-LICENSING.md)
+
 **A New Life for a Forgotten Vision**
 
 Ryzova Kernel is a **9front-derived general-purpose kernel project**. The plan is to retain and extend the strengths of Plan 9/9front—namespaces, 9P and network-oriented resource interfaces—while developing Ryzova-specific capabilities. RyzovaOS and third-party OS variants are future consumers of this kernel.
 
-> **Status: Phase 2 policy and licensing foundation in progress; native AMD64 build and QEMU boot not yet verified.** The imported tree remains upstream-derived source, not yet a separately working Ryzova kernel.
+> **Status: Phase 2 project policies and license inventory complete (formal legal clearance pending); native AMD64 build and QEMU boot of this source tree not yet verified.** The imported tree remains upstream-derived source, not yet a separately working Ryzova kernel.
 
 ## Branches and source
 
@@ -23,6 +25,7 @@ Initial integrated upstream revision: `a0806493926c04ce90d4e4a46961dec30a1054dd`
 - Source-history, layout and license-notice checks: [GitHub Actions](https://github.com/RyzovaTech/Ryzova-Kernal/actions).
 - AMD64 kernel source: `sys/src/9/pc64/`.
 - Native build and QEMU boot procedure: [docs/BUILD.md](docs/BUILD.md) (**not yet performed**).
+- Pre-Phase 3 boot checks and the difference between an upstream release VM and a kernel built from this repository: [docs/PRE-PHASE3-BOOT.md](docs/PRE-PHASE3-BOOT.md).
 - Preliminary licensing findings: [docs/LICENSE-REVIEW.md](docs/LICENSE-REVIEW.md).
 
 
