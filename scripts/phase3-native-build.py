@@ -156,6 +156,10 @@ with (OUT/"host.log").open("wb") as host:
         server.shutdown()
 
 text=bytes(raw).decode("utf-8",errors="replace")
+# Plan 9's rc expands $status to an empty string on success, and an error
+# description for a failed attempt to open the read-only identity device.
+# A terminal echo of the command is not accepted as proof of the returned status.
+write_denied=bool(re.search(rb"(?:\\r?\\n)RYZOVA_WRITE_STATUS_[^\\r\\n\\s$]+",bytes(bootlog)))
 (OUT/"result.txt").write_text(
     f"Source SHA: {SOURCE_SHA}\n"
     f"Source transfer: {'PASS' if marks.get('fetch-repository-source') else 'NOT CONFIRMED'}\n"
@@ -221,7 +225,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 bootstate["user"]=True
                 print("FRESH KERNEL: userspace login reached",flush=True)
             if b"term%" in tail and bootstate["user"] and not bootstate["command"]:
-                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; test -d /proc && echo RYZOVA_PROC_OK; test -d /net && echo RYZOVA_NET_OK; mkdir -p /tmp/ryzova-ns; bind '#Z' /tmp/ryzova-ns; cat /tmp/ryzova-ns/version; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
+                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; test -d /proc && echo RYZOVA_PROC_OK; test -d /net && echo RYZOVA_NET_OK; mkdir -p /tmp/ryzova-ns; bind '#Z' /tmp/ryzova-ns; cat /tmp/ryzova-ns/version; echo NOT_ALLOWED > '#Z/version'; echo RYZOVA_WRITE_STATUS_$status; cat '#Z/version'; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
                 bootstate["command"]=True
                 print("FRESH KERNEL: rc probe sent",flush=True)
             if re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)):
@@ -249,8 +253,8 @@ runtime_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)", bytes(bootlog)) for v in
     f"V4 basic proc/net and per-process bind checks: {runtime_ok}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and write_denied):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
-print("PASS V3/V4: source-built Ryzova kernel booted, exposed #Z identity, and passed basic proc/net/bind checks.",flush=True)
+print("PASS V3/V4: source-built Ryzova kernel booted, exposed #Z identity, and passed basic proc/net/bind/read-only checks.",flush=True)
 
