@@ -1,0 +1,16 @@
+</$objtype/mkfile
+
+BIN=/$objtype/bin/image
+TARG=\
+	correlate\
+	affinewarp\
+	histogram\
+	crop\
+
+OFILES=\
+	util.$O\
+
+HFILES=\
+	fns.h\
+
+</sys/src/cmd/mkmany

@@ -1,0 +1,110 @@
+#include <u.h>
+#include <libc.h>
+#include <draw.h>
+
+Image *
+creadimage(Display *d, int fd, int)
+{
+	char hdr[5*12+1];
+	Rectangle r;
+	int m, nb, miny, maxy, new, ldepth, ncblock;
+	uchar *buf;
+	Image *i;
+	ulong chan;
+
+	if(readn(fd, hdr, 5*12) != 5*12){
+		werrstr("creadimage: short header");
+		return nil;
+	}
+
+	/*
+	 * distinguish new channel descriptor from old ldepth.
+	 * channel descriptors have letters as well as numbers,
+	 * while ldepths are a single digit formatted as %-11d.
+	 */
+	new = 0;
+	for(m=0; m<10; m++){
+		if(hdr[m] != ' '){
+			new = 1;
+			break;
+		}
+	}
+	if(hdr[11] != ' '){
+		werrstr("creadimage: bad format");
+		return nil;
+	}
+	if(new){
+		hdr[11] = '\0';
+		if((chan = strtochan(hdr)) == 0){
+			werrstr("creadimage: bad channel string %s", hdr);
+			return nil;
+		}
+	}else{
+		ldepth = ((int)hdr[10])-'0';
+		if(ldepth<0 || ldepth>3){
+			werrstr("creadimage: bad ldepth %d", ldepth);
+			return nil;
+		}
+		chan = drawld2chan[ldepth];
+	}
+	r.min.x=atoi(hdr+1*12);
+	r.min.y=atoi(hdr+2*12);
+	r.max.x=atoi(hdr+3*12);
+	r.max.y=atoi(hdr+4*12);
+	if(r.min.x>r.max.x || r.min.y>r.max.y){
+		werrstr("creadimage: bad rectangle");
+		return nil;
+	}
+
+	if(d != nil){
+		i = allocimage(d, r, chan, 0, 0);
+		if(i == nil)
+			return nil;
+	}else{
+		i = mallocz(sizeof(Image), 1);
+		if(i == nil)
+			return nil;
+	}
+	setmalloctag(i, getcallerpc(&d));
+	ncblock = _compblocksize(r, chantodepth(chan));
+	buf = malloc(ncblock);
+	if(buf == nil)
+		goto Errout;
+	miny = r.min.y;
+	while(miny != r.max.y){
+		if(readn(fd, hdr, 2*12) != 2*12){
+		Shortread:
+			werrstr("creadimage: short read");
+		Errout:
+			freeimage(i);
+			free(buf);
+			return nil;
+		}
+		maxy = atoi(hdr+0*12);
+		nb = atoi(hdr+1*12);
+		if(maxy<=miny || r.max.y<maxy){
+			werrstr("creadimage: bad maxy %d", maxy);
+			goto Errout;
+		}
+		if(nb<=0 || ncblock<nb){
+			werrstr("creadimage: bad count %d", nb);
+			goto Errout;
+		}
+		if(readn(fd, buf, nb)!=nb)
+			goto Shortread;
+		if(d != nil){
+			if(!new)	/* old image: flip the data bits */
+				_twiddlecompressed(buf, nb);
+			_lockdisplay(d);
+			if(drawcmd(i->display, "blllll<",
+			    'Y', i->id, r.min.x, miny, r.max.x, maxy, nb, buf) < 0){
+				_unlockdisplay(d);
+				goto Errout;
+			}
+			_unlockdisplay(d);
+		}
+		miny = maxy;
+	}
+	free(buf);
+	return i;
+}
