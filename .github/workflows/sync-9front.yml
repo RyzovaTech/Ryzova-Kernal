@@ -1,0 +1,59 @@
+name: Sync 9front upstream history
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sync-9front.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '23 2 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ryzova-9front-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Import upstream/front (no auto-merge)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out Ryzova control branch with history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Fetch complete 9front front history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add ninefront https://github.com/9front/9front.git
+          git fetch --no-tags ninefront +refs/heads/front:refs/remotes/ninefront/front
+          test "$(git rev-parse --is-shallow-repository)" = "false"
+          git rev-parse --verify refs/remotes/ninefront/front^{commit}
+          printf '9front upstream SHA: %s\n' "$(git rev-parse refs/remotes/ninefront/front)"
+
+      - name: Publish only upstream/front (fast-forward)
+        shell: bash
+        run: |
+          set -euo pipefail
+          new_sha="$(git rev-parse refs/remotes/ninefront/front)"
+          current_sha="$(git ls-remote --heads origin refs/heads/upstream/front | cut -f1)"
+          if [ "$current_sha" = "$new_sha" ]; then
+            echo 'Already up to date.'
+            exit 0
+          fi
+          if [ -n "$current_sha" ]; then
+            git cat-file -e "$current_sha^{commit}" || git fetch --no-tags origin "$current_sha"
+            if ! git merge-base --is-ancestor "$current_sha" "$new_sha"; then
+              echo 'Upstream history diverged. Refusing to force-push.' >&2
+              exit 1
+            fi
+          fi
+          git push origin "$new_sha:refs/heads/upstream/front"
+          echo "Updated upstream/front to $new_sha"
