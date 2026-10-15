@@ -9,6 +9,9 @@ on:
       - 'amd64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
+      - 'scripts/extract-9pc64.py'
+      - 'scripts/check-identity.py'
+      - 'scripts/verify-foundation.sh'
       - '.github/workflows/phase3-native-build.yml'
   pull_request:
     branches: [main]
@@ -18,6 +21,9 @@ on:
       - 'amd64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
+      - 'scripts/extract-9pc64.py'
+      - 'scripts/check-identity.py'
+      - 'scripts/verify-foundation.sh'
       - '.github/workflows/phase3-native-build.yml'
   workflow_dispatch:
 
