@@ -221,7 +221,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 bootstate["user"]=True
                 print("FRESH KERNEL: userspace login reached",flush=True)
             if b"term%" in tail and bootstate["user"] and not bootstate["command"]:
-                guest.sendall(b"echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
+                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
                 bootstate["command"]=True
                 print("FRESH KERNEL: rc probe sent",flush=True)
             if re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)):
