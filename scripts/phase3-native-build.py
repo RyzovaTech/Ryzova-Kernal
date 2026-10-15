@@ -72,6 +72,10 @@ stages = [
      "echo PHASE3_END_3"),
     ("inspect-boot-disk",
      "9fs 9fat; ls -l /n/9fat; cat /n/9fat/plan9.ini; echo PHASE3_END_4"),
+    ("install-fresh-bootfile",
+     "cd /sys/src/9/pc64; cp 9pc64 /n/9fat/9pc64; "
+     "cmp 9pc64 /n/9fat/9pc64; echo PHASE3_COPY_STATUS_$status; "
+     "ls -l /n/9fat/9pc64; echo PHASE3_END_5"),
 ]
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
@@ -127,7 +131,7 @@ with (OUT/"host.log").open("wb") as host:
                     session["stage"]+=1
                     session["sent"]=False
                     print("PASSED STAGE",ix,label,flush=True)
-                    if ix==4:
+                    if ix==5:
                         session["final"]=True
                         break
                 if time.monotonic()-stage_start>380:
@@ -170,4 +174,78 @@ if not re.search(r"(?:^|\r?\n)PHASE3_MK_STATUS_\s*(?:\r?\n)",text):
 if re.search(r"(?:^|\r?\n)ls:.*9pc64",text):
     print("FAIL: expected AMD64 kernel not found",file=sys.stderr)
     sys.exit(1)
-print("PASS: native mk command returned success (binary transfer and fresh boot still pending).")
+if not marks.get("install-fresh-bootfile") or not re.search(
+    r"(?:^|\r?\n)PHASE3_COPY_STATUS_\s*(?:\r?\n)", text
+):
+    print("FAIL: the fresh compiled binary was not byte-compared with the FAT bootfile",file=sys.stderr)
+    sys.exit(1)
+print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and cmp verified.",flush=True)
+
+# Start a NEW QEMU process against the SAME disposable qcow2 overlay.
+# plan9.ini reads "bootfile=9pc64", and we have verified by cmp that this
+# filename contains the freshly compiled source-derived binary.
+SER.unlink(missing_ok=True)
+MON.unlink(missing_ok=True)
+bootlog=bytearray()
+bootstate=dict(bootargs=False,user=False,command=False)
+with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
+    second=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
+    guest=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    try:
+        for _ in range(300):
+            try:
+                guest.connect(str(SER))
+                break
+            except (FileNotFoundError,ConnectionRefusedError):
+                time.sleep(.1)
+        else:
+            raise RuntimeError("fresh-boot serial socket unavailable")
+        guest.setblocking(False)
+        deadline=time.monotonic()+140
+        while time.monotonic()<deadline:
+            if second.poll() is not None:
+                print("Fresh-kernel QEMU unexpectedly exited",flush=True)
+                break
+            ready,_,_=select.select([guest],[],[],.3)
+            if ready:
+                try: data=guest.recv(65536)
+                except BlockingIOError: data=b""
+                if data: bootlog.extend(data)
+            tail=bytes(bootlog[-16000:])
+            if b"bootargs is " in tail and not bootstate["bootargs"]:
+                guest.sendall(b"\r")
+                bootstate["bootargs"]=True
+                print("FRESH KERNEL: bootargs prompt reached",flush=True)
+            if (b"user[glenda]:" in tail or b"user:" in tail) and bootstate["bootargs"] and not bootstate["user"]:
+                guest.sendall(b"glenda\r")
+                bootstate["user"]=True
+                print("FRESH KERNEL: userspace login reached",flush=True)
+            if b"term%" in tail and bootstate["user"] and not bootstate["command"]:
+                guest.sendall(b"echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
+                bootstate["command"]=True
+                print("FRESH KERNEL: rc probe sent",flush=True)
+            if re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)):
+                print("FRESH KERNEL: native rc probe produced expected output",flush=True)
+                break
+    finally:
+        (OUT/"fresh-boot-serial.log").write_bytes(bootlog)
+        second.terminate()
+        try: second.wait(timeout=8)
+        except subprocess.TimeoutExpired: second.kill()
+        guest.close()
+
+boottext=bytes(bootlog).decode("utf-8",errors="replace")
+(OUT/"result.txt").write_text(
+    f"Source SHA: {SOURCE_SHA}\n"
+    f"Kernel source archive sha256: {archive_hash}\n"
+    "V2 native source compilation: PASS\n"
+    "New FAT bootfile byte-for-byte compared with compiled 9pc64: PASS\n"
+    f"V3 bootargs prompt reached: {bootstate['bootargs']}\n"
+    f"V3 rc userspace command verified: {bool(re.search(rb'(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)',bytes(bootlog)))}\n"
+)
+print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
+if not (bootstate["bootargs"] and re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog))):
+    print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
+    sys.exit(1)
+print("PASS V3: the new source-built 9pc64, installed to configured 9fat bootfile, booted into rc.",flush=True)
+
