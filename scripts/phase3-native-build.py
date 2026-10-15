@@ -8,6 +8,7 @@ a successful fresh build. This workflow stops before claiming V3 until V2 works.
 from __future__ import annotations
 
 import http.server
+import json
 import os
 from pathlib import Path
 import re
@@ -17,6 +18,8 @@ import subprocess
 import sys
 import threading
 import time
+
+from phase4_1_stability import STAGES as PHASE41_STAGES, check_stability_serial
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "artifacts" / "phase3"
@@ -156,6 +159,13 @@ with (OUT/"host.log").open("wb") as host:
         client.close()
 
 text=bytes(raw).decode("utf-8",errors="replace")
+# Phase 4.1: all positive markers must be standalone output lines from a
+# freshly built QEMU guest; parsing command echo text is insufficient.
+stability=check_stability_serial(bytes(bootlog))
+(OUT/"phase4-1-stability.json").write_text(json.dumps(stability, indent=2, sort_keys=True) + "\n")
+for label, ok in stability["checks"].items():
+    print("PHASE4.1", "PASS" if ok else "FAIL", label, flush=True)
+
 (OUT/"result.txt").write_text(
     f"Source SHA: {SOURCE_SHA}\n"
     f"Source transfer: {'PASS' if marks.get('fetch-repository-source') else 'NOT CONFIRMED'}\n"
@@ -192,8 +202,8 @@ runtime_commands=[
     "echo RYZOVA_9P_DATA > /tmp/ryzova-9p/probe; grep RYZOVA_9P_DATA /tmp/ryzova-9p/probe > /dev/null && echo RYZOVA_9P_OK; echo RYZOVA_RUNTIME_STAGE_1",
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
-    "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_DONE",
-]
+    "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
+] + [command for _, command in PHASE41_STAGES]
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
@@ -208,7 +218,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         else:
             raise RuntimeError("fresh-boot serial socket unavailable")
         guest.setblocking(False)
-        deadline=time.monotonic()+140
+        deadline=time.monotonic()+185
         while time.monotonic()<deadline:
             if second.poll() is not None:
                 print("Fresh-kernel QEMU unexpectedly exited",flush=True)
@@ -292,10 +302,11 @@ write_denied=(b"can't create: #Z/version: permission denied" in bytes(bootlog)
     f"V3 Ryzova identity device verified: {identity_ok}\n"
     f"V4 basic proc/net and per-process bind checks: {runtime_ok}\n"
     f"V4 9P ramfs, 9fat and HTTP checks: {regression_ok}\n"
+    f"V4.1 bounded memory/process/scheduler checks: {stability['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and write_denied and regression_ok):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and write_denied and regression_ok and stability["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
-print("PASS V3/V4: source-built Ryzova kernel booted, exposed #Z identity, and passed proc/net/bind/read-only and 9P/storage/network regression checks.",flush=True)
+print("PASS V3/V4/4.1: source-built Ryzova kernel passed 9P/storage/network, bounded memory, process and scheduler regression checks.",flush=True)
 
