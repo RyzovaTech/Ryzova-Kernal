@@ -8,9 +8,9 @@ Phase 3 must **not** be started on the assumption that a successful file-layout 
 | --- | --- | --- |
 | V0 — Source/history/license notices | Original upstream source and key license notices were imported without losing Git ancestry | PASS, from existing foundation CI |
 | V1 — Official 9front VM smoke | A *separately distributed, prebuilt 9front release image* starts its kernel under QEMU | **PASS for kernel startup + native rc shell** in a headless guest (runs 38692092989 and 38693367962); NOT Ryzova-built kernel |
-| V2 — Ryzova source native compile | The files at a recorded `Ryzova-Kernal` commit compile to a fresh AMD64 kernel with the correct 9front `mk` toolchain | NOT RUN |
-| V3 — Boot freshly built kernel | The **V2 artifact** boots under QEMU with recoverable boot logs and matching checksum | NOT RUN |
-| V4 — Basic runtime checks | Booted V3 kernel reaches user space and provides 9P, local storage, network, basic process/memory functions | NOT RUN |
+| V2 — Ryzova source native compile | Exact checked-out Ryzova kernel source built by native 9front `mk` in disposable QEMU guest | **PASS** (Phase 3 CI run 38703531423) |
+| V3 — Boot freshly built kernel | Freshly compiled `9pc64` was byte-compared to installed bootfile; QEMU restarted and reached `rc` | **PASS for source-built boot** (bytewise compare, serial evidence). Independent published binary SHA256 still pending |
+| V4 — Basic runtime checks | Minimal userspace, `/proc`, `/net`, namespace bind, Ryzova read-only device checks | **PARTIAL**: these smoke tests passed; fuller 9P/storage/network regression pending |
 | V5 — Physical hardware | The kernel works on explicitly listed hardware IDs / platforms | NOT RUN |
 
 The diagnostic workflow [`prephase3-qemu.yml`](../.github/workflows/prephase3-qemu.yml) downloads **9front-11952.amd64.qcow2.gz** from the [official release archive](https://build.9front.org/release/), records the downloaded SHA256 and launches its **prebuilt** kernel in QEMU. This can at most satisfy V1. It must **never** be counted as a successful build/boot of Ryzova's repository source. On 2026-10-15, [upstream release QEMU run #38692092989](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38692092989) captured a guest serial log containing `Plan 9`, two detected CPUs, a VirtIO network interface, memory accounting, `/dev/sd00` disk partitions, and the `bootargs` prompt. The first diagnostic **proves kernel initialization**. A subsequent, stricter [native rc guest test #38693367962](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38693367962) also reached `init: starting /bin/rc` and executed `echo PROBE_MARKER | tr A-Z a-z`, observing the actual lowercase `probe_marker` output. This confirms basic userspace execution in a serial/headless guest. The graphical `rio` environment reported no framebuffer in that VM; this is not a graphical desktop verification. If serial output does not show a definite 9front marker, the V1 job fails and records a screenshot for manual investigation.
@@ -25,9 +25,9 @@ The official image is pinned by *release filename* and a SHA256 observed in the 
 
 **Conclusion:** the imported source's **kernel files** are unchanged from the upstream nightly build source. This is strong external compile evidence, **but not a native compilation of the Ryzova repository**, not a fresh kernel checksum, and not a successful boot of the kernel artifact from this branch.
 
-## Remaining blocker: fresh source-built Ryzova kernel
+## Source-built boot gate — satisfied in Phase 3.0–3.4
 
-See [Issue #5](https://github.com/RyzovaTech/Ryzova-Kernal/issues/5). Neither the original official-VM boot nor rc-shell test compiled this repository's source. Phase 3 must not be called fully boot-verified until V2 and V3 pass against a freshly compiled artifact.
+The [Phase 3 CI run](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38703531423) compiled exact checked-out kernel source with native 9front `mk`, installed the kernel after a byte-for-byte FAT compare, rebooted QEMU and verified native `rc` output from the newly built kernel. See [Issue #5](https://github.com/RyzovaTech/Ryzova-Kernal/issues/5) for remaining release-quality verification (published compiled-kernel SHA256 and fuller 9P/storage/network checks).
 
 ## V2: native build plan (not yet completed)
 
