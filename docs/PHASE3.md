@@ -26,7 +26,7 @@ The [fresh source-build and identity CI run](https://github.com/RyzovaTech/Ryzov
 - Minimal `/proc` and `/net` existence checks plus per-process namespace `bind` succeeded.
 - The workflow now archives fresh-boot serial and host diagnostics for review and reruns when kernel source or Ryzova metadata changes.
 
-**These are minimal smoke tests, not comprehensive 9P/network/storage regression checks or real hardware certification.** The compilation source archive SHA256 is recorded, while separate release-grade independent kernel binary checksum/export and full regression testing remain to be completed.
+**Phase 3.5 QEMU regression additions:** [passing run #38708363099](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38708363099) confirms a real 9P `ramfs` write/read, 9fat filesystem mount/bootfile read, VirtIO HTTP GET against a host test server, and successful native source compilation/boot. A separate host-side extractor used QEMU's FAT boot disk to compute a SHA256 that exactly matched both guest-side SHA256 digests (built kernel and installed bootfile). The binary was intentionally deleted before public CI artifact upload pending licensing review. This is not exhaustive 9P/network/storage regression, physical hardware certification, or authorized end-user distribution.
 
 ## Release policy
 

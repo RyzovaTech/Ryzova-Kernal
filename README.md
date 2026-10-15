@@ -26,10 +26,11 @@ Initial integrated upstream revision: `a0806493926c04ce90d4e4a46961dec30a1054dd`
 - AMD64 kernel source: `sys/src/9/pc64/`.
 - Native AMD64 build, freshly built kernel boot, identity, and denied-write checks: [successful CI run](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38703531423) and [docs/BUILD.md](docs/BUILD.md).
 - Ryzova identity: `cat '#Z/version'` → `Ryzova Kernel 0.1.0-dev`, plus [native device API documentation](docs/kernel-api/RYZOVA-DEVICE.md).
-- Basic `/proc`, `/net`, per-process namespace `bind` and read-only `#Z` device smoke tests run inside the freshly booted QEMU guest. Full 9P/storage/network and physical hardware regression remain pending.
+- Source-built QEMU kernel runs native `rc` and passed read-only `#Z`, `/proc`, `/net`, process namespace bind, a real 9P `ramfs` read/write, 9fat boot-filesystem access and VirtIO HTTP GET tests. Physical hardware, exhaustive regression and legal clearance remain pending.
 - Experimental [AMD64 build profile](ryzova/config/amd64.default.json), [version metadata](ryzova/metadata/kernel-version.json) and [Phase 3 evidence report](docs/PHASE3.md).
 - Pre-Phase 3 boot checks and the difference between an upstream release VM and a kernel built from this repository: [docs/PRE-PHASE3-BOOT.md](docs/PRE-PHASE3-BOOT.md).
 - Preliminary licensing findings: [docs/LICENSE-REVIEW.md](docs/LICENSE-REVIEW.md).
+- Phase 3.5 verified QEMU test and independent Guest/Host SHA-256 equality: [CI run #38708363099](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38708363099); [preview release gates](docs/PHASE3-5-RELEASE-GATES.md). **No public kernel binary release authorized.**
 
 
 ## License, community and project policy (Phase 2)

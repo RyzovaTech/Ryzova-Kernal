@@ -1,6 +1,6 @@
 # Phase 3.5 — AMD64 developer-preview release gate
 
-**Status:** technical validation in progress; **public binary release is on hold** until scoped redistribution rights and maintainer approval are documented. This plan is not itself a license or legal clearance.
+**Status:** the defined experimental QEMU technical gates passed in [CI run #38708363099](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38708363099). **Public binary release remains on hold** until scoped redistribution rights and maintainer approval are documented. This plan is not itself a license or legal clearance.
 
 ## Artifact provenance
 
@@ -27,7 +27,7 @@ These are **functional regression smoke checks**, not exhaustive fuzz, network s
 
 ## Release prerequisites
 
-- [ ] CI passes and actual provenance JSON and guest/host SHA256 have been reviewed.
+- [x] CI passed; guest/host SHA256 and provenance were generated, extracted and cross-checked in run #38708363099. This is technical integrity evidence, not publisher attestation or legal clearance.
 - [ ] Scoped inventory of material actually embedded in the 9pc64 binary and accompanying release assets is reviewed by a responsible rights-holder/counsel (see [legal gate #3](https://github.com/RyzovaTech/Ryzova-Kernal/issues/3)).
 - [ ] Any restricted third-party material is removed, replaced with appropriate permission, or excluded from distributed assets.
 - [ ] A valid authorized sign-off documents **what artifact may be redistributed under which license(s)**.

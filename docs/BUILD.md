@@ -23,7 +23,7 @@ The upstream source is at repository root. The amd64 kernel is under `sys/src/9/
 6. Run checks for device initialization, memory allocation, network access, basic 9P mounts and process management.
 7. Record results and enable an automated, checksum-pinned VM build job only after the above procedure passes.
 
-The native build and source-built QEMU userspace boot gates have been demonstrated with logs. The entire seven-step verification list, especially full network/9P/runtime regression, independent release-grade kernel artifact checksums, and physical hardware validation, is **not yet complete**. See `docs/PHASE3.md` and open release gate issues.
+The native build and source-built QEMU userspace boot gates are demonstrated with logs. The [Phase 3.5 run](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38708363099) also verified actual 9P ramfs/file I/O, 9fat mount, VirtIO HTTP GET, and three matching kernel binary SHA256 values (compiled guest file, installed guest file, independently extracted host file). **Remaining:** broader stress/performance tests, real physical hardware certification, approved redistribution, and any public developer-preview binary. See `docs/PHASE3.md` and `docs/PHASE3-5-RELEASE-GATES.md`.
 
 ## Developer workflow
 
