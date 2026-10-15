@@ -1,0 +1,8 @@
+{
+  "schema": "ryzova-physical-driver-tests/v1",
+  "description": "No Ryzova Kernel physical hardware has been release-qualified in this repository.",
+  "test_records": [],
+  "maintainer_approval": null,
+  "license_clearance": false,
+  "independent_lab_review": null
+}
