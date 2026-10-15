@@ -11,6 +11,9 @@ echo 'SOURCE_BUILD_VERIFIED=false' >> summary.txt
 echo 'RYZOVA_KERNEL_BOOT_VERIFIED=false' >> summary.txt
 curl --fail --location --retry 3 --retry-delay 5 --connect-timeout 25 --max-time 850 "$url" --output upstream.qcow2.gz
 sha256sum upstream.qcow2.gz | tee compressed-sha256.txt
+# Pinned to the bytes observed in successful QEMU run #38692092989.
+# This is reproducibility pinning, not an independently authenticated upstream signature.
+printf "%s  %s\\n" "3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c" "upstream.qcow2.gz" | sha256sum -c -
 gzip -t upstream.qcow2.gz
 gzip -dc upstream.qcow2.gz > upstream.qcow2
 qemu-img info upstream.qcow2 | tee image-info.txt
