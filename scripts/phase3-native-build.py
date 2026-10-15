@@ -68,7 +68,7 @@ stages = [
      "cd /sys/src/9/pc64; ls -l main.c mkfile; echo PHASE3_END_2"),
     ("native-amd64-mk",
      "cd /sys/src/9/pc64; mk > /tmp/ryzova-native-build.log >[2=1]; "
-     "echo PHASE3_MK_STATUS_$status; ls -l 9pc64; "
+     "echo PHASE3_MK_STATUS_$status; tail -n 90 /tmp/ryzova-native-build.log; ls -l 9pc64; "
      "echo PHASE3_END_3"),
 ]
 raw=bytearray()
