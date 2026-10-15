@@ -24,9 +24,9 @@ Initial integrated upstream revision: `a0806493926c04ce90d4e4a46961dec30a1054dd`
 
 - Source-history, layout and license-notice checks: [GitHub Actions](https://github.com/RyzovaTech/Ryzova-Kernal/actions).
 - AMD64 kernel source: `sys/src/9/pc64/`.
-- Native AMD64 build and freshly built kernel boot: [successful source-to-boot verification run](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38701081133) and [docs/BUILD.md](docs/BUILD.md).
+- Native AMD64 build, freshly built kernel boot, identity, and denied-write checks: [successful CI run](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38703531423) and [docs/BUILD.md](docs/BUILD.md).
 - Ryzova identity: `cat '#Z/version'` → `Ryzova Kernel 0.1.0-dev`, plus [native device API documentation](docs/kernel-api/RYZOVA-DEVICE.md).
-- Basic `/proc`, `/net` and namespace `bind` smoke tests run inside the freshly booted QEMU guest.
+- Basic `/proc`, `/net`, per-process namespace `bind` and read-only `#Z` device smoke tests run inside the freshly booted QEMU guest. Full 9P/storage/network and physical hardware regression remain pending.
 - Experimental [AMD64 build profile](ryzova/config/amd64.default.json), [version metadata](ryzova/metadata/kernel-version.json) and [Phase 3 evidence report](docs/PHASE3.md).
 - Pre-Phase 3 boot checks and the difference between an upstream release VM and a kernel built from this repository: [docs/PRE-PHASE3-BOOT.md](docs/PRE-PHASE3-BOOT.md).
 - Preliminary licensing findings: [docs/LICENSE-REVIEW.md](docs/LICENSE-REVIEW.md).
@@ -46,7 +46,7 @@ The generated inventory is **not** a complete clearance for third-party redistri
 
 ## Roadmap
 
-1. **Phase 1:** clone, history-preserving merge and safe upstream tracking. Source integrity checks done; native boot verification pending.
+1. **Phase 1:** clone, history-preserving merge and safe upstream tracking completed. Native source build and boot verification were subsequently completed in Phase 3.0.
 2. **Phase 2:** repository-wide rights map and source licensing inventory, contributor and commercial policies, marks, build conventions and license CI. Human legal approval for third-party redistribution and contracts is still required.
 3. **Phase 3:** native AMD64 build + fresh boot verified; Ryzova read-only `#Z` version interface and profile/CI checks implemented. Real hardware and cleared developer preview remain pending.
 4. **Later:** native APIs, scoped binary compatibility, optional external resources and community SDK.
