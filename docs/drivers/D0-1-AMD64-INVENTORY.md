@@ -2,21 +2,21 @@
 # D0.1 — AMD64 configuration inventory (experimental)
 
 This driver-track deliverable converts the **existing** 9front-derived AMD64
-\`sys/src/9/pc64/pc64\` configuration into deterministic, machine-readable JSON.
+`sys/src/9/pc64/pc64` configuration into deterministic, machine-readable JSON.
 It **does not install, fix, write or qualify any driver**.
 
 ## Run locally
 
-\`\`\`sh
+```sh
 python3 -m unittest discover -s tests -p 'test_driver_inventory.py' -v
 python3 scripts/driver_inventory.py --output artifacts/drivers/amd64-pc64.json
-\`\`\`
+```
 
 The parser requires Python 3.9+ and uses only the standard library. The
-separate \`driver-inventory.yml\` GitHub Action runs the tests and uploads
+separate `driver-inventory.yml` GitHub Action runs the tests and uploads
 the generated JSON as a review artifact for every relevant PR or manual run.
 The manifest is generated from the checked-out source at CI runtime, not from
-a moving 9front upstream repository. It does not modify \`main\`.
+a moving 9front upstream repository. It does not modify `main`.
 
 ## Scope of the generated JSON
 
@@ -28,10 +28,10 @@ configuration that was parsed. Entries retain their source order.
 
 **Deliberate unknowns:** supported PCI/USB IDs, firmware licenses and
 distribution rights, test evidence and physical hardware qualification are
-\`not-reviewed\` or \`unverified\` until a human reviews the relevant driver
+`not-reviewed` or `unverified` until a human reviews the relevant driver
 and hardware documentation. A configured, source-present module is *not*
-a verified device. \`dev\`, \`link\`, \`misc\` and \`ip\` sections are indexed;
-\`port\` and \`bootdir\` are not hardware driver inventories.
+a verified device. `dev`, `link`, `misc` and `ip` sections are indexed;
+`port` and `bootdir` are not hardware driver inventories.
 
 This first-pass parser recognizes commented-out entries by known module-name
 prefixes to exclude ordinary prose comments. If additional 9front config
