@@ -1,9 +1,22 @@
 name: Phase 3 AMD64 native source build (experimental)
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'sys/src/9/**'
+      - 'sys/include/**'
+      - 'amd64/include/**'
+      - 'ryzova/**'
+      - 'scripts/phase3-native-build.py'
+      - '.github/workflows/phase3-native-build.yml'
   pull_request:
     branches: [main]
     paths:
+      - 'sys/src/9/**'
+      - 'sys/include/**'
+      - 'amd64/include/**'
+      - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
       - '.github/workflows/phase3-native-build.yml'
   workflow_dispatch:
@@ -47,6 +60,8 @@ jobs:
           path: |
             artifacts/phase3/serial.log
             artifacts/phase3/host.log
+            artifacts/phase3/fresh-boot-serial.log
+            artifacts/phase3/fresh-kernel-qemu-host.log
             artifacts/phase3/result.txt
             artifacts/phase3/source-provenance.txt
             artifacts/phase3/screen.ppm
