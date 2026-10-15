@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 from hardware_evidence import build as source_evidence
+from packed_pci_evidence import packed_pci_candidates
 
 HEX4 = re.compile(r"^[0-9a-fA-F]{4}$")
 SHA40 = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -44,6 +45,21 @@ def build_matrix(root):
             if record["vendor_id"] and record["device_id"]:
                 pair = (record["vendor_id"], record["device_id"])
                 claims.setdefault(pair, set()).add(mod)
+        # Reviewed packed (DID<<16)|VID probe tables missed by D0.2's
+        # literal pcimatch/switch->did scanner. These remain candidates.
+        if mod in ("ether8169", "etherigbe"):
+            packed = packed_pci_candidates(
+                (root / driver["source_file"]).read_text(encoding="utf-8"),
+                driver["source_file"])
+            for e in packed:
+                devices.append({
+                    "driver": mod, "source": e["source_file"],
+                    "line": e["evidence_line"], "match_type": e["kind"],
+                    "interpretation": e["interpretation"],
+                    "vendor_id": e["vendor_id"], "device_id": e["device_id"],
+                    "pci_class": None, "verified": False,
+                })
+                claims.setdefault((e["vendor_id"], e["device_id"]), set()).add(mod)
         for f in driver.get("firmware_references", []):
             path = f["reference"]
             firmware.append({
