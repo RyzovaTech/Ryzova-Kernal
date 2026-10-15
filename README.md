@@ -11,14 +11,14 @@ Ryzova Kernel is a **9front-derived general-purpose kernel project**. The plan i
 ## Branches and source
 
 - **`main`**: 9front full source tree and original Git ancestry, plus Ryzova documentation, CI and reviewed integrations.
-- **`upstream/front`**: exact upstream `9front/9front` branch history, fetched and updated by automation. Never commit Ryzova changes there.
+- **`upstream/front`**: retained historical 9front upstream snapshot for source provenance. **No automated fetch, branch update or merge is configured.**
 - **`integration/*`**: reviewed changes and future upstream merges prior to integrating into `main`.
 
 Upstream: [9front GitHub mirror](https://github.com/9front/9front) (`front` branch). Original project: [9front.org](https://9front.org/); source: [git.9front.org](https://git.9front.org/).
 
 Initial integrated upstream revision: `a0806493926c04ce90d4e4a46961dec30a1054dd`, imported through [Pull Request #1](https://github.com/RyzovaTech/Ryzova-Kernal/pull/1) with full original history.
 
-**Upstream sync fetches commits only; it does not auto-merge to `main`, deploy changes, or prove a new driver works.** Build and review gates are required before future integrations.
+**9front upstream synchronization is disabled.** The previous scheduled/manual sync workflow was removed. Ryzova maintains its own kernel and drivers independently; no automatic 9front source or driver updates are imported. The original upstream history and copyright notices remain intact.
 
 ## Verification and build
 
@@ -47,7 +47,7 @@ The generated inventory is **not** a complete clearance for third-party redistri
 
 ## Roadmap
 
-1. **Phase 1:** clone, history-preserving merge and safe upstream tracking completed. Native source build and boot verification were subsequently completed in Phase 3.0.
+1. **Phase 1:** history-preserving 9front source import completed. The previously configured automatic upstream tracking was retired; kernel source build and boot verification were subsequently completed in Phase 3.0.
 2. **Phase 2:** repository-wide rights map and source licensing inventory, contributor and commercial policies, marks, build conventions and license CI. Human legal approval for third-party redistribution and contracts is still required.
 3. **Phase 3:** native AMD64 build + fresh boot verified; Ryzova read-only `#Z` version interface and profile/CI checks implemented. Real hardware and cleared developer preview remain pending.
 4. **Later:** native APIs, scoped binary compatibility, optional external resources and community SDK.
