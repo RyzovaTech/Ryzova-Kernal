@@ -6,7 +6,7 @@
 
 Ryzova Kernel is a **9front-derived general-purpose kernel project**. The plan is to retain and extend the strengths of Plan 9/9front—namespaces, 9P and network-oriented resource interfaces—while developing Ryzova-specific capabilities. RyzovaOS and third-party OS variants are future consumers of this kernel.
 
-> **Status: Phase 2 project policies and license inventory complete (formal legal clearance pending); native AMD64 build and QEMU boot of this source tree not yet verified.** The imported tree remains upstream-derived source, not yet a separately working Ryzova kernel.
+> **Status: Phase 3 native AMD64 development build is verified in QEMU, including a Ryzova-specific read-only identity device and basic userspace/namespace smoke tests.** Experimental only; no stable ABI, real-hardware compatibility certification, or cleared public binary release.
 
 ## Branches and source
 
@@ -24,7 +24,10 @@ Initial integrated upstream revision: `a0806493926c04ce90d4e4a46961dec30a1054dd`
 
 - Source-history, layout and license-notice checks: [GitHub Actions](https://github.com/RyzovaTech/Ryzova-Kernal/actions).
 - AMD64 kernel source: `sys/src/9/pc64/`.
-- Native build and QEMU boot procedure: [docs/BUILD.md](docs/BUILD.md) (**not yet performed**).
+- Native AMD64 build and freshly built kernel boot: [successful source-to-boot verification run](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38701081133) and [docs/BUILD.md](docs/BUILD.md).
+- Ryzova identity: `cat '#Z/version'` → `Ryzova Kernel 0.1.0-dev`, plus [native device API documentation](docs/kernel-api/RYZOVA-DEVICE.md).
+- Basic `/proc`, `/net` and namespace `bind` smoke tests run inside the freshly booted QEMU guest.
+- Experimental [AMD64 build profile](ryzova/config/amd64.default.json), [version metadata](ryzova/metadata/kernel-version.json) and [Phase 3 evidence report](docs/PHASE3.md).
 - Pre-Phase 3 boot checks and the difference between an upstream release VM and a kernel built from this repository: [docs/PRE-PHASE3-BOOT.md](docs/PRE-PHASE3-BOOT.md).
 - Preliminary licensing findings: [docs/LICENSE-REVIEW.md](docs/LICENSE-REVIEW.md).
 
@@ -39,13 +42,13 @@ Initial integrated upstream revision: `a0806493926c04ce90d4e4a46961dec30a1054dd`
 - [Build standards](docs/BUILD-STANDARDS.md) · [Branding](docs/BRANDING.md)
 - [Phase 2 report](docs/PHASE2-REPORT.md) · [license inventory CI](.github/workflows/license-audit.yml)
 
-The generated inventory is **not** a complete clearance for third-party redistribution or a substitute for legal counsel. Do not claim an official Ryzova kernel binary release until verified build/boot tests pass.
+The generated inventory is **not** a complete clearance for third-party redistribution or a substitute for legal counsel. Do not claim an official Ryzova kernel binary release until verified build/boot tests and release/legal requirements pass.
 
 ## Roadmap
 
 1. **Phase 1:** clone, history-preserving merge and safe upstream tracking. Source integrity checks done; native boot verification pending.
 2. **Phase 2:** repository-wide rights map and source licensing inventory, contributor and commercial policies, marks, build conventions and license CI. Human legal approval for third-party redistribution and contracts is still required.
-3. **Phase 3:** Ryzova kernel identity, AMD64 build/boot verification and Ryzova kernel interfaces.
+3. **Phase 3:** native AMD64 build + fresh boot verified; Ryzova read-only `#Z` version interface and profile/CI checks implemented. Real hardware and cleared developer preview remain pending.
 4. **Later:** native APIs, scoped binary compatibility, optional external resources and community SDK.
 
 ## License and attribution
