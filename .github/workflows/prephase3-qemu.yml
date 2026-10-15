@@ -1,0 +1,46 @@
+name: Pre-Phase-3 QEMU boot diagnostics
+
+on:
+  push:
+    branches: ['prephase3/**']
+    paths:
+      - 'scripts/boot-smoke-upstream.sh'
+      - '.github/workflows/prephase3-qemu.yml'
+      - 'docs/PRE-PHASE3-BOOT.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/boot-smoke-upstream.sh'
+      - '.github/workflows/prephase3-qemu.yml'
+      - 'docs/PRE-PHASE3-BOOT.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-release-qemu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install QEMU and boot capture tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils socat file
+      - name: Start official 9front upstream release in QEMU and capture diagnostics
+        run: bash scripts/boot-smoke-upstream.sh
+      - name: Remove large VM disk files before artifact upload
+        if: always()
+        run: |
+          rm -f artifacts/qemu/upstream.qcow2 artifacts/qemu/upstream.qcow2.gz artifacts/qemu/boot-overlay.qcow2
+      - name: Upload QEMU evidence (not source-built kernel proof)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-qemu-diagnostics
+          path: artifacts/qemu/
+          if-no-files-found: warn
+          retention-days: 14
