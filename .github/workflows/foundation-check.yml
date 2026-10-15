@@ -23,3 +23,5 @@ jobs:
       - name: Verify source layout and licenses
         shell: bash
         run: bash scripts/verify-foundation.sh
+      - name: Validate Ryzova native identity and build profile
+        run: python3 scripts/check-identity.py

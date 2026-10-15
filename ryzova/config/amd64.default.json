@@ -1,0 +1,16 @@
+{
+  "schema": "ryzova-kernel-build-profile/v1",
+  "name": "amd64-default",
+  "architecture": "amd64",
+  "kernel_source": "sys/src/9/pc64",
+  "kernel_config": "sys/src/9/pc64/pc64",
+  "native_tool": "mk",
+  "kernel_binary": "9pc64",
+  "boot_method": "9bootfat",
+  "features": {
+    "plan9_9p": true,
+    "process_namespaces": true,
+    "ryzova_device": true
+  },
+  "abi_stability": "experimental"
+}
