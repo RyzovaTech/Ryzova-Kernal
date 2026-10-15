@@ -1,0 +1,54 @@
+name: Phase 3 AMD64 native source build (experimental)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/phase3-native-build.py'
+      - '.github/workflows/phase3-native-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install isolated QEMU dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils file
+      - name: Verify upstream source provenance
+        run: bash scripts/verify-foundation.sh
+      - name: Fetch and verify 9front native build guest image
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --max-time 900 \
+            https://build.9front.org/release/9front-11952.amd64.qcow2.gz -o 9front.qcow2.gz
+          echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  9front.qcow2.gz' | sha256sum -c -
+          gzip -dc 9front.qcow2.gz > 9front.qcow2
+          qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-build-overlay.qcow2
+      - name: Transfer exact Git checkout kernel source and run Plan 9 mk
+        run: python3 scripts/phase3-native-build.py native-build-overlay.qcow2
+      - name: Remove huge disk images before logs upload
+        if: always()
+        run: rm -f 9front.qcow2.gz 9front.qcow2 native-build-overlay.qcow2
+      - name: Archive native guest source/build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase3-native-build-evidence
+          path: |
+            artifacts/phase3/serial.log
+            artifacts/phase3/host.log
+            artifacts/phase3/result.txt
+            artifacts/phase3/source-provenance.txt
+            artifacts/phase3/screen.ppm
+          if-no-files-found: warn
+          retention-days: 14
