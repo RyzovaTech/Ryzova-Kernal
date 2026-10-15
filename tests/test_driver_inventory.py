@@ -55,7 +55,7 @@ class InventoryTests(unittest.TestCase):
     def test_counts_enabled_disabled_and_sections(self):
         result = driver_inventory.inventory(EXAMPLE, self.root)
         modules = {x["module"]: x for x in result["entries"]}
-        self.assertEqual(len(modules), 10)
+        self.assertEqual(len(modules), 11)
         self.assertFalse(modules["lpt"]["enabled"])
         self.assertFalse(modules["etherold"]["enabled"])
         self.assertFalse(modules["vganvidia"]["enabled"])
@@ -64,7 +64,7 @@ class InventoryTests(unittest.TestCase):
         self.assertNotIn("int", modules)
         self.assertNotIn("amd64", modules)
         self.assertEqual(result["counts"]["disabled"], 3)
-        self.assertEqual(result["counts"]["enabled"], 7)
+        self.assertEqual(result["counts"]["enabled"], 8)
         self.assertEqual(modules["etheri225"]["section"], "link")
 
     def test_source_paths_are_verified_on_disk_not_inferred(self):
