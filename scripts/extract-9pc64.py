@@ -41,8 +41,8 @@ def candidate_offsets(image: Path) -> list[int]:
             b = fh.read(512)
             if len(b) < 512:
                 break
-            if (b[:1] in (b"\\xeb", b"\\xe9")
-                and b[510:512] == b"\\x55\\xaa"
+            if (b[:1] in (b"\xeb", b"\xe9")
+                and b[510:512] == b"\x55\xaa"
                 and (b[54:62].startswith(b"FAT") or b[82:90].startswith(b"FAT"))):
                 found.append(off)
     return found
@@ -57,7 +57,7 @@ def main() -> int:
     # QEMU boot, before the second boot starts.
     before_second_boot = log
     checks = re.findall(
-        r"(?m)^([0-9a-f]{64})\\s+(9pc64|/n/9fat/9pc64)\\s*$",
+        r"(?m)^([0-9a-f]{64})\s+(9pc64|/n/9fat/9pc64)\s*$",
         before_second_boot
     )
     expected = {}
@@ -91,7 +91,7 @@ def main() -> int:
             host_digest = digest(kernel)
             if host_digest != expected["9pc64"]:
                 raise RuntimeError(f"Guest/host SHA256 mismatch: guest={expected['9pc64']} host={host_digest}")
-            (OUT / "9pc64.sha256").write_text(f"{host_digest}  9pc64\\n")
+            (OUT / "9pc64.sha256").write_text(f"{host_digest}  9pc64\n")
             record = {
                 "source_commit": SOURCE,
                 "compiled_kernel_path_in_guest": "/sys/src/9/pc64/9pc64",
@@ -103,7 +103,7 @@ def main() -> int:
                 "verification": "three SHA256 digests equal; QEMU boot separately verified",
                 "distribution_status": "BLOCKED pending reviewed scoped redistribution rights",
             }
-            (OUT / "kernel-provenance.json").write_text(json.dumps(record, indent=2) + "\\n")
+            (OUT / "kernel-provenance.json").write_text(json.dumps(record, indent=2) + "\n")
             print("PASS: source-built, installed and independently extracted kernel SHA256 match:", host_digest, flush=True)
         finally:
             # Never upload the kernel to a public workflow artifact while
