@@ -191,7 +191,7 @@ bootlog=bytearray()
 runtime_commands=[
     "mkdir -p /tmp/ryzova-9p; ramfs -m /tmp/ryzova-9p; echo RYZOVA_RUNTIME_STAGE_0",
     "echo RYZOVA_9P_DATA > /tmp/ryzova-9p/probe; grep RYZOVA_9P_DATA /tmp/ryzova-9p/probe > /dev/null && echo RYZOVA_9P_OK; echo RYZOVA_RUNTIME_STAGE_1",
-    "9fs 9fat; grep bootfile=9pc64 /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
+    "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_DONE",
 ]
@@ -247,10 +247,18 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 print("FRESH KERNEL: 9P/storage/network stage 0 sent",flush=True)
             elif bootstate["runtime_test"] and bootstate["runtime_stage"] < len(runtime_commands)-1:
                 i=bootstate["runtime_stage"]
-                if re.search(rb"(?:\r?\n)RYZOVA_RUNTIME_STAGE_"+str(i).encode()+rb"(?:\r?\n)",bytes(bootlog)):
+                # Await the rc prompt AFTER the output marker. A marker alone
+                # may arrive before the shell is ready for the next serial line.
+                marker=b"RYZOVA_RUNTIME_STAGE_"+str(i).encode()
+                tail=bytes(bootlog[-12000:])
+                pos=tail.rfind(b"\n"+marker+b"\r")
+                if pos < 0:
+                    pos=tail.rfind(b"\n"+marker+b"\n")
+                if pos >= 0 and b"term%" in tail[pos+len(marker)+1:]:
+                    time.sleep(.15)
                     bootstate["runtime_stage"]=i+1
                     guest.sendall((runtime_commands[i+1]+"\r").encode())
-                    print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent",flush=True)
+                    print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
             if re.search(rb"(?:\r?\n)RYZOVA_RUNTIME_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
