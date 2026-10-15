@@ -154,7 +154,6 @@ with (OUT/"host.log").open("wb") as host:
         try: proc.wait(timeout=8)
         except subprocess.TimeoutExpired: proc.kill()
         client.close()
-        server.shutdown()
 
 text=bytes(raw).decode("utf-8",errors="replace")
 (OUT/"result.txt").write_text(
@@ -268,6 +267,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         try: second.wait(timeout=8)
         except subprocess.TimeoutExpired: second.kill()
         guest.close()
+        server.shutdown()
 
 boottext=bytes(bootlog).decode("utf-8",errors="replace")
 fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
