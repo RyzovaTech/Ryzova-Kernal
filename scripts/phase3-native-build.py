@@ -236,6 +236,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
 
 boottext=bytes(bootlog).decode("utf-8",errors="replace")
 fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
+identity_ok=all(v in bytes(bootlog) for v in (b"Ryzova Kernel 0.1.0-dev", b"9front-derived", b"experimental-0"))
 (OUT/"result.txt").write_text(
     f"Source SHA: {SOURCE_SHA}\n"
     f"Kernel source archive sha256: {archive_hash}\n"
@@ -243,10 +244,11 @@ fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootl
     "New FAT bootfile byte-for-byte compared with compiled 9pc64: PASS\n"
     f"V3 bootargs prompt reached: {bootstate['bootargs']}\n"
     f"V3 rc userspace command verified: {fresh_rc_ok}\n"
+    f"V3 Ryzova identity device verified: {identity_ok}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
-print("PASS V3: the new source-built 9pc64, installed to configured 9fat bootfile, booted into rc.",flush=True)
+print("PASS V3: source-built Ryzova kernel booted into rc and reported identity via #Z.",flush=True)
 
