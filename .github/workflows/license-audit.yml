@@ -1,0 +1,31 @@
+name: License and project-policy inventory
+
+on:
+  push:
+    branches: [main, 'phase2/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  license-inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out tracked source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Generate preliminary source license inventory
+        run: python3 scripts/audit_licenses.py --output artifacts/license-inventory.json
+      - name: Publish inventory report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-inventory
+          path: artifacts/license-inventory.json
+          if-no-files-found: warn
+          retention-days: 30

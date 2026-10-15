@@ -4,7 +4,7 @@
 
 Ryzova Kernel is a **9front-derived general-purpose kernel project**. The plan is to retain and extend the strengths of Plan 9/9front—namespaces, 9P and network-oriented resource interfaces—while developing Ryzova-specific capabilities. RyzovaOS and third-party OS variants are future consumers of this kernel.
 
-> **Status: Phase 1 source integration completed; native AMD64 build and QEMU boot not yet verified.** The imported tree is the upstream 9front kernel/system, not yet a separately working Ryzova kernel.
+> **Status: Phase 2 policy and licensing foundation in progress; native AMD64 build and QEMU boot not yet verified.** The imported tree remains upstream-derived source, not yet a separately working Ryzova kernel.
 
 ## Branches and source
 
@@ -25,15 +25,28 @@ Initial integrated upstream revision: `a0806493926c04ce90d4e4a46961dec30a1054dd`
 - Native build and QEMU boot procedure: [docs/BUILD.md](docs/BUILD.md) (**not yet performed**).
 - Preliminary licensing findings: [docs/LICENSE-REVIEW.md](docs/LICENSE-REVIEW.md).
 
+
+## License, community and project policy (Phase 2)
+
+**This repository is multi-licensed at the file/asset level.** Most inherited 9front code is MIT-licensed as described in `lib/legal/NOTICE`, with significant exceptions; it is **not** globally relicensed AGPLv3. Newly authored Ryzova files expressly marked `AGPL-3.0-only` use the bundled AGPLv3 text. A commercial alternative may be offered for specific code when rights are fully controlled, but **AGPL allows commercial use**.
+
+- [License map](LICENSE.md) · [AGPL text](LICENSES/AGPL-3.0-only.txt) · [License review](docs/LICENSE-REVIEW.md)
+- [Commercial licensing scope](COMMERCIAL-LICENSING.md) · [Contributor rights](docs/CONTRIBUTOR-LICENSING.md)
+- [Contribution guide](CONTRIBUTING.md) · [Trademark and naming policy](TRADEMARKS.md)
+- [Build standards](docs/BUILD-STANDARDS.md) · [Branding](docs/BRANDING.md)
+- [Phase 2 report](docs/PHASE2-REPORT.md) · [license inventory CI](.github/workflows/license-audit.yml)
+
+The generated inventory is **not** a complete clearance for third-party redistribution or a substitute for legal counsel. Do not claim an official Ryzova kernel binary release until verified build/boot tests pass.
+
 ## Roadmap
 
 1. **Phase 1:** clone, history-preserving merge and safe upstream tracking. Source integrity checks done; native boot verification pending.
-2. **Phase 2:** file-level license audit, contributor conditions, Ryzova marks and build conventions.
+2. **Phase 2:** repository-wide rights map and source licensing inventory, contributor and commercial policies, marks, build conventions and license CI. Human legal approval for third-party redistribution and contracts is still required.
 3. **Phase 3:** Ryzova kernel identity, AMD64 build/boot verification and Ryzova kernel interfaces.
 4. **Later:** native APIs, scoped binary compatibility, optional external resources and community SDK.
 
 ## License and attribution
 
-The imported 9front code retains its upstream notices, including `lib/legal/NOTICE` and its listed exceptions. **This repository is not globally relicensed AGPLv3**, nor is third-party code offered under a Ryzova proprietary license. A potential AGPLv3/commercial dual-license model for **Ryzova-owned additions** is subject to Phase 2 rights review. AGPLv3 does not prohibit compliant commercial use.
+The imported 9front code retains its upstream notices, including `lib/legal/NOTICE` and its listed exceptions. **This repository is not globally relicensed AGPLv3**, nor is third-party code offered under a Ryzova proprietary license. The policy for **Ryzova-owned additions** is AGPL-3.0-only where expressly marked, with optional, separately negotiated commercial alternatives only when sufficient rights exist; no commercial license contract has yet been executed. AGPLv3 does not prohibit compliant commercial use.
 
 See [upstream integration policy](docs/UPSTREAM.md).
