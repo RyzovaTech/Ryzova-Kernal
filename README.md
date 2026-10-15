@@ -33,6 +33,14 @@ Initial integrated upstream revision: `a0806493926c04ce90d4e4a46961dec30a1054dd`
 - Phase 3.5 verified QEMU test and independent Guest/Host SHA-256 equality: [CI run #38708363099](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38708363099); [preview release gates](docs/PHASE3-5-RELEASE-GATES.md). **No public kernel binary release authorized.**
 
 
+## Phase 4.0: frozen AMD64 development baseline and recovery
+
+The **known-good experimental AMD64 QEMU source baseline** is pinned to commit `d6b1f3d8e78470f5ae9caf42d85deb983239e752`, with historical ref `baseline/amd64-phase4-0`. Four kernel-related Git tree IDs are recorded in [ryzova/baselines/amd64-phase4.0.json](ryzova/baselines/amd64-phase4.0.json).
+
+[Phase 4.0 recovery and validation protocol](docs/PHASE4-0.md) includes a reproducible baseline audit, source regression detection, and a non-destructive local recovery branch drill. [Phase 4 CI](.github/workflows/phase4-baseline.yml) checks the pinned source and absence of 9front automatic sync. New kernel/driver changes continue to trigger the separate native-build QEMU test.
+
+**This is a stable development reference, not a production-certified kernel or public binary release.** Physical hardware qualification, release authorization and administrator-enforced GitHub branch protection remain separate gates.
+
 ## License, community and project policy (Phase 2)
 
 **This repository is multi-licensed at the file/asset level.** Most inherited 9front code is MIT-licensed as described in `lib/legal/NOTICE`, with significant exceptions; it is **not** globally relicensed AGPLv3. Newly authored Ryzova files expressly marked `AGPL-3.0-only` use the bundled AGPLv3 text. A commercial alternative may be offered for specific code when rights are fully controlled, but **AGPL allows commercial use**.
