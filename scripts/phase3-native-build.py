@@ -21,6 +21,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "artifacts" / "phase3"
 OUT.mkdir(parents=True, exist_ok=True)
+(OUT / "network-probe.txt").write_text("RYZOVA_NETWORK_DATA\n")
 SER = OUT / "serial.sock"
 MON = OUT / "monitor.sock"
 ARCHIVE = OUT / "kernel-source.tar.gz"
@@ -75,7 +76,7 @@ stages = [
     ("install-fresh-bootfile",
      "cd /sys/src/9/pc64; cp 9pc64 /n/9fat/9pc64; "
      "cmp 9pc64 /n/9fat/9pc64; echo PHASE3_COPY_STATUS_$status; "
-     "ls -l /n/9fat/9pc64; echo PHASE3_END_5"),
+     "ls -l /n/9fat/9pc64; sha1sum -2 256 9pc64; sha1sum -2 256 /n/9fat/9pc64; echo PHASE3_END_5"),
 ]
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
@@ -153,7 +154,6 @@ with (OUT/"host.log").open("wb") as host:
         try: proc.wait(timeout=8)
         except subprocess.TimeoutExpired: proc.kill()
         client.close()
-        server.shutdown()
 
 text=bytes(raw).decode("utf-8",errors="replace")
 (OUT/"result.txt").write_text(
@@ -187,7 +187,14 @@ print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and 
 SER.unlink(missing_ok=True)
 MON.unlink(missing_ok=True)
 bootlog=bytearray()
-bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False)
+runtime_commands=[
+    "mkdir -p /tmp/ryzova-9p; ramfs -m /tmp/ryzova-9p; echo RYZOVA_RUNTIME_STAGE_0",
+    "echo RYZOVA_9P_DATA > /tmp/ryzova-9p/probe; grep RYZOVA_9P_DATA /tmp/ryzova-9p/probe > /dev/null && echo RYZOVA_9P_OK; echo RYZOVA_RUNTIME_STAGE_1",
+    "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
+    "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
+    "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_DONE",
+]
+bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
     guest=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
@@ -232,8 +239,27 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 guest.sendall(b"cat '#Z/version'; echo RYZOVA_RO_TEST_DONE | tr A-Z a-z\r")
                 bootstate["post_test"]=True
                 print("FRESH KERNEL: write denied; verifying device remains readable",flush=True)
-            if re.search(rb"(?:\r?\n)ryzova_ro_test_done(?:\r?\n)",bytes(bootlog)):
-                print("FRESH KERNEL: read-only rejection and subsequent read confirmed",flush=True)
+            if re.search(rb"(?:\r?\n)ryzova_ro_test_done(?:\r?\n)",bytes(bootlog)) and not bootstate["runtime_test"]:
+                guest.sendall((runtime_commands[0]+"\r").encode())
+                bootstate["runtime_test"]=True
+                bootstate["runtime_stage"]=0
+                print("FRESH KERNEL: 9P/storage/network stage 0 sent",flush=True)
+            elif bootstate["runtime_test"] and bootstate["runtime_stage"] < len(runtime_commands)-1:
+                i=bootstate["runtime_stage"]
+                # Await the rc prompt AFTER the output marker. A marker alone
+                # may arrive before the shell is ready for the next serial line.
+                marker=b"RYZOVA_RUNTIME_STAGE_"+str(i).encode()
+                tail=bytes(bootlog[-12000:])
+                pos=tail.rfind(b"\n"+marker+b"\r")
+                if pos < 0:
+                    pos=tail.rfind(b"\n"+marker+b"\n")
+                if pos >= 0 and b"term%" in tail[pos+len(marker)+1:]:
+                    time.sleep(.15)
+                    bootstate["runtime_stage"]=i+1
+                    guest.sendall((runtime_commands[i+1]+"\r").encode())
+                    print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
+            if re.search(rb"(?:\r?\n)RYZOVA_RUNTIME_DONE(?:\r?\n)",bytes(bootlog)):
+                print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
         (OUT/"fresh-boot-serial.log").write_bytes(bootlog)
@@ -241,6 +267,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         try: second.wait(timeout=8)
         except subprocess.TimeoutExpired: second.kill()
         guest.close()
+        server.shutdown()
 
 boottext=bytes(bootlog).decode("utf-8",errors="replace")
 fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
@@ -249,6 +276,8 @@ runtime_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)", bytes(bootlog)) for v in
 # A failed output redirection causes Plan 9 rc to abort the current
 # command line. Probe it independently, then ensure a fresh subsequent
 # command can still read the device. Echoed input is not accepted as output.
+regression_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)",bytes(bootlog))
+    for v in (b"RYZOVA_9P_OK",b"RYZOVA_STORAGE_OK",b"RYZOVA_NETWORK_OK",b"RYZOVA_RUNTIME_DONE"))
 write_denied=(b"can't create: #Z/version: permission denied" in bytes(bootlog)
     and bool(re.search(rb"(?:\r?\n)ryzova_ro_test_done(?:\r?\n)",bytes(bootlog)))
     and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 3)
@@ -262,10 +291,11 @@ write_denied=(b"can't create: #Z/version: permission denied" in bytes(bootlog)
     f"V3 rc userspace command verified: {fresh_rc_ok}\n"
     f"V3 Ryzova identity device verified: {identity_ok}\n"
     f"V4 basic proc/net and per-process bind checks: {runtime_ok}\n"
+    f"V4 9P ramfs, 9fat and HTTP checks: {regression_ok}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and write_denied):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and write_denied and regression_ok):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
-print("PASS V3/V4: source-built Ryzova kernel booted, exposed #Z identity, and passed basic proc/net/bind/read-only checks.",flush=True)
+print("PASS V3/V4: source-built Ryzova kernel booted, exposed #Z identity, and passed proc/net/bind/read-only and 9P/storage/network regression checks.",flush=True)
 
