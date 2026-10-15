@@ -188,7 +188,14 @@ print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and 
 SER.unlink(missing_ok=True)
 MON.unlink(missing_ok=True)
 bootlog=bytearray()
-bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,runtime_test=False)
+runtime_commands=[
+    "mkdir -p /tmp/ryzova-9p; ramfs -m /tmp/ryzova-9p; echo RYZOVA_RUNTIME_STAGE_0",
+    "echo RYZOVA_9P_DATA > /tmp/ryzova-9p/probe; grep RYZOVA_9P_DATA /tmp/ryzova-9p/probe > /dev/null && echo RYZOVA_9P_OK; echo RYZOVA_RUNTIME_STAGE_1",
+    "9fs 9fat; grep bootfile=9pc64 /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
+    "ip/ipconfig -d ether /net/ether0; webfs; echo RYZOVA_RUNTIME_STAGE_3",
+    "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_DONE",
+]
+bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
     guest=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
@@ -234,19 +241,18 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 bootstate["post_test"]=True
                 print("FRESH KERNEL: write denied; verifying device remains readable",flush=True)
             if re.search(rb"(?:\r?\n)ryzova_ro_test_done(?:\r?\n)",bytes(bootlog)) and not bootstate["runtime_test"]:
-                guest.sendall(
-                    b"mkdir -p /tmp/ryzova-9p; ramfs -m /tmp/ryzova-9p; "
-                    b"echo RYZOVA_9P_DATA > /tmp/ryzova-9p/probe; "
-                    b"grep RYZOVA_9P_DATA /tmp/ryzova-9p/probe > /dev/null && echo RYZOVA_9P_OK; "
-                    b"9fs 9fat; grep bootfile=9pc64 /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; "
-                    b"ip/ipconfig -d ether /net/ether0; webfs; "
-                    b"hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; "
-                    b"echo RYZOVA_RUNTIME_DONE\r"
-                )
+                guest.sendall((runtime_commands[0]+"\r").encode())
                 bootstate["runtime_test"]=True
-                print("FRESH KERNEL: starting 9P/storage/network regression",flush=True)
+                bootstate["runtime_stage"]=0
+                print("FRESH KERNEL: 9P/storage/network stage 0 sent",flush=True)
+            elif bootstate["runtime_test"] and bootstate["runtime_stage"] < len(runtime_commands)-1:
+                i=bootstate["runtime_stage"]
+                if re.search(rb"(?:\r?\n)RYZOVA_RUNTIME_STAGE_"+str(i).encode()+rb"(?:\r?\n)",bytes(bootlog)):
+                    bootstate["runtime_stage"]=i+1
+                    guest.sendall((runtime_commands[i+1]+"\r").encode())
+                    print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent",flush=True)
             if re.search(rb"(?:\r?\n)RYZOVA_RUNTIME_DONE(?:\r?\n)",bytes(bootlog)):
-                print("FRESH KERNEL: regression command completed; examining individual results",flush=True)
+                print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
         (OUT/"fresh-boot-serial.log").write_bytes(bootlog)
