@@ -35,6 +35,17 @@ The existing [native AMD64 build workflow](../.github/workflows/phase3-native-bu
 
 The [Phase 4 baseline workflow](../.github/workflows/phase4-baseline.yml) runs Phase 4.0 source/rollback checks and Phase 4.1 parser/negative-path unit tests. In addition, the native QEMU workflow is triggered when Phase 4.1 scenarios or kernel-related files change.
 
+## Verified Phase 4.1 execution — 2026-10-15
+
+**Merge:** [PR #17](https://github.com/RyzovaTech/Ryzova-Kernal/pull/17) at `55858ba416f0da0473aa2a9a66f3694403a1b54c`.
+
+- [Pull request native QEMU job #38714502983](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38714502983): **SUCCESS**, all nine Phase 4.1 checks PASS after fresh kernel build.
+- [Merged main native QEMU job #38714970777](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38714970777): **SUCCESS**, repeated all Phase 4.1 checks against the merged kernel source. Independently extracted kernel SHA-256 matched the installed kernel: `9008efec45cec3a36da53336279a6a25683edfe9fdb4fa311ae0f5fd163f16af`.
+- [Phase 4.0/4.1 CI #38714970721](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38714970721): **SUCCESS**, 11/11 parser, negative-condition, frozen baseline and local recovery tests passed.
+- [Source CI #38714970773](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38714970773) and [license inventory #38714970704](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38714970704): **SUCCESS**.
+
+Result artifact: `phase3-native-build-evidence/phase4-1-stability.json` in the native QEMU workflow run; raw fresh-boot serial evidence is archived alongside it. All checks are limited to the stated bounded/virtual scope.
+
 ## Realistic limitations
 
 These tests establish **basic progress and no immediate regressions** for bounded loads. They do not measure CPU fairness, deadline scheduling, process stress at scale, leak rates over hours, OOM recovery, privilege-boundary completeness, side channels, memory corruption, or real-hardware SMP/NUMA timing.
@@ -43,8 +54,8 @@ Extensive fault injection, repeated multi-hour soak, memory exhaustion tests, se
 
 ## Acceptance
 
-1. Phase 4.0 frozen baseline unchanged; retired 9front sync workflow remains absent.
-2. Phase 4.1 parser unit tests pass, including negative/error cases.
-3. Fresh native AMD64 compilation, QEMU second boot, 9P/storage/network, kernel identity, read-only protection, and every Phase 4.1 scenario pass **on the same PR head**.
-4. PR reviewed/merged only after CI, then equivalent main-branch native CI passes.
-5. Docs and evidence identify what remains unverified rather than declaring unconditional stability.
+1. [x] Phase 4.0 frozen baseline unchanged; retired 9front sync workflow remains absent.
+2. [x] Phase 4.1 parser unit tests pass, including negative/error cases.
+3. [x] Fresh native AMD64 compilation, QEMU second boot, 9P/storage/network, kernel identity, read-only protection, and every Phase 4.1 scenario pass **on the same PR head**.
+4. [x] PR merged after CI, then equivalent main-branch native CI passed.
+5. [x] Docs and evidence identify what remains unverified rather than declaring unconditional stability.
