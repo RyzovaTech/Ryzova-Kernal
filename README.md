@@ -41,6 +41,10 @@ The **known-good experimental AMD64 QEMU source baseline** is pinned to commit `
 
 **This is a stable development reference, not a production-certified kernel or public binary release.** Physical hardware qualification, release authorization and administrator-enforced GitHub branch protection remain separate gates.
 
+## Phase 4.1 — bounded kernel stability regression
+
+The [Phase 4.1 test plan](docs/PHASE4-1.md) adds live, bounded QEMU checks for `/dev/swap` memory statistics, 512 KiB ramfs allocation, process creation/wait, two-child scheduler progress, `ps` enumeration, and existing read-only `#Z` security behavior. These execute on the **freshly compiled** AMD64 kernel with machine-readable JSON results; they are not long-duration stress or real-hardware security certification.
+
 ## License, community and project policy (Phase 2)
 
 **This repository is multi-licensed at the file/asset level.** Most inherited 9front code is MIT-licensed as described in `lib/legal/NOTICE`, with significant exceptions; it is **not** globally relicensed AGPLv3. Newly authored Ryzova files expressly marked `AGPL-3.0-only` use the bundled AGPLv3 text. A commercial alternative may be offered for specific code when rights are fully controlled, but **AGPL allows commercial use**.

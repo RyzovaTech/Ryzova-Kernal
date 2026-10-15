@@ -9,6 +9,7 @@ on:
       - 'amd64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
+      - 'scripts/phase4_1_stability.py'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -21,6 +22,7 @@ on:
       - 'amd64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
+      - 'scripts/phase4_1_stability.py'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -75,6 +77,7 @@ jobs:
             artifacts/phase3/source-provenance.txt
             artifacts/phase3/9pc64.sha256
             artifacts/phase3/kernel-provenance.json
+            artifacts/phase3/phase4-1-stability.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn
           retention-days: 14
