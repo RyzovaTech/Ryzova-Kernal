@@ -1,4 +1,4 @@
-# Preliminary upstream license review — Phase 1
+# Preliminary upstream license review — Phase 2 update
 
 **Not a final legal audit and not a project-wide relicensing.**
 
@@ -14,6 +14,6 @@ The NOTICE explicitly lists important exceptions:
 
 **Action before binary/source distribution:** review each of the above paths (including any missing, moved, or additional files), collect file-level license inventory, classify redistributability, and exclude/relicense incompatible payloads when necessary. Do not imply that all repository contents may be copied as MIT or AGPLv3.
 
-**Phase 2:** define rights for new Ryzova-owned files, contributor agreements if needed, third-party notices, the trademark policy, and an optional commercial license. An AGPLv3 license cannot forbid compliant commercial usage. Ryzova cannot grant proprietary rights to code it does not own or have sufficient relicensing permission for.
+**Phase 2 policy files now present:** see `LICENSE.md`, `COMMERCIAL-LICENSING.md`, `TRADEMARKS.md`, `docs/CONTRIBUTOR-LICENSING.md` and the CI-generated inventory. The audit is an automated inventory, **not comprehensive legal clearance**. AGPLv3 does not forbid compliant commercial usage. Ryzova cannot grant proprietary rights to code it does not own or have sufficient relicensing permission for.
 
 Source references: `lib/legal/NOTICE`, `lib/legal/mit`, `lib/legal/contributing` in the imported upstream history.
