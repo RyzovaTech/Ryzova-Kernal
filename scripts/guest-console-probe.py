@@ -96,7 +96,7 @@ with (ART/"qemu-host.log").open("wb") as host:
         (ART/"serial.log").write_bytes(log)
         (ART/"summary.txt").write_text("\n".join(stage_msg+[
             f"Bootargs prompt answered: {state['bootargs']}",
-            f"Guest shell probe executed: {b'probe_marker' in bytes(log).lower()}",
+            f"Guest shell probe executed: {b'probe_marker' in bytes(log)}",
             "This probe does not compile or boot the Ryzova source."
         ])+"\n")
         proc.terminate()
@@ -104,7 +104,7 @@ with (ART/"qemu-host.log").open("wb") as host:
         except subprocess.TimeoutExpired: proc.kill()
         print("\n".join(stage_msg))
         print("Serial tail:",bytes(log[-4500:]).decode("utf-8",errors="replace"))
-if b"probe_marker" not in bytes(log).lower():
+if b"probe_marker" not in bytes(log):
     print("FAIL: native rc shell could not be confirmed; examine artifacts.",file=sys.stderr)
     sys.exit(1)
 print("PASS: native 9front rc shell command execution confirmed. Source build remains pending.")
