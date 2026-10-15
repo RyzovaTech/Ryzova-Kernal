@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: D0.1 AMD64 driver inventory (source-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sys/src/9/pc64/pc64'
+      - 'sys/src/9/pc/**'
+      - 'sys/src/9/port/**'
+      - 'sys/src/9/ip/**'
+      - 'scripts/driver_inventory.py'
+      - 'tests/test_driver_inventory.py'
+      - '.github/workflows/driver-inventory.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/pc64/pc64'
+      - 'sys/src/9/pc/**'
+      - 'sys/src/9/port/**'
+      - 'sys/src/9/ip/**'
+      - 'scripts/driver_inventory.py'
+      - 'tests/test_driver_inventory.py'
+      - '.github/workflows/driver-inventory.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test deterministic inventory parser
+        run: python3 -m unittest discover -s tests -p 'test_driver_inventory.py' -v
+      - name: Generate source-only inventory
+        run: |
+          python3 scripts/driver_inventory.py --output artifacts/drivers/amd64-pc64.json
+          python3 - <<'PY'
+          import json
+          with open("artifacts/drivers/amd64-pc64.json", encoding="utf-8") as handle:
+              report = json.load(handle)
+          assert report["counts"]["entries"] > 0, "Empty driver inventory"
+          assert report["counts"]["enabled"] > 0, "No enabled entries found"
+          assert all(e["physical_hardware_status"] == "unverified" for e in report["entries"])
+          assert all(e["device_ids_review"] == "not-reviewed" for e in report["entries"])
+          print(json.dumps(report["counts"], indent=2))
+          PY
+      - name: Upload source-only JSON inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: d0-1-amd64-driver-inventory
+          path: artifacts/drivers/amd64-pc64.json
+          if-no-files-found: error
+          retention-days: 30
