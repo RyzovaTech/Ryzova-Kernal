@@ -1,0 +1,46 @@
+name: Experimental native 9front guest console
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/guest-console-probe.py
+      - .github/workflows/guest-console-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  guest-shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install QEMU
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils file
+      - name: Download pinned official 9front release guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/guest-console
+          curl --fail --location --retry 3 --max-time 850 https://build.9front.org/release/9front-11952.amd64.qcow2.gz -o guest.qcow2.gz
+          echo "3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  guest.qcow2.gz" | sha256sum -c -
+          gzip -dc guest.qcow2.gz > guest.qcow2
+          qemu-img create -f qcow2 -F qcow2 -b guest.qcow2 guest-overlay.qcow2
+      - name: Boot and drive serial guest into rc shell (native toolchain probe only)
+        run: python3 scripts/guest-console-probe.py guest-overlay.qcow2
+      - name: Remove large disks before artifact upload
+        if: always()
+        run: rm -f guest.qcow2.gz guest.qcow2 guest-overlay.qcow2
+      - name: Upload raw guest evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guest-shell-probe
+          path: artifacts/guest-console/
+          if-no-files-found: warn
