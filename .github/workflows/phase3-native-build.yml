@@ -36,7 +36,7 @@ jobs:
       - name: Install isolated QEMU dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils file
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils file mtools
       - name: Verify upstream source provenance
         run: bash scripts/verify-foundation.sh
       - name: Fetch and verify 9front native build guest image
@@ -49,6 +49,8 @@ jobs:
           qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-build-overlay.qcow2
       - name: Transfer exact Git checkout kernel source and run Plan 9 mk
         run: python3 scripts/phase3-native-build.py native-build-overlay.qcow2
+      - name: Independently verify compiled kernel SHA256 from FAT boot disk (no public binary)
+        run: python3 scripts/extract-9pc64.py native-build-overlay.qcow2
       - name: Remove huge disk images before logs upload
         if: always()
         run: rm -f 9front.qcow2.gz 9front.qcow2 native-build-overlay.qcow2
@@ -64,6 +66,8 @@ jobs:
             artifacts/phase3/fresh-kernel-qemu-host.log
             artifacts/phase3/result.txt
             artifacts/phase3/source-provenance.txt
+            artifacts/phase3/9pc64.sha256
+            artifacts/phase3/kernel-provenance.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn
           retention-days: 14
