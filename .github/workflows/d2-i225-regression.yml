@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: D2 i225 driver error-path regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/pc/etheri225.c'
+      - 'tests/test_i225_vmap_failure.py'
+      - '.github/workflows/d2-i225-regression.yml'
+  push:
+    branches: ['driver-fixes/d2-i225-mmio-failure']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  i225-source-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify i225 MMIO failure cleanup
+        run: python3 -m unittest discover -s tests -p 'test_i225_vmap_failure.py' -v
