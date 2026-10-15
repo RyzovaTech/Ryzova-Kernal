@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: Ryzova driver D-series evidence and fail-closed gate
+
+on:
+  push:
+    branches: ['driver-engineering/d0-3-through-d6-quality-gates']
+  pull_request:
+    branches: ['driver-audit/d0-2-pci-firmware-evidence']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-and-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test D0.1 source config
+        run: python3 -m unittest discover -s tests -p 'test_driver_inventory.py' -v
+      - name: Test D0.2 PCI and firmware evidence
+        run: python3 -m unittest discover -s tests -p 'test_hardware_evidence.py' -v
+      - name: Test D0.3-D6 verification gates
+        run: python3 -m unittest discover -s tests -p 'test_driver_release_matrix.py' -v
+      - name: Generate source-only device matrix and release blockers
+        run: |
+          python3 scripts/driver_release_matrix.py \
+            --output artifacts/drivers/d-series-matrix.json \
+            --gate-output artifacts/drivers/d-series-release-gate.json
+          python3 - <<'PY'
+          import json
+          m = json.load(open("artifacts/drivers/d-series-matrix.json", encoding="utf-8"))
+          g = json.load(open("artifacts/drivers/d-series-release-gate.json", encoding="utf-8"))
+          assert m["counts"]["real_hardware_verified"] == 0
+          assert g["gate"] == "blocked" and not g["auto_release_allowed"]
+          assert "human-release-authorization-required" in g["blockers"]
+          print("Verified: no automatic driver release / no false physical certifications")
+          PY
+      - name: Confirm strict release request fails closed
+        run: |
+          if python3 scripts/driver_release_matrix.py --enforce-release \
+            --output artifacts/drivers/d-series-matrix.json \
+            --gate-output artifacts/drivers/d-series-release-gate.json; then
+            echo 'ERROR: release gate unexpectedly allowed automatic release' >&2
+            exit 1
+          else
+            echo 'PASS: release authorization intentionally blocked'
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ryzova-d-series-source-matrix-and-gates
+          path: |
+            artifacts/drivers/d-series-matrix.json
+            artifacts/drivers/d-series-release-gate.json
+          if-no-files-found: error
+          retention-days: 30
