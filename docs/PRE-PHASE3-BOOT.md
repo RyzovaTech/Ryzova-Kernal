@@ -19,6 +19,12 @@ The diagnostic workflow [`prephase3-qemu.yml`](../.github/workflows/prephase3-qe
 
 The official image is pinned by *release filename* and a SHA256 observed in the passing test (`3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c`). This verifies bytes are stable on subsequent runs but **is not independent authenticity verification**. Before long-term dependency on this VM, verify the digest against an independent trusted source or upstream signature.
 
+## Upstream compilation evidence: source parity (not a Ryzova-built binary)
+
+9front's public [nightly build index](https://build.9front.org/) records a **passing build (12077)** for upstream commit `9c7543976c3e9614ddd61c1173aaa754aff5e1d5`. The Ryzova import is upstream commit `a0806493926c04ce90d4e4a46961dec30a1054dd`, exactly **one commit newer**. The only change between these commits is `sys/src/games/aout2gba.c`, outside the kernel. CI `scripts/verify-foundation.sh` checks that precise diff and fails if it changes.
+
+**Conclusion:** the imported source's **kernel files** are unchanged from the upstream nightly build source. This is strong external compile evidence, **but not a native compilation of the Ryzova repository**, not a fresh kernel checksum, and not a successful boot of the kernel artifact from this branch.
+
 ## V2: native build plan (not yet completed)
 
 After V1 diagnostics, use a version- and checksum-pinned installed 9front build environment, transfer this repository's exact source revision to the guest, and run its real `mk` build, not a Linux host compile.
