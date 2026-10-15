@@ -15,12 +15,18 @@ The [native AMD64 build / fresh boot workflow](https://github.com/RyzovaTech/Ryz
 
 The pristine 9front release VM was an isolated **toolchain bootstrap environment**, not the kernel whose second-boot success was checked.
 
-## Upcoming identity/runtime checks
+## Phase 3.1–3.4 evidence — verified
 
-- Verify `#Z/version`, `#Z/foundation`, `#Z/abi` in the **freshly built** kernel, not in the upstream release.
-- Verify the device is read-only; report errors for writes to `#Z/version`.
-- Verify existing `/proc`, `/net`, local disk and 9P operations were not regressed.
-- Verify stable build provenance (checkout SHA, archive digest, installed bootfile compare, serial boot logs).
+The [fresh source-build and identity CI run](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38703531423) succeeded with Ryzova native `mk`, `9pc64` installed onto the QEMU guest's FAT boot partition, byte-for-byte `cmp`, a second QEMU boot, and native `rc` output:
+
+- `#Z/version`: `Ryzova Kernel 0.1.0-dev`.
+- `#Z/foundation`: `9front-derived`.
+- `#Z/abi`: `experimental-0`.
+- `#Z/version` rejects a write with `permission denied` and remains readable afterward.
+- Minimal `/proc` and `/net` existence checks plus per-process namespace `bind` succeeded.
+- The workflow now archives fresh-boot serial and host diagnostics for review and reruns when kernel source or Ryzova metadata changes.
+
+**These are minimal smoke tests, not comprehensive 9P/network/storage regression checks or real hardware certification.** The compilation source archive SHA256 is recorded, while separate release-grade independent kernel binary checksum/export and full regression testing remain to be completed.
 
 ## Release policy
 
