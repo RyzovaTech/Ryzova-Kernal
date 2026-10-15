@@ -235,16 +235,17 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         guest.close()
 
 boottext=bytes(bootlog).decode("utf-8",errors="replace")
+fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
 (OUT/"result.txt").write_text(
     f"Source SHA: {SOURCE_SHA}\n"
     f"Kernel source archive sha256: {archive_hash}\n"
     "V2 native source compilation: PASS\n"
     "New FAT bootfile byte-for-byte compared with compiled 9pc64: PASS\n"
     f"V3 bootargs prompt reached: {bootstate['bootargs']}\n"
-    f"V3 rc userspace command verified: {bool(re.search(rb'(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)',bytes(bootlog)))}\n"
+    f"V3 rc userspace command verified: {fresh_rc_ok}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog))):
+if not (bootstate["bootargs"] and fresh_rc_ok):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
 print("PASS V3: the new source-built 9pc64, installed to configured 9fat bootfile, booted into rc.",flush=True)
