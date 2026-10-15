@@ -187,7 +187,7 @@ print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and 
 SER.unlink(missing_ok=True)
 MON.unlink(missing_ok=True)
 bootlog=bytearray()
-bootstate=dict(bootargs=False,user=False,command=False)
+bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
     guest=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
@@ -221,11 +221,19 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 bootstate["user"]=True
                 print("FRESH KERNEL: userspace login reached",flush=True)
             if b"term%" in tail and bootstate["user"] and not bootstate["command"]:
-                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; test -d /proc && echo RYZOVA_PROC_OK; test -d /net && echo RYZOVA_NET_OK; mkdir -p /tmp/ryzova-ns; bind '#Z' /tmp/ryzova-ns; cat /tmp/ryzova-ns/version; echo NOT_ALLOWED > '#Z/version'; echo RYZOVA_WRITE_STATUS_$status; cat '#Z/version'; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
+                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; test -d /proc && echo RYZOVA_PROC_OK; test -d /net && echo RYZOVA_NET_OK; mkdir -p /tmp/ryzova-ns; bind '#Z' /tmp/ryzova-ns; cat /tmp/ryzova-ns/version; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
                 bootstate["command"]=True
                 print("FRESH KERNEL: rc probe sent",flush=True)
-            if re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)):
-                print("FRESH KERNEL: native rc probe produced expected output",flush=True)
+            if re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)) and not bootstate["write_test"]:
+                guest.sendall(b"echo NOT_ALLOWED > '#Z/version'\r")
+                bootstate["write_test"]=True
+                print("FRESH KERNEL: requested prohibited identity write",flush=True)
+            if bootstate["write_test"] and b"can't create: #Z/version: permission denied" in bytes(bootlog) and not bootstate["post_test"]:
+                guest.sendall(b"cat '#Z/version'; echo RYZOVA_RO_TEST_DONE | tr A-Z a-z\r")
+                bootstate["post_test"]=True
+                print("FRESH KERNEL: write denied; verifying device remains readable",flush=True)
+            if re.search(rb"(?:\r?\n)ryzova_ro_test_done(?:\r?\n)",bytes(bootlog)):
+                print("FRESH KERNEL: read-only rejection and subsequent read confirmed",flush=True)
                 break
     finally:
         (OUT/"fresh-boot-serial.log").write_bytes(bootlog)
@@ -238,10 +246,12 @@ boottext=bytes(bootlog).decode("utf-8",errors="replace")
 fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
 identity_ok=all(v in bytes(bootlog) for v in (b"Ryzova Kernel 0.1.0-dev", b"9front-derived", b"experimental-0"))
 runtime_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)", bytes(bootlog)) for v in (b"RYZOVA_PROC_OK", b"RYZOVA_NET_OK")) and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 2
-# Plan 9's rc expands $status to an empty string on success, and an error
-# description for a failed attempt to open the read-only identity device.
-# A terminal echo of the command is not accepted as proof of the returned status.
-write_denied=bool(re.search(rb"(?:\r?\n)RYZOVA_WRITE_STATUS_[^\r\n\s$]+",bytes(bootlog)))
+# A failed output redirection causes Plan 9 rc to abort the current
+# command line. Probe it independently, then ensure a fresh subsequent
+# command can still read the device. Echoed input is not accepted as output.
+write_denied=(b"can't create: #Z/version: permission denied" in bytes(bootlog)
+    and bool(re.search(rb"(?:\r?\n)ryzova_ro_test_done(?:\r?\n)",bytes(bootlog)))
+    and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 3)
 
 (OUT/"result.txt").write_text(
     f"Source SHA: {SOURCE_SHA}\n"
