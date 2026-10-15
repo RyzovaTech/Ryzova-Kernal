@@ -1,18 +1,11 @@
 name: Pre-Phase-3 QEMU boot diagnostics
 
 on:
-  push:
-    branches: ['prephase3/**']
-    paths:
-      - 'scripts/boot-smoke-upstream.sh'
-      - '.github/workflows/prephase3-qemu.yml'
-      - 'docs/PRE-PHASE3-BOOT.md'
   pull_request:
     branches: [main]
     paths:
       - 'scripts/boot-smoke-upstream.sh'
       - '.github/workflows/prephase3-qemu.yml'
-      - 'docs/PRE-PHASE3-BOOT.md'
   workflow_dispatch:
 
 permissions:
