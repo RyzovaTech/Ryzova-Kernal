@@ -49,6 +49,11 @@ ryzovaopen(Chan *c, int omode)
 	return devopen(c, omode, ryzovadir, nelem(ryzovadir), devgen);
 }
 
+static void
+ryzovaclose(Chan*)
+{
+}
+
 static long
 ryzovaread(Chan *c, void *va, long n, vlong off)
 {
@@ -85,7 +90,7 @@ Dev ryzovadevtab = {
 	ryzovastat,
 	ryzovaopen,
 	devcreate,
-	devclose,
+	ryzovaclose,
 	ryzovaread,
 	devbread,
 	ryzovawrite,
