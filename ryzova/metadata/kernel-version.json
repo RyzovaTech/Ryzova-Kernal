@@ -1,0 +1,10 @@
+{
+  "name": "Ryzova Kernel",
+  "version": "0.1.0-dev",
+  "foundation": "9front-derived",
+  "abi": "experimental-0",
+  "status": "experimental",
+  "native_architecture": "amd64",
+  "device": "#Z",
+  "notes": "Unstable read-only Plan 9 device interface. This version is not a stable ABI or end-user release."
+}
