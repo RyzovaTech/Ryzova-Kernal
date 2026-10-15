@@ -50,6 +50,7 @@ jobs:
       - name: Transfer exact Git checkout kernel source and run Plan 9 mk
         run: python3 scripts/phase3-native-build.py native-build-overlay.qcow2
       - name: Independently verify compiled kernel SHA256 from FAT boot disk (no public binary)
+        if: always()
         run: python3 scripts/extract-9pc64.py native-build-overlay.qcow2
       - name: Remove huge disk images before logs upload
         if: always()
