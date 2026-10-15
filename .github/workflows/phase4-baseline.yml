@@ -28,7 +28,7 @@ jobs:
       - name: Verify pinned kernel source and no automatic 9front updates
         run: python3 scripts/phase4-baseline.py verify
       - name: Unit-test risk classification and non-destructive recovery
-        run: python3 -m unittest discover -s tests -p test_phase4_baseline.py -v
+        run: python3 -m unittest discover -s tests -p 'test_phase4*.py' -v
       - name: Drill creating a recovery ref LOCALLY, then remove it
         shell: bash
         run: |
