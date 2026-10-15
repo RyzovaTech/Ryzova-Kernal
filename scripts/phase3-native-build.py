@@ -159,13 +159,6 @@ with (OUT/"host.log").open("wb") as host:
         client.close()
 
 text=bytes(raw).decode("utf-8",errors="replace")
-# Phase 4.1: all positive markers must be standalone output lines from a
-# freshly built QEMU guest; parsing command echo text is insufficient.
-stability=check_stability_serial(bytes(bootlog))
-(OUT/"phase4-1-stability.json").write_text(json.dumps(stability, indent=2, sort_keys=True) + "\n")
-for label, ok in stability["checks"].items():
-    print("PHASE4.1", "PASS" if ok else "FAIL", label, flush=True)
-
 (OUT/"result.txt").write_text(
     f"Source SHA: {SOURCE_SHA}\n"
     f"Source transfer: {'PASS' if marks.get('fetch-repository-source') else 'NOT CONFIRMED'}\n"
@@ -291,6 +284,13 @@ regression_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)",bytes(bootlog))
 write_denied=(b"can't create: #Z/version: permission denied" in bytes(bootlog)
     and bool(re.search(rb"(?:\r?\n)ryzova_ro_test_done(?:\r?\n)",bytes(bootlog)))
     and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 3)
+
+# Phase 4.1: all positive markers must be standalone output lines from a
+# freshly built QEMU guest; parsing command echo text is insufficient.
+stability=check_stability_serial(bytes(bootlog))
+(OUT/"phase4-1-stability.json").write_text(json.dumps(stability, indent=2, sort_keys=True) + "\n")
+for label, ok in stability["checks"].items():
+    print("PHASE4.1", "PASS" if ok else "FAIL", label, flush=True)
 
 (OUT/"result.txt").write_text(
     f"Source SHA: {SOURCE_SHA}\n"
