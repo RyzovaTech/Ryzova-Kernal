@@ -30,6 +30,19 @@ done
 
 grep -q "MIT" lib/legal/NOTICE
 grep -q "Permission is hereby granted" lib/legal/mit
+# The successful official 9front nightly builder recorded source SHA 9c754397....
+# The difference to the Ryzova-pinned upstream baseline is only an unrelated game file.
+UPSTREAM_BUILT_SHA="9c7543976c3e9614ddd61c1173aaa754aff5e1d5"
+git cat-file -e "${UPSTREAM_BUILT_SHA}^{commit}"
+parity_diff="$(git diff --name-only "$UPSTREAM_BUILT_SHA" "$PIN")"
+if [ "$parity_diff" != "sys/src/games/aout2gba.c" ]; then
+  echo "ERROR: upstream prebuilt baseline differs from pinned kernel source beyond the expected games file." >&2
+  printf 'Changed files:\n%s\n' "$parity_diff" >&2
+  exit 1
+fi
+echo "PASS: imported kernel source unchanged from official 9front nightly builder baseline ($UPSTREAM_BUILT_SHA)."
+echo "NOTE: this proves source parity, NOT independent Ryzova kernel compilation or boot."
+
 printf 'Pinned upstream commit: %s\n' "$PIN"
 printf 'Current Ryzova commit: %s\n' "$(git rev-parse HEAD)"
 echo 'PASS: provenance, required source files, and license notices present.'
