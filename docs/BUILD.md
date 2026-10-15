@@ -1,6 +1,6 @@
 # Ryzova Kernel baseline build and boot verification
 
-**Status: not built or boot-tested.** Phase 1 imports the untouched 9front source and establishes checks; a successful structural CI check does **not** mean the kernel compiled or booted.
+**Status (updated 2026-10-15): the experimental Ryzova AMD64 source kernel has been built with native 9front `mk` and successfully booted under QEMU.** The verified [CI run](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38703531423) includes device identity and read-only checks. This is not hardware certification, an end-user release, or full network/storage regression clearance.
 
 ## Current pinned baseline
 
@@ -13,7 +13,7 @@ The upstream source is at repository root. The amd64 kernel is under `sys/src/9/
 
 `scripts/verify-foundation.sh` verifies upstream ancestry, key 9front sources, and retained license notices. This is **not** a substitute for a native compile or QEMU boot.
 
-## Required native build gate — to be executed and logged
+## Native build gate — implemented in experimental QEMU CI
 
 1. Pin a known working 9front system / toolchain image with source URL and checksum; do not use an unverified “latest” download.
 2. In a disposable VM using the pinned image, install or mount exactly this imported source tree with the correct Plan 9 paths and `amd64` tools.
@@ -23,7 +23,7 @@ The upstream source is at repository root. The amd64 kernel is under `sys/src/9/
 6. Run checks for device initialization, memory allocation, network access, basic 9P mounts and process management.
 7. Record results and enable an automated, checksum-pinned VM build job only after the above procedure passes.
 
-No boot success or driver compatibility is claimed until gates 1–7 have evidence.
+The native build and source-built QEMU userspace boot gates have been demonstrated with logs. The entire seven-step verification list, especially full network/9P/runtime regression, independent release-grade kernel artifact checksums, and physical hardware validation, is **not yet complete**. See `docs/PHASE3.md` and open release gate issues.
 
 ## Developer workflow
 
