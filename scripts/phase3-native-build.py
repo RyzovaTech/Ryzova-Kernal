@@ -241,7 +241,7 @@ runtime_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)", bytes(bootlog)) for v in
 # Plan 9's rc expands $status to an empty string on success, and an error
 # description for a failed attempt to open the read-only identity device.
 # A terminal echo of the command is not accepted as proof of the returned status.
-write_denied=bool(re.search(rb"(?:\\r?\\n)RYZOVA_WRITE_STATUS_[^\\r\\n\\s$]+",bytes(bootlog)))
+write_denied=bool(re.search(rb"(?:\r?\n)RYZOVA_WRITE_STATUS_[^\r\n\s$]+",bytes(bootlog)))
 
 (OUT/"result.txt").write_text(
     f"Source SHA: {SOURCE_SHA}\n"
