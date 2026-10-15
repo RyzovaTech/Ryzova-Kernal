@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "name": "Ryzova Kernel AMD64 Phase 4.0 known-good baseline",
+  "baseline_commit": "d6b1f3d8e78470f5ae9caf42d85deb983239e752",
+  "baseline_branch": "baseline/amd64-phase4-0",
+  "last_verified_native_build_commit": "ad60322c64b7cf15eaac3cb9d59037683d263b41",
+  "last_verified_native_build_url": "https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38708829586",
+  "verified_architecture": "amd64",
+  "status": "experimental_qemu_only",
+  "source_trees": {
+    "sys/src/9": "044deb31d5d9a2e8c1a3e81f257163012061d25a",
+    "sys/include": "bef74b27ad19f569c741bca37011cc99f871aa39",
+    "amd64/include": "6de6a09a556d21b8bc1acdb03ebf98ce2b6a9e95",
+    "ryzova": "7c11e220fee5ff35d8bec8f31414cb794fca9404"
+  },
+  "change_policy": "Retain baseline SHA, never auto-update or force-push branch; review fresh-driver changes and run source-built QEMU tests.",
+  "release_policy": "Not a public kernel binary release. Human review required for redistribution; physical hardware unverified."
+}
