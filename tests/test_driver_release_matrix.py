@@ -30,6 +30,7 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(m["counts"]["real_hardware_verified"], 0)
         self.assertTrue(m["counts"]["source_probe_records"] >= 10)
         self.assertTrue(m["counts"]["class_selector_records"] >= 3)
+        self.assertTrue(m["counts"]["fully_specified_vendor_device_records"] >= 20)
         self.assertTrue(m["source_config_sha256"])
         self.assertEqual(m["schema"], "ryzova-driver-source-matrix/v1")
 
@@ -42,6 +43,8 @@ class MatrixTests(unittest.TestCase):
                             for r in rows))
         self.assertTrue(any(r["driver"] == "usbxhcipci" and r["pci_class"] == "0c:03:30"
                             for r in rows))
+        self.assertTrue(any(r["driver"] == "ether8169" and r["vendor_id"] == "10ec"
+                            and r["device_id"] == "8168" for r in rows))
         self.assertTrue(all(r["verified"] is False for r in rows))
 
     def test_firmware_evidence_never_implies_rights(self):
