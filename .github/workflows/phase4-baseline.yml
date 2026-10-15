@@ -1,0 +1,51 @@
+name: Phase 4 baseline and rollback safety
+
+on:
+  push:
+    branches: [main, 'phase4/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4-baseline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline-and-recovery:
+    name: Phase 4.0 pinned baseline, no-sync and rollback drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out complete source history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify pinned kernel source and no automatic 9front updates
+        run: python3 scripts/phase4-baseline.py verify
+      - name: Unit-test risk classification and non-destructive recovery
+        run: python3 -m unittest discover -s tests -p test_phase4_baseline.py -v
+      - name: Drill creating a recovery ref LOCALLY, then remove it
+        shell: bash
+        run: |
+          set -euo pipefail
+          name='recovery/phase4-ci-drill'
+          trap 'git branch -D "$name" >/dev/null 2>&1 || true' EXIT
+          python3 scripts/phase4-baseline.py prepare-rollback --name "$name" \
+            --create-local-branch --output artifacts/phase4/rollback-drill.json
+          expected="$(python3 -c 'import json;print(json.load(open("ryzova/baselines/amd64-phase4.0.json"))["baseline_commit"])')"
+          actual="$(git rev-parse "$name")"
+          test "$actual" = "$expected"
+          echo "PASS: local recovery ref matches frozen baseline commit."
+      - name: Upload Phase 4 baseline audit (never a kernel binary)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-baseline-evidence
+          path: artifacts/phase4/*.json
+          if-no-files-found: warn
+          retention-days: 30
