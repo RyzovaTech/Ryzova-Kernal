@@ -16,7 +16,7 @@ dev
 	tls
 	cap
 	kprof
-	ryzova		# Ryzova Kernel read-only identity (#Z)
+	ryzova
 	fs
 
 	ether		netif
