@@ -79,7 +79,7 @@ with (ART/"qemu-host.log").open("wb") as host:
                 guest.sendall(b"echo PROBE_MARKER | tr A-Z a-z\r")
                 state["probe"]=True
                 stage_msg.append("Sent rc-shell probe (may fail if no shell)")
-            if state["probe"] and b"probe_marker" in bytes(log).lower():
+            if state["probe"] and b"probe_marker" in bytes(log):
                 stage_msg.append("Guest shell successfully executed a command")
                 break
         guest.close()
