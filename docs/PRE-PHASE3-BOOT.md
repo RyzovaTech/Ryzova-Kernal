@@ -29,7 +29,7 @@ The official image is pinned by *release filename* and a SHA256 observed in the 
 
 The [Phase 3 CI run](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38703531423) compiled exact checked-out kernel source with native 9front `mk`, installed the kernel after a byte-for-byte FAT compare, rebooted QEMU and verified native `rc` output from the newly built kernel. See [Issue #5](https://github.com/RyzovaTech/Ryzova-Kernal/issues/5) for remaining release-quality verification (published compiled-kernel SHA256 and fuller 9P/storage/network checks).
 
-## V2: native build plan (not yet completed)
+## V2: native build procedure (completed experimentally in Phase 3 CI)
 
 After V1 diagnostics, use a version- and checksum-pinned installed 9front build environment, transfer this repository's exact source revision to the guest, and run its real `mk` build, not a Linux host compile.
 
@@ -44,14 +44,14 @@ mk
 
 Build prerequisites, copied source tree layout, toolchain versions, logs and kernel SHA256 are required. **Do not boot the release's original prebuilt kernel and label it the output of this build.**
 
-## V3: QEMU boot of V2 artifact (not yet completed)
+## V3: QEMU boot of V2 artifact (completed experimentally in Phase 3 CI)
 
 Prepare a 9front bootloader and Plan 9 boot configuration pointing **specifically** at the built `/amd64/9pc64` artifact. Capture QEMU serial/video evidence of the newly compiled kernel reaching boot and userspace. Confirm the boot file checksum matches the V2 output, and record exact source commit.
 
-## V4: Runtime check plan
+## V4: Additional runtime and hardware regression still required
 
 Check startup, CPU count, kernel memory reporting, basic process creation, local filesystem, 9P mount, network device detection/traffic and graceful shutdown. Hardware support is only confirmed for specific devices under test.
 
 ## Phase transition rule
 
-Proceed to Phase 3 kernel changes only after reporting the actual V0–V3 results; any pending gate must remain explicitly pending, with actionable blockers and reproducible logs. Distinguish **test harness delivered** from **kernel actually boot-verified**.
+V0–V3 have now been documented with passing source-built QEMU evidence (see `docs/PHASE3.md`). V4 remains partially verified and V5 physical hardware is untested. Developer preview release still requires provenance/release artifacts and third-party licensing review. Distinguish **test harness delivered** from **kernel actually boot-verified**.
