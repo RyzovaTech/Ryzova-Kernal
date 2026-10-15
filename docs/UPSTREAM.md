@@ -7,30 +7,39 @@
 - Mirrored branch: `front`
 - Ryzova mirror branch: `upstream/front`
 
-The GitHub repository is a mirror, so Ryzova's schedule cannot guarantee immediate propagation of changes made to the canonical repository.
+The GitHub repository is a mirror, so sync timing follows that mirror rather than guaranteeing immediate propagation from the canonical development repository.
 
 ## Provenance and synchronization
 
-The scheduled workflow fetches the **full commit history** of upstream `front` and updates `upstream/front` using a non-forced fast-forward push.
+The scheduled workflow fetches the **full Git history** of the upstream `front` branch and updates `upstream/front` via a non-forced fast-forward push.
 
-- **No force pushes.** If upstream changes history, require human review before reconciling.
-- **Never push upstream directly into `main`.** Fetching new driver code is not validation or approval of that code.
-- **Do not run untrusted upstream build scripts with write credentials in the sync job.**
-- **Keep upstream history, copyrights, and notices intact.** Perform a file-by-file license audit before adopting any imported code under a Ryzova release.
-- **Check CI before integration.** The first integration must use a dedicated branch with a documented upstream SHA, compiler/toolchain requirements, and QEMU boot results.
-- **No automatic deployment.** Updates can be reviewed, tested, then incorporated in a separate integration change.
+- **No force pushes.** An upstream history rewrite requires maintainer review.
+- **Never automatically merge upstream into `main`.** New driver code requires testing and approval.
+- **Do not run upstream build scripts using a token with repository write privileges.**
+- **Retain original ancestry and legal notices**, including all license exceptions.
+- **Release and future update integrations require compiler/test review,** not only source-layout validation.
 
-## First integration (planned, not yet completed)
+## First source integration — completed
 
-1. Confirm the `upstream/front` branch exists and resolves to the source commit being evaluated.
-2. Create a separate integration branch from Ryzova development history.
-3. Merge the unrelated source history only after review (using a local Git checkout with `--allow-unrelated-histories` if required).
-4. Build baseline AMD64 9front with a documented, reproducible toolchain.
-5. Test a 9front baseline boot in QEMU and capture logs and build artifacts.
-6. After compliance review, merge approved integration through a protected pull request.
+- Initial upstream source revision: `a0806493926c04ce90d4e4a46961dec30a1054dd`.
+- History preserved by a two-parent integration commit on `integration/9front-baseline`, retaining original Ryzova and upstream ancestors.
+- Integrated via [Pull Request #1](https://github.com/RyzovaTech/Ryzova-Kernal/pull/1).
+- Phase 1 source-provenance and license-notice structural CI checks passed on the integration branch.
+- Original `upstream/front` remains separately synced.
 
-**Phase boundary:** Changes to the kernel identity, interfaces, or behavior belong in Phase 3. AGPLv3/commercial licensing proposals are **not** applied to inherited upstream files automatically.
+**Still pending:** native amd64 compilation, QEMU boot logs, runtime regression tests, comprehensive file-level rights audit. See [BUILD.md](BUILD.md) and [LICENSE-REVIEW.md](LICENSE-REVIEW.md). Source import is not a release or proof of kernel usability.
+
+## Future upstream updates
+
+1. Compare `main` with `upstream/front` and record target SHA.
+2. File/license review for changed and new content.
+3. Create a dedicated integration branch; do not overwrite `main` or force-update histories.
+4. Build with a known, checksum-pinned 9front toolchain/image; capture logs.
+5. Run QEMU boot and regression tests, then obtain maintainer review.
+6. Merge approved changes into `main` through a pull request.
+
+**Phase boundary:** Kernel identity/ABI/behavior changes begin in Phase 3. Phase 2 will specify rights of Ryzova-owned contributions; upstream files are not automatically AGPLv3 or commercially relicensed.
 
 ## Failure policy
 
-If fetching fails, credentials lack repository write permission, or the upstream history diverges: fail the workflow and leave existing refs unchanged. Review the GitHub Actions run and do not bypass the guard with a force push.
+If fetching fails, permissions fail or histories diverge, fail the sync job. Leave branch refs untouched. Review logs rather than bypassing safety checks.
