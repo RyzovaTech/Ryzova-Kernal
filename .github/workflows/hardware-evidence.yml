@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: D0.2 PCI and firmware evidence (source-only)
+on:
+  push:
+    branches: [main, 'driver-audit/d0-2-pci-firmware-evidence']
+    paths:
+      - 'sys/src/9/**'
+      - 'scripts/hardware_evidence.py'
+      - 'scripts/driver_inventory.py'
+      - 'tests/test_hardware_evidence.py'
+      - 'tests/test_driver_inventory.py'
+      - '.github/workflows/hardware-evidence.yml'
+  pull_request:
+    branches: [main, 'driver-audit/d0-1-amd64-inventory']
+    paths:
+      - 'sys/src/9/**'
+      - 'scripts/hardware_evidence.py'
+      - 'scripts/driver_inventory.py'
+      - 'tests/test_hardware_evidence.py'
+      - 'tests/test_driver_inventory.py'
+      - '.github/workflows/hardware-evidence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pci-firmware-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run D0.1 and D0.2 regression tests
+        run: python3 -m unittest discover -s tests -p 'test_*inventory.py' -v && python3 -m unittest discover -s tests -p 'test_hardware_evidence.py' -v
+      - name: Generate source-only hardware evidence JSON
+        run: |
+          python3 scripts/hardware_evidence.py --output artifacts/drivers/d0-2-hardware-evidence.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("artifacts/drivers/d0-2-hardware-evidence.json", encoding="utf-8"))
+          assert d["summary"]["review_modules"] == 15
+          assert d["summary"]["physically_verified_device_count"] == 0
+          assert all(v.get("physical_hardware_status", "unverified") == "unverified" for v in d["drivers"])
+          print("source-only inventory verified:", d["summary"])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: d0-2-pci-firmware-evidence
+          path: artifacts/drivers/d0-2-hardware-evidence.json
+          if-no-files-found: error
+          retention-days: 30
