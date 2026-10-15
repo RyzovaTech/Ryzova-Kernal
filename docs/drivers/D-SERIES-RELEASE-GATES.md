@@ -26,11 +26,16 @@ motherboard, Wi-Fi card or GPU is working.
 ```sh
 python3 -m unittest discover -s tests -p 'test_driver_inventory.py' -v
 python3 -m unittest discover -s tests -p 'test_hardware_evidence.py' -v
+python3 -m unittest discover -s tests -p 'test_packed_pci_evidence.py' -v
 python3 -m unittest discover -s tests -p 'test_driver_release_matrix.py' -v
 python3 scripts/driver_release_matrix.py \
   --output artifacts/drivers/d-series-matrix.json \
   --gate-output artifacts/drivers/d-series-release-gate.json
 ```
+
+The D0.3 packed-ID extractor additionally resolves reviewed Realtek RTL8169
+and Intel igbe probe-switch cases written as `(did<<16)|vid`. This still
+cannot certify any physical device and does not cover arbitrary C expressions.
 
 The matrix lists distinct source candidates, PCI class patterns, possible
 conflicts, and firmware name/path references. **Not all IDs are decoded.**
