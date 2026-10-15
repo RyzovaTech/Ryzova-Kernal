@@ -70,6 +70,8 @@ stages = [
      "cd /sys/src/9/pc64; mk > /tmp/ryzova-native-build.log >[2=1]; "
      "echo PHASE3_MK_STATUS_$status; tail -n 90 /tmp/ryzova-native-build.log; ls -l 9pc64; "
      "echo PHASE3_END_3"),
+    ("inspect-boot-disk",
+     "9fs 9fat; ls -l /n/9fat; cat /n/9fat/plan9.ini; echo PHASE3_END_4"),
 ]
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
@@ -125,7 +127,7 @@ with (OUT/"host.log").open("wb") as host:
                     session["stage"]+=1
                     session["sent"]=False
                     print("PASSED STAGE",ix,label,flush=True)
-                    if ix==3:
+                    if ix==4:
                         session["final"]=True
                         break
                 if time.monotonic()-stage_start>380:
