@@ -221,7 +221,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 bootstate["user"]=True
                 print("FRESH KERNEL: userspace login reached",flush=True)
             if b"term%" in tail and bootstate["user"] and not bootstate["command"]:
-                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
+                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; test -d /proc && echo RYZOVA_PROC_OK; test -d /net && echo RYZOVA_NET_OK; mkdir -p /tmp/ryzova-ns; bind '#Z' /tmp/ryzova-ns; cat /tmp/ryzova-ns/version; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
                 bootstate["command"]=True
                 print("FRESH KERNEL: rc probe sent",flush=True)
             if re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)):
@@ -237,6 +237,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
 boottext=bytes(bootlog).decode("utf-8",errors="replace")
 fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
 identity_ok=all(v in bytes(bootlog) for v in (b"Ryzova Kernel 0.1.0-dev", b"9front-derived", b"experimental-0"))
+runtime_ok=all(v in bytes(bootlog) for v in (b"RYZOVA_PROC_OK", b"RYZOVA_NET_OK")) and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 2
 (OUT/"result.txt").write_text(
     f"Source SHA: {SOURCE_SHA}\n"
     f"Kernel source archive sha256: {archive_hash}\n"
@@ -245,10 +246,11 @@ identity_ok=all(v in bytes(bootlog) for v in (b"Ryzova Kernel 0.1.0-dev", b"9fro
     f"V3 bootargs prompt reached: {bootstate['bootargs']}\n"
     f"V3 rc userspace command verified: {fresh_rc_ok}\n"
     f"V3 Ryzova identity device verified: {identity_ok}\n"
+    f"V4 basic proc/net and per-process bind checks: {runtime_ok}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
-print("PASS V3: source-built Ryzova kernel booted into rc and reported identity via #Z.",flush=True)
+print("PASS V3/V4: source-built Ryzova kernel booted, exposed #Z identity, and passed basic proc/net/bind checks.",flush=True)
 
