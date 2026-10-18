@@ -264,7 +264,7 @@ struct Rock {
 static void
 vqinterrupt(Vqueue *q)
 {
-	int id, free, m;
+	int id, free, m, n, next;
 	struct Rock *r;
 	Rendez *z;
 
@@ -273,6 +273,19 @@ vqinterrupt(Vqueue *q)
 	ilock(q);
 	while((q->lastused ^ q->used->idx) & m){
 		id = q->usedent[q->lastused++ & m].id;
+		/* Validate the device-supplied head and entire chain before indexing
+		 * the waiter table or modifying the free list. */
+		for(n = 0, next = id; n < q->size; n++){
+			if((uint)next >= (uint)q->size)
+				break;
+			if((q->desc[next].flags & Next) == 0)
+				break;
+			next = q->desc[next].next;
+		}
+		if(n == q->size || (uint)next >= (uint)q->size){
+			print("virtio: invalid used descriptor chain (head %d)\\n", id);
+			continue;
+		}
 		if(r = q->rock[id]){
 			q->rock[id] = nil;
 			z = r->sleep;
