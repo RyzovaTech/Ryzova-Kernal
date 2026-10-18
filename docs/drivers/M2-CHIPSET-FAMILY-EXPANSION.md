@@ -32,7 +32,11 @@ These do not represent 3,072 additional hardware models.
 ## Evidence and release blockers
 
 M2 Source/Build Stage: actual CI compilation and native AMD64 QEMU boot are
-required before review. The M0 native #P/drivercandidates file is still
+required before review. The native test uses two separate boots: the first
+preserves normal VirtIO networking, 9P and storage; the second adds emulated
+AMD PCnet and RTL8139 PCI NICs **only** to read #P/drivercandidates. It
+records both original vendor/device IDs and candidate labels without claiming
+successful NIC traffic. Full serial evidence is archived by GitHub Actions. The M0 native #P/drivercandidates file is still
 read-only. Existing proprietary firmware is never included or licensed by a
 registry entry.
 
