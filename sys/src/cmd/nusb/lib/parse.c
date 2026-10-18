@@ -108,6 +108,11 @@ parseendpt(Usbdev *d, Conf *c, Iface *ip, uchar *b, int n, Ep **epp)
 		return -1;
 	}
 	dep = (DEp *)b;
+	/* Reject malformed descriptors before creating or modifying endpoints. */
+	if((GET2(dep->wMaxPacketSize) & 0x7FF) == 0){
+		werrstr("invalid zero-sized USB endpoint");
+		return -1;
+	}
 
 	type = dep->bmAttributes & 0x03;
 	addr = dep->bEndpointAddress;
@@ -158,10 +163,6 @@ Again:
 	ep->iface = ip;
 	ep->conf = c;
 	ep->maxpkt = GET2(dep->wMaxPacketSize);
-	if((ep->maxpkt & 0x7FF) == 0){
-		werrstr("invalid zero-sized USB endpoint");
-		return -1;
-	}
 	ep->ntds = 1 + ((ep->maxpkt >> 11) & 3);
 	ep->maxpkt &= 0x7FF;
 	ep->attrib = dep->bmAttributes;
