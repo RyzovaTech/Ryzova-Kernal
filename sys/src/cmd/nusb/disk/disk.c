@@ -12,6 +12,7 @@
 #include <9p.h>
 #include "scsireq.h"
 #include "usb.h"
+#include "../lib/m1class.h"
 #include "ums.h"
 
 enum
@@ -338,6 +339,11 @@ umscapacity(Umsc *lun)
 				GETBELONG(data + 4);
 		}
 	}
+	if(!m1diskcapacityvalid(lun->blocks, lun->lbsize)){
+		lun->blocks = 0;
+		lun->lbsize = 0;
+		return -1;
+	}
 	lun->blocks++; /* SRcapacity returns LBA of last block */
 	lun->capacity = (vlong)lun->blocks * lun->lbsize;
 	fixlength(lun, lun->blocks);
@@ -404,7 +410,7 @@ umsrequest(Umsc *umsc, ScsiPtr *cmd, ScsiPtr *data, int *status)
 {
 	Cbw cbw;
 	Csw csw;
-	int n, nio;
+	int n, nio, mismatches;
 	Ums *ums;
 
 	ums = umsc->ums;
@@ -414,11 +420,12 @@ umsrequest(Umsc *umsc, ScsiPtr *cmd, ScsiPtr *data, int *status)
 	cbw.datalen = data->count;
 	cbw.flags = data->write? CbwDataOut: CbwDataIn;
 	cbw.lun = umsc->lun;
-	if(cmd->count < 1 || cmd->count > 16)
-		fprint(2, "%s: umsrequest: bad cmd count: %ld\n", argv0, cmd->count);
+	if(cmd->count < 1 || cmd->count > 16 || data->count < 0){
+		fprint(2, "%s: umsrequest: invalid CDB/data length\n", argv0);
+		goto Fail;
+	}
 
 	cbw.len = cmd->count;
-	assert(cmd->count <= sizeof(cbw.command));
 	memcpy(cbw.command, cmd->p, cmd->count);
 	memset(cbw.command + cmd->count, 0, sizeof(cbw.command) - cmd->count);
 
@@ -459,6 +466,7 @@ umsrequest(Umsc *umsc, ScsiPtr *cmd, ScsiPtr *data, int *status)
 		}
 	}
 
+	mismatches = 0;
 Again:
 	/* read the transfer's status */
 	n = read(ums->epin->dfd, &csw, CswLen);
@@ -474,6 +482,8 @@ Again:
 	}
 	if(csw.tag != cbw.tag){
 		dprint(2, "%s: status tag mismatch: %lux != %lux\n", argv0, csw.tag, cbw.tag);
+		if(++mismatches >= 3)
+			goto Fail;
 		goto Again;
 	}
 	if(csw.status >= CswPhaseErr){
