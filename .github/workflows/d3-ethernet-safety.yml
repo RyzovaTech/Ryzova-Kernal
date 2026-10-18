@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: D3 Ethernet BAR validation regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/pc/etheri225.c'
+      - 'tests/test_d3_i225_bar.py'
+      - '.github/workflows/d3-ethernet-safety.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ethernet-source-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tests -p 'test_d3_i225_bar.py' -v
