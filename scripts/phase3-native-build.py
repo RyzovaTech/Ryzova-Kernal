@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from ryzova.remote.phase7_fixture import Ephemeral9PTLSFixture
 from phase7_secure_closeout import gateway_metrics_report
+from phase7_native_guest_tls import commands as native_tls_commands, inspect as inspect_native_tls
 OUT = ROOT / "artifacts" / "phase3"
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "network-probe.txt").write_text("RYZOVA_NETWORK_DATA\n")
@@ -228,7 +229,8 @@ m2_enabled = (ROOT / "ryzova/drivers/m2-chipset-families.json").is_file()
 fresh_cmd = list(cmd)
 # QEMU guest -> plaintext CI-host 9P gateway -> pinned mutual TLS 1.3
 # -> separate, read-only 9P2000 localhost peer. Public fixture only.
-tls_fixture = Ephemeral9PTLSFixture(payload_for_commit(SOURCE_SHA), gateway_port=15640).start()
+tls_fixture = Ephemeral9PTLSFixture(payload_for_commit(SOURCE_SHA), gateway_port=15640, guest_tls_port=15641).start()
+guest_cert_pin = tls_fixture.guest_cert_sha256
 print("PHASE7 native read-only 9P gateway and mutual TLS peer started", flush=True)
 
 # Start a NEW QEMU process against the SAME disposable qcow2 overlay.
@@ -243,7 +245,7 @@ runtime_commands=[
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
-] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()]
+] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)]
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(fresh_cmd,stdout=host,stderr=subprocess.STDOUT)
@@ -258,7 +260,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         else:
             raise RuntimeError("fresh-boot serial socket unavailable")
         guest.setblocking(False)
-        deadline=time.monotonic()+250
+        deadline=time.monotonic()+330
         while time.monotonic()<deadline:
             if second.poll() is not None:
                 print("Fresh-kernel QEMU unexpectedly exited",flush=True)
@@ -328,7 +330,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                     bootstate["runtime_stage"]=i+1
                     guest.sendall((runtime_commands[i+1]+"\r").encode())
                     print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
-            if re.search(rb"(?:\r?\n)RYZOVA_PHASE6_NATIVE_DONE(?:\r?\n)",bytes(bootlog)):
+            if re.search(rb"(?:\r?\n)RYZOVA_NATIVE_TLS_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
@@ -338,6 +340,11 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         except subprocess.TimeoutExpired: second.kill()
         guest.close()
         server.shutdown()
+        guest_tls_metrics = {
+            "native_tls12_sessions": tls_fixture.guest_tls.tls12_sessions,
+            "native_tls_9p_frames": tls_fixture.guest_tls.forwarded_frames,
+            "upstream_tls13_sessions": tls_fixture.gateway.verified_tls_sessions,
+        }
         tls_metrics = {
             "gateway_9p_frames": tls_fixture.gateway.forwarded_frames,
             "peer_9p_frames": tls_fixture.peer.frames,
@@ -380,6 +387,10 @@ for label, ok in extended["checks"].items():
 for label, ok in stability["checks"].items():
     print("PHASE4.1", "PASS" if ok else "FAIL", label, flush=True)
 native_9p_evidence=inspect_native_9p_serial(bytes(bootlog),SOURCE_SHA,tls_metrics["gateway_9p_frames"])
+guest_tls_evidence=inspect_native_tls(bytes(bootlog),SOURCE_SHA,guest_cert_pin,guest_tls_metrics)
+(OUT/"phase7-native-guest-tls.json").write_text(json.dumps(guest_tls_evidence,indent=2,sort_keys=True)+"\n")
+for label,ok in guest_tls_evidence["checks"].items():
+    print("NATIVE GUEST TLS", "PASS" if ok else "FAIL",label,flush=True)
 phase7_secure_evidence=gateway_metrics_report(SOURCE_SHA,tls_metrics,native_9p_evidence)
 (OUT/"phase7-secure-bridge.json").write_text(json.dumps(phase7_secure_evidence,indent=2,sort_keys=True)+"\n")
 for label, ok in phase7_secure_evidence["checks"].items():
@@ -404,10 +415,11 @@ for label,ok in native_9p_evidence["checks"].items():
     f"V4.5 bounded additional stress checks: {extended['passed']}\n"
     f"V6 source-built QEMU guest network 9P mount and SHA: {native_9p_evidence['passed']}\n"
     f"V7 native guest 9P via pinned mutual TLS host gateway: {phase7_secure_evidence['passed']}\n"
+    f"V7 native 9front tlsclient pinned TLS1.2 9P: {guest_tls_evidence['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
-print("PASS V3/V4/4.1/4.5/V6/V7: native guest 9P read and guest SHA through host-side mutual TLS 1.3 peer; M2/M4 probes preserved.",flush=True)
+print("PASS native 9front tlsclient pinned TLS1.2 guest ingress and host mutual TLS1.3 peer; native 9P guest SHA, M2/M4 preserved.",flush=True)
 
