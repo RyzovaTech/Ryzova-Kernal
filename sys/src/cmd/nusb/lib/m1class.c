@@ -48,12 +48,12 @@ m1diskcapacityvalid(unsigned long long lastlba, unsigned long blocksize)
 }
 
 int
-m1cdcmacvalid(const char *mac)
+m1cdcmacvalid(const char *mac, unsigned long len)
 {
 	int i;
 	unsigned char c;
 
-	if(mac == 0)
+	if(mac == 0 || len != 12)
 		return 0;
 	for(i = 0; i < 12; i++){
 		c = mac[i];
@@ -62,7 +62,7 @@ m1cdcmacvalid(const char *mac)
 		     (c >= 'A' && c <= 'F')))
 			return 0;
 	}
-	return mac[12] == 0;
+	return 1;
 }
 
 int
