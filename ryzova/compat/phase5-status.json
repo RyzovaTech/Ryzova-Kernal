@@ -1,0 +1,37 @@
+{
+  "schema": "ryzova-phase5-compatibility/v1",
+  "phase": "5.8",
+  "status": "experimental-foundations-only",
+  "platforms": {
+    "linux": {
+      "format": "ELF64 AMD64",
+      "static_parser": true,
+      "subset_interpreter_host_tested": true,
+      "virtual_syscall_mock": true,
+      "virtual_namespace_mock": true,
+      "native_kernel_execution_verified": false,
+      "normal_app_support": false,
+      "real_runtime_mount": false
+    },
+    "windows": {
+      "format": "PE32+ AMD64",
+      "metadata_parser": true,
+      "nt_win32_runtime": false,
+      "dll_loader": false,
+      "application_execution_verified": false
+    },
+    "macos": {
+      "format": "Mach-O x86_64",
+      "metadata_parser": true,
+      "darwin_mach_runtime": false,
+      "dyld_or_frameworks": false,
+      "application_execution_verified": false,
+      "apple_silicon_supported": false
+    }
+  },
+  "phase5_full_completion": false,
+  "phase5_main_merge_authorized": false,
+  "public_release_allowed": false,
+  "native_kernel_code_modified": false,
+  "notes": "Positive host-side proof for narrow Linux static ELF interpreter only; parser metadata for Windows/macOS; source folders are not mounted runtime paths. Separate QEMU native-app test and authorization required."
+}
