@@ -23,7 +23,7 @@ def guest_commands():
          "echo RYZOVA_PHASE6_READ_END; echo RYZOVA_RUNTIME_STAGE_14"),
         ("phase6-native-tcp-9p-digest",
          "sha1sum -2 256 /n/ryzova6/probe; "
-         "echo RYZOVA_PHASE6_NATIVE_DONE; echo RYZOVA_RUNTIME_STAGE_15"),
+         "echo RYZOVA_RUNTIME_STAGE_15; echo RYZOVA_PHASE6_NATIVE_DONE"),
     )
 
 def _line(data, value):
