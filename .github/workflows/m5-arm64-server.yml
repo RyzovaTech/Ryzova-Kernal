@@ -14,6 +14,8 @@ on:
       - 'ryzova/drivers/m5-platform-matrix.json'
       - 'tests/test_m5_ecam.c'
       - 'tests/test_m5_platform.py'
+      - 'tests/test_m5_server_gates.py'
+      - 'scripts/m5_server_gates.py'
       - '.github/workflows/m5-arm64-server.yml'
   push:
     branches: [main]
@@ -46,6 +48,8 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_m5_platform.py' -v
           python3 scripts/m5_platform_audit.py > /tmp/m5-readiness.json
+          python3 -m unittest discover -s tests -p 'test_m5_server_gates.py' -v
+          python3 scripts/m5_server_gates.py > /tmp/m5-full-gates.json
           python3 - <<'PY'
           import json
           x=json.load(open('/tmp/m5-readiness.json'))
@@ -54,6 +58,9 @@ jobs:
           assert x['newly_certified_models']==0
           assert x['auto_binding'] is False
           assert x['release_gate']=='blocked-pending-native-arm64-boot-and-lab'
+          a=json.load(open('/tmp/m5-full-gates.json'))
+          assert not a['m5_full_complete'] and a['ready_for_m6_planning']
+          assert not a['ready_for_m6_hardware_release']
           PY
       - name: Preserve completed M0-M4 AMD64 and legacy gates
         run: |
@@ -67,6 +74,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: m5-source-only-platform-readiness
-          path: /tmp/m5-readiness.json
+          path: |
+            /tmp/m5-readiness.json
+            /tmp/m5-full-gates.json
           if-no-files-found: error
           retention-days: 14
