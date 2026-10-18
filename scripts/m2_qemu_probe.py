@@ -28,7 +28,20 @@ def validate_serial(data):
     )
 
 
-def run_probe(base_cmd, serial_path, monitor_path, output_dir):
+def legacy_memory_cmd(base_cmd, mib):
+    """Override QEMU guest memory without duplicating -m on its command line."""
+    if type(mib) is not int or not 128 <= mib <= 4096:
+        raise ValueError("unsafe legacy guest memory size")
+    if base_cmd.count("-m") != 1:
+        raise ValueError("QEMU memory configuration is ambiguous")
+    cmd = list(base_cmd)
+    cmd[cmd.index("-m")+1] = str(mib)
+    return cmd
+
+
+def run_probe(base_cmd, serial_path, monitor_path, output_dir, memory_mib=None):
+    if memory_mib is not None:
+        base_cmd = legacy_memory_cmd(base_cmd, memory_mib)
     serial_path = Path(serial_path)
     monitor_path = Path(monitor_path)
     output_dir = Path(output_dir)
