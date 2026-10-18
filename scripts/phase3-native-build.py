@@ -21,8 +21,12 @@ import time
 
 from phase4_1_stability import STAGES as PHASE41_STAGES, check_stability_serial
 from phase4_5_stress import STAGES as PHASE45_STAGES, check_extended_serial
+from phase6_native_9p import guest_commands, inspect_native_9p_serial, payload_for_commit
 
 ROOT = Path(__file__).resolve().parents[1]
+# The external fixture is exposed only inside the disposable QEMU test.
+sys.path.insert(0, str(ROOT))
+from ryzova.remote.native9p import Native9PTCPServer
 OUT = ROOT / "artifacts" / "phase3"
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "network-probe.txt").write_text("RYZOVA_NETWORK_DATA\n")
@@ -217,6 +221,13 @@ for component in m1_native_components:
         sys.exit(1)
 print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and cmp verified.",flush=True)
 
+# Start a read-only native TCP 9P2000 fixture on the QEMU host loopback.
+# A fresh guest must mount it and produce its own hash. No TLS or public files.
+native_9p = Native9PTCPServer({"probe": payload_for_commit(SOURCE_SHA)})
+native_9p_thread = threading.Thread(target=native_9p.serve_forever, daemon=True)
+native_9p_thread.start()
+print("PHASE6 native read-only 9P TCP fixture started, port", native_9p.server_address[1], flush=True)
+
 # Start a NEW QEMU process against the SAME disposable qcow2 overlay.
 # plan9.ini reads "bootfile=9pc64", and we have verified by cmp that this
 # filename contains the freshly compiled source-derived binary.
@@ -229,7 +240,7 @@ runtime_commands=[
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
-] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES]
+] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()]
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
@@ -244,7 +255,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         else:
             raise RuntimeError("fresh-boot serial socket unavailable")
         guest.setblocking(False)
-        deadline=time.monotonic()+185
+        deadline=time.monotonic()+250
         while time.monotonic()<deadline:
             if second.poll() is not None:
                 print("Fresh-kernel QEMU unexpectedly exited",flush=True)
@@ -314,7 +325,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                     bootstate["runtime_stage"]=i+1
                     guest.sendall((runtime_commands[i+1]+"\r").encode())
                     print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
-            if re.search(rb"(?:\r?\n)RYZOVA_PHASE45_DONE(?:\r?\n)",bytes(bootlog)):
+            if re.search(rb"(?:\r?\n)RYZOVA_PHASE6_NATIVE_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
@@ -324,6 +335,9 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         except subprocess.TimeoutExpired: second.kill()
         guest.close()
         server.shutdown()
+        native_9p.shutdown()
+        native_9p.server_close()
+        native_9p_thread.join(timeout=3)
 
 boottext=bytes(bootlog).decode("utf-8",errors="replace")
 fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
@@ -349,6 +363,10 @@ for label, ok in extended["checks"].items():
     print("PHASE4.5", "PASS" if ok else "FAIL", label, flush=True)
 for label, ok in stability["checks"].items():
     print("PHASE4.1", "PASS" if ok else "FAIL", label, flush=True)
+native_9p_evidence=inspect_native_9p_serial(bytes(bootlog),SOURCE_SHA,native_9p.frames)
+(OUT/"phase6-native-9p.json").write_text(json.dumps(native_9p_evidence,indent=2,sort_keys=True)+"\n")
+for label,ok in native_9p_evidence["checks"].items():
+    print("PHASE6 NATIVE 9P", "PASS" if ok else "FAIL",label,flush=True)
 
 (OUT/"result.txt").write_text(
     f"Source SHA: {SOURCE_SHA}\n"
@@ -363,10 +381,11 @@ for label, ok in stability["checks"].items():
     f"V4 9P ramfs, 9fat and HTTP checks: {regression_ok}\n"
     f"V4.1 bounded memory/process/scheduler checks: {stability['passed']}\n"
     f"V4.5 bounded additional stress checks: {extended['passed']}\n"
+    f"V6 source-built QEMU guest network 9P mount and SHA: {native_9p_evidence['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
-print("PASS V3/V4/4.1/4.5: source-built Ryzova kernel passed basic and bounded-extended QEMU checks.",flush=True)
+print("PASS V3/V4/4.1/4.5/V6: source-built Ryzova kernel mounted host TCP 9P2000 and matched guest-side SHA256.",flush=True)
 
