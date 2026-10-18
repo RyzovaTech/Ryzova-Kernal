@@ -63,6 +63,8 @@ igfxblank(VGAscr *scr, int blank)
 {
 	u32int off;
 
+	if(scr->pci == nil || scr->mmio == nil)
+		return;
 	switch(scr->pci->did){
 	default:
 		return;
@@ -84,6 +86,9 @@ igfxblank(VGAscr *scr, int blank)
 		break;
 	}
 
+	/* PCI MMIO mappings are device-specific; avoid a register past BAR0. */
+	if((uvlong)off + sizeof(u32int) > scr->pci->mem[0].size)
+		return;
 	/* toggle PP_CONTROL backlight & power state */
 	if(blank)
 		scr->mmio[off/4] &= ~0x5;
@@ -145,10 +150,12 @@ igfxcurregs(VGAscr* scr, int pipe)
 {
 	u32int o;
 
-	if(scr->mmio == nil || scr->storage == 0)
+	if(scr->pci == nil || scr->mmio == nil || scr->storage == 0 || pipe < 0 || pipe >= NPIPE)
 		return nil;
 	o = pipe == 3 ? 0xf000 : pipe*0x1000;
 	/* check PIPExCONF if enabled */
+	if((uvlong)(0x70008 | o) + sizeof(u32int) > scr->pci->mem[0].size)
+		return nil;
 	if((scr->mmio[(0x70008 | o)/4] & (1<<31)) == 0)
 		return nil;
 	switch(scr->pci->did){
@@ -180,6 +187,8 @@ igfxcurregs(VGAscr* scr, int pipe)
 		if(pipe > 0)
 			return nil;
 	}
+	if((uvlong)(0x70080 + o) + 3*sizeof(u32int) > scr->pci->mem[0].size)
+		return nil;
 	return (u32int*)((uchar*)scr->mmio + (0x70080 + o));
 }
 
