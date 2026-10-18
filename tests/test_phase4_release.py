@@ -16,6 +16,19 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertFalse(result["publication_permitted_by_ci"])
         self.assertIn("scoped_redistribution_rights",result["missing"])
         self.assertIn("physical_qualification",result["missing"])
+    def test_forged_physical_evidence_does_not_validate(self):
+        from unittest.mock import patch
+        import phase4_release_gate as gate
+        original=gate.document
+        def altered(root,path):
+            d=original(root,path)
+            if path=="ryzova/drivers/physical-tests.json":
+                return {**d,"test_records":[{"driver":"fabricated"}],
+                        "license_clearance":True,"maintainer_approval":"unknown",
+                        "independent_lab_review":"unverified"}
+            return d
+        with patch.object(gate,"document",side_effect=altered):
+            self.assertFalse(gate.assess()["checks"]["physical_qualification"])
     def test_current_builder_provenance_is_not_binary_reproducibility(self):
         r=collect()
         self.assertEqual(len(r["source_commit"]),40)

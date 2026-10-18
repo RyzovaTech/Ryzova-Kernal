@@ -7,6 +7,8 @@ import pathlib
 import re
 import sys
 
+from driver_release_matrix import validate_evidence
+
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 SHA256=re.compile(r"^[0-9a-f]{64}$")
 GITSHA=re.compile(r"^[0-9a-f]{40}$")
@@ -42,6 +44,8 @@ def assess(root=ROOT):
         "scoped_redistribution_rights": approval(rights, scoped=True),
         "physical_qualification": isinstance(records,list) and len(records)>0
           and physical.get("license_clearance") is True
+          and not validate_evidence(physical)
+          and bool(physical.get("independent_lab_review"))
           and isinstance(physical.get("maintainer_approval"),str)
           and bool(physical.get("maintainer_approval")),
         "independent_reproduction": isinstance(rep,dict) and rep.get("verified") is True
