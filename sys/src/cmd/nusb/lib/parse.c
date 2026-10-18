@@ -2,6 +2,7 @@
 #include <libc.h>
 #include <thread.h>
 #include "usb.h"
+#include "m1class.h"
 
 int
 parsedev(Dev *xd, uchar *b, int n)
@@ -9,6 +10,10 @@ parsedev(Dev *xd, uchar *b, int n)
 	Usbdev *d;
 	DDev *dd;
 
+	if(!m1usbdevdescvalid(b, n)){
+		werrstr("invalid or truncated device descriptor");
+		return -1;
+	}
 	d = xd->usb;
 	dd = (DDev*)b;
 	if(usbdebug>1)
@@ -258,6 +263,10 @@ parseconf(Usbdev *d, Conf *c, uchar *b, int n)
 	int	l;
 	int	nr;
 
+	if(b == nil || n < Dconflen){
+		werrstr("truncated configuration descriptor");
+		return -1;
+	}
 	dc = (DConf*)b;
 	if(usbdebug>1)
 		fprint(2, "%s:\tparseconf %.*H\n", argv0, Dconflen, b);
