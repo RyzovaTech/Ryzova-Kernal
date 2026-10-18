@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: M3 Modern AMD64 Controller Safety
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/pc/etherx550.c'
+      - 'sys/src/9/port/sdnvme.c'
+      - 'tests/test_m3_modern_controllers.py'
+      - 'docs/drivers/M3-MODERN-AMD64-CONTROLLERS.md'
+      - '.github/workflows/m3-modern-controllers.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  modern-controller-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: X550/NVMe bounded MMIO and timeout regressions
+        run: python3 -m unittest discover -s tests -p 'test_m3_modern_controllers.py' -v
+      - name: Keep legacy modern source candidates and safety gates
+        run: |
+          python3 scripts/m0_device_registry.py
+          python3 scripts/m0_native_rules.py --check
+          python3 -m unittest discover -s tests -p 'test_m0_device_registry.py' -v
+          python3 -m unittest discover -s tests -p 'test_m1_qualification.py' -v
+          python3 -m unittest discover -s tests -p 'test_m2_chipsets.py' -v
+          python3 scripts/m2_chipset_audit.py > /tmp/m3-m2-audit.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('/tmp/m3-m2-audit.json'))
+          assert r['release_gate']=='blocked'
+          assert r['physical_verified_models']==0
+          assert r['certified_models']==0
+          assert r['modern_track_present'] and r['legacy_track_present']
+          assert not r['auto_bind_allowed']
+          PY
