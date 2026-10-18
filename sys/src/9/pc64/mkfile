@@ -51,6 +51,8 @@ OBJ=\
 	i8253.$O\
 	i8259.$O\
 	main.$O\
+	ryzovadrvmatch.$O\
+	ryzovadrvprobe.$O\
 	memory.$O\
 	mmu.$O\
 	irq.$O\
