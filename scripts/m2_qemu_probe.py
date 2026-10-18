@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Isolated third QEMU guest: source-built Ryzova PCI chipset discovery only.
+
+Keeps network-sensitive legacy baseline boot separate from synthetic PCI NICs.
+No ethernet data-path or physical chipset certification is performed.
+"""
+from pathlib import Path
+import re
+import select
+import socket
+import subprocess
+import time
+
+CANDIDATES = (b"m2-amd-pcnet-2000-candidate",
+              b"m2-realtek-rtl8139-candidate")
+
+
+def validate_serial(data):
+    """Require output lines, not copied command echo or fabricated source IDs."""
+    if not re.search(rb"(?:^|\r?\n)RYZOVA_M2_PCI_OK(?:\r?\n)", data):
+        return False
+    return all(
+        re.search(rb"(?:^|\r?\n)PCI\.[^\r\n]{1,180} candidate=" +
+                  re.escape(name) + rb" verified=no(?:\r?\n)", data)
+        for name in CANDIDATES
+    )
+
+
+def run_probe(base_cmd, serial_path, monitor_path, output_dir):
+    serial_path = Path(serial_path)
+    monitor_path = Path(monitor_path)
+    output_dir = Path(output_dir)
+    serial_path.unlink(missing_ok=True)
+    monitor_path.unlink(missing_ok=True)
+    extra = [
+        "-netdev", "user,id=m2pcnet", "-device", "pcnet,netdev=m2pcnet",
+        "-netdev", "user,id=m2rtl", "-device", "rtl8139,netdev=m2rtl",
+    ]
+    report = bytearray()
+    bootargs = login = sent = False
+    with (output_dir / "m2-qemu-host.log").open("wb") as host:
+        guest = subprocess.Popen(base_cmd + extra, stdout=host, stderr=subprocess.STDOUT)
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            for _ in range(300):
+                try:
+                    client.connect(str(serial_path))
+                    break
+                except (FileNotFoundError, ConnectionRefusedError):
+                    if guest.poll() is not None:
+                        break
+                    time.sleep(.1)
+            else:
+                raise RuntimeError("isolated M2 serial socket never became available")
+            client.setblocking(False)
+            deadline = time.monotonic() + 85
+            while time.monotonic() < deadline:
+                if guest.poll() is not None:
+                    break
+                ready, _, _ = select.select([client], [], [], .2)
+                if ready:
+                    try:
+                        chunk = client.recv(65536)
+                    except BlockingIOError:
+                        chunk = b""
+                    if chunk:
+                        report.extend(chunk)
+                tail = bytes(report[-16000:])
+                if b"bootargs is " in tail and not bootargs:
+                    client.sendall(b"\r")
+                    bootargs = True
+                if bootargs and (b"user[glenda]:" in tail or b"user:" in tail) and not login:
+                    client.sendall(b"glenda\r")
+                    login = True
+                if login and b"term%" in tail and not sent:
+                    client.sendall(b"grep 'candidate=m2-' '#P/drivercandidates'; echo RYZOVA_M2_PCI_OK\r")
+                    sent = True
+                if sent and validate_serial(bytes(report)):
+                    break
+        finally:
+            (output_dir / "m2-chipset-probe-serial.log").write_bytes(report)
+            guest.terminate()
+            try:
+                guest.wait(timeout=8)
+            except subprocess.TimeoutExpired:
+                guest.kill()
+            client.close()
+    return validate_serial(bytes(report))
