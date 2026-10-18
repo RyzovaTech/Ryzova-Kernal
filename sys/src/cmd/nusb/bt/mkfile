@@ -1,0 +1,10 @@
+</$objtype/mkfile
+
+TARG=bt
+OFILES=bt.$O hciwire.$O
+HFILES=../lib/usb.h hciwire.h
+LIB=../lib/usb.a$O
+BIN=/$objtype/bin/nusb
+
+</sys/src/cmd/mkone
+CFLAGS=-I../lib $CFLAGS
