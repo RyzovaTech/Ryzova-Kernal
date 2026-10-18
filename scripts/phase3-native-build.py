@@ -26,7 +26,8 @@ from phase6_native_9p import guest_commands, inspect_native_9p_serial, payload_f
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from ryzova.remote.native9p import Native9PTCPServer
+from ryzova.remote.phase7_fixture import Ephemeral9PTLSFixture
+from phase7_secure_closeout import gateway_metrics_report
 OUT = ROOT / "artifacts" / "phase3"
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "network-probe.txt").write_text("RYZOVA_NETWORK_DATA\n")
@@ -225,11 +226,10 @@ print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and 
 # process, preserving the original VirtIO network for baseline 9P/HTTP checks.
 m2_enabled = (ROOT / "ryzova/drivers/m2-chipset-families.json").is_file()
 fresh_cmd = list(cmd)
-# Host-only read-only TCP 9P fixture; QEMU guest accesses 10.0.2.2:15640.
-native_9p = Native9PTCPServer({"probe": payload_for_commit(SOURCE_SHA)})
-native_9p_thread = threading.Thread(target=native_9p.serve_forever, daemon=True)
-native_9p_thread.start()
-print("PHASE6 native read-only 9P TCP fixture started, port", native_9p.server_address[1], flush=True)
+# QEMU guest -> plaintext CI-host 9P gateway -> pinned mutual TLS 1.3
+# -> separate, read-only 9P2000 localhost peer. Public fixture only.
+tls_fixture = Ephemeral9PTLSFixture(payload_for_commit(SOURCE_SHA), gateway_port=15640).start()
+print("PHASE7 native read-only 9P gateway and mutual TLS peer started", flush=True)
 
 # Start a NEW QEMU process against the SAME disposable qcow2 overlay.
 # plan9.ini reads "bootfile=9pc64", and we have verified by cmp that this
@@ -338,9 +338,14 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         except subprocess.TimeoutExpired: second.kill()
         guest.close()
         server.shutdown()
-        native_9p.shutdown()
-        native_9p.server_close()
-        native_9p_thread.join(timeout=3)
+        tls_metrics = {
+            "gateway_9p_frames": tls_fixture.gateway.forwarded_frames,
+            "peer_9p_frames": tls_fixture.peer.frames,
+            "tls_client_pinned_sessions": tls_fixture.gateway.verified_tls_sessions,
+            "tls_server_pinned_sessions": tls_fixture.peer.secure_sessions,
+            "denied_guest_writes": tls_fixture.gateway.denied_writes,
+        }
+        tls_fixture.close()
 
 boottext=bytes(bootlog).decode("utf-8",errors="replace")
 fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
@@ -374,7 +379,11 @@ for label, ok in extended["checks"].items():
     print("PHASE4.5", "PASS" if ok else "FAIL", label, flush=True)
 for label, ok in stability["checks"].items():
     print("PHASE4.1", "PASS" if ok else "FAIL", label, flush=True)
-native_9p_evidence=inspect_native_9p_serial(bytes(bootlog),SOURCE_SHA,native_9p.frames)
+native_9p_evidence=inspect_native_9p_serial(bytes(bootlog),SOURCE_SHA,tls_metrics["gateway_9p_frames"])
+phase7_secure_evidence=gateway_metrics_report(SOURCE_SHA,tls_metrics,native_9p_evidence)
+(OUT/"phase7-secure-bridge.json").write_text(json.dumps(phase7_secure_evidence,indent=2,sort_keys=True)+"\n")
+for label, ok in phase7_secure_evidence["checks"].items():
+    print("PHASE7 TLS GATEWAY", "PASS" if ok else "FAIL", label, flush=True)
 (OUT/"phase6-native-9p.json").write_text(json.dumps(native_9p_evidence,indent=2,sort_keys=True)+"\n")
 for label,ok in native_9p_evidence["checks"].items():
     print("PHASE6 NATIVE 9P", "PASS" if ok else "FAIL",label,flush=True)
@@ -394,10 +403,11 @@ for label,ok in native_9p_evidence["checks"].items():
     f"V4.1 bounded memory/process/scheduler checks: {stability['passed']}\n"
     f"V4.5 bounded additional stress checks: {extended['passed']}\n"
     f"V6 source-built QEMU guest network 9P mount and SHA: {native_9p_evidence['passed']}\n"
+    f"V7 native guest 9P via pinned mutual TLS host gateway: {phase7_secure_evidence['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
-print("PASS V3/V4/4.1/4.5/V6: source-built Ryzova kernel mounted host TCP 9P2000 with SHA256; M2 probe remains separately qualified.",flush=True)
+print("PASS V3/V4/4.1/4.5/V6/V7: native guest 9P read and guest SHA through host-side mutual TLS 1.3 peer; M2/M4 probes preserved.",flush=True)
 
