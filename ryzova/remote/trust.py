@@ -6,6 +6,7 @@ no sockets or Internet connection methods. Production transport needs peer-auth
 TLS, secure key provisioning, revocation and native Ryzova integration.
 """
 import base64
+import binascii
 from dataclasses import dataclass
 import hashlib
 import hmac
@@ -96,7 +97,7 @@ class Endpoint:
                 raise RemoteDenied("payload quota exceeded")
         except RemoteDenied:
             raise
-        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError) as exc:
+        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError, binascii.Error) as exc:
             raise RemoteDenied("malformed envelope") from exc
         self._received[sender] = message["seq"]
         return body

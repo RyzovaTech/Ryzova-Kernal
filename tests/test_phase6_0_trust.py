@@ -48,6 +48,20 @@ class TrustTests(unittest.TestCase):
     def test_policy_rejects_arbitrary_operation(self):
         a,_=pair()
         with self.assertRaises(RemoteDenied):a.sign("server","request","exec","x".encode())
+    def test_authenticated_invalid_base64_is_rejected_not_crashed(self):
+        import base64, hashlib, hmac
+        from ryzova.remote.trust import _canonical
+        a,b=pair()
+        wrapper=json.loads(a.sign("server","request","9p",b"hello"))
+        wrapper["message"]["body"]="%%%not base64%%%"
+        wrapper["hmac"]=hmac.new(KEY,_canonical(wrapper["message"]),hashlib.sha256).hexdigest()
+        with self.assertRaises(RemoteDenied):
+            b.verify(json.dumps(wrapper).encode(),"request","9p")
+    def test_empty_or_invalid_authentication_envelope(self):
+        _,b=pair()
+        for malformed in (b'{}',b'[]',b'null',b'{"message":1}',b'{"message":{}}'):
+            with self.subTest(malformed=malformed),self.assertRaises(RemoteDenied):
+                b.verify(malformed,"request","9p")
     def test_reflection_is_rejected(self):
         a,b=pair()
         packet=a.sign("server","request","9p",b"x")
