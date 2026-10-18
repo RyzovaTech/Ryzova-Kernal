@@ -1,0 +1,35 @@
+{
+  "schema": "ryzova-release-candidate/v1",
+  "label": "AMD64 experimental kernel preview — draft, no publication",
+  "version": "0.1.0-dev",
+  "architecture": "amd64",
+  "abi": "experimental-0",
+  "kernel_artifact_sha256": null,
+  "source_commit": null,
+  "rights_clearance": {
+    "approved": false,
+    "artifact_scoped": false,
+    "review_reference": null
+  },
+  "independent_reproduction": {
+    "verified": false,
+    "log_sha256": null,
+    "review_reference": null
+  },
+  "security_qualification": {
+    "reviewed": false,
+    "soak_log_sha256": null,
+    "fuzz_log_sha256": null,
+    "review_reference": null
+  },
+  "maintainer_approval": {
+    "approved": false,
+    "review_reference": null
+  },
+  "signing": {
+    "verified": false,
+    "signature_reference": null
+  },
+  "published": false,
+  "note": "DO NOT RELEASE: this document records missing evidence. No kernel binary is authorized for publishing."
+}
