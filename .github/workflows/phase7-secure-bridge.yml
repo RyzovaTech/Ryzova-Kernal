@@ -1,0 +1,33 @@
+name: Phase 7 mutually authenticated 9P bridge security regression
+on:
+  push:
+    branches: ['phase7/**', main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  secure-host-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Verify OpenSSL is available for ephemeral test-only certs
+        run: openssl version
+      - name: Exercise real TCP 9P over pinned mutual TLS and negative controls
+        run: |
+          python3 -m unittest discover -s tests -p 'test_phase7_secure_bridge.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase6_native9p.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase7_handoff.py' -v
+      - name: Compile bridge source
+        run: python3 -m py_compile ryzova/remote/native_bridge.py ryzova/remote/phase7_fixture.py
