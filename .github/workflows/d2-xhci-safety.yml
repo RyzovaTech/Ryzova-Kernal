@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: D2 USB xHCI safety regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/port/usbxhci.c'
+      - 'sys/src/9/port/usbxhcipci.c'
+      - 'tests/test_d2_xhci_safety.py'
+      - '.github/workflows/d2-xhci-safety.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  xhci-source-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check xHCI source safety invariants
+        run: python3 -m unittest discover -s tests -p 'test_d2_xhci_safety.py' -v
