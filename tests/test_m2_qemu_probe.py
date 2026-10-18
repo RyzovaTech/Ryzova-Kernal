@@ -25,7 +25,7 @@ class M2QemuEvidence(unittest.TestCase):
         self.assertFalse(validate_serial(line+b"RYZOVA_M2_PCI_OK\r\n"))
 
     def test_missing_or_false_claim_rejected(self):
-        self.assertFalse(validate_serial(self.good.replace(b"RTL8139",b"RTL8138")))
+        self.assertFalse(validate_serial(self.good.replace(b"10ec:8139",b"10ec:8138")))
         self.assertFalse(validate_serial(self.good.replace(b"m2-realtek-rtl8139-candidate",b"m2-other-candidate")))
         self.assertFalse(validate_serial(self.good.replace(b"verified=no",b"verified=yes")))
         self.assertFalse(validate_serial(self.good.replace(b"RYZOVA_M2_PCI_OK\r\n",b"")))
