@@ -20,8 +20,8 @@
 
 enum {
 	Rzscanlimit = 512,
-	Rzshowlimit = 24,
-	Rzreportlen = 4096,
+	Rzshowlimit = 8,
+	Rzreportlen = 1536,
 };
 
 static long
