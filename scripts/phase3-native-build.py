@@ -62,6 +62,14 @@ cmd = [
     "-monitor", f"unix:{MON},server=on,wait=off",
     "-no-reboot", "-no-shutdown",
 ]
+# M1 QEMU regression exposes generic emulated xHCI keyboard/mouse devices.
+# This is NOT equivalent to physical USB HID qualification.
+if (ROOT / "sys/src/cmd/nusb/lib/m1class.c").is_file():
+    cmd += [
+        "-device", "qemu-xhci,id=m1xhci",
+        "-device", "usb-kbd,bus=m1xhci.0",
+        "-device", "usb-mouse,bus=m1xhci.0",
+    ]
 # The 9front rc shell is used for ALL target compilation, not Linux gcc/make.
 stages = [
     ("guest-network", "ip/ipconfig -d ether /net/ether0; webfs; echo PHASE3_END_0"),
@@ -92,7 +100,8 @@ for component in m1_native_components:
     stages.append((
         "m1-usb-" + component,
         "cd /sys/src/cmd/nusb/" + component +
-        "; mk > /tmp/m1-" + component + ".log >[2=1]; echo M1_" +
+        "; mk " + ("install" if component != "lib" else "") +
+        " > /tmp/m1-" + component + ".log >[2=1]; echo M1_" +
         component.upper() + "_STATUS_$status; tail -n 15 /tmp/m1-" +
         component + ".log; echo PHASE3_END_" + str(stageindex)
     ))
