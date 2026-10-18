@@ -25,13 +25,17 @@ rzdrvmatch(const Rzdevkey *d, const Rzdrvrule *rules, unsigned long count)
 	best = 0;
 	for(i=0; i<count; i++){
 		const Rzdrvrule *r = &rules[i];
-		if(r->bus != d->bus || r->firstrevision > r->lastrevision ||
-		   r->lastrevision > maxrev || r->vendor > 65535U ||
+		if((r->bus != RzbusPci && r->bus != RzbusUsb) ||
+		   r->firstrevision > r->lastrevision ||
+		   r->lastrevision > (r->bus == RzbusPci ? 255U : 65535U) ||
+		   r->vendor > 65535U ||
 		   r->device > 65535U || r->classcode > 255U ||
 		   r->subclass > 255U || r->protocol > 255U ||
 		   r->kind < RzruleExact || r->kind > RzruleClassProtocol)
 			return RzmatchInvalid;
-		if(d->revision < r->firstrevision || d->revision > r->lastrevision)
+		/* Rules for other buses are valid, but cannot match this device. */
+		if(r->bus != d->bus || d->revision < r->firstrevision ||
+		   d->revision > r->lastrevision)
 			continue;
 		score = 0;
 		if(r->kind == RzruleExact && r->vendor == d->vendor &&
