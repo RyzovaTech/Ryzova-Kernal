@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: M0 native PCI diagnostic integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/pc64/pc64'
+      - 'sys/src/9/pc64/main.c'
+      - 'sys/src/9/pc64/fns.h'
+      - 'sys/src/9/port/ryzovadrvmatch.*'
+      - 'sys/src/9/port/ryzovadrvprobe.c'
+      - 'sys/src/9/port/ryzovapcirules.h'
+      - 'scripts/m0_native_rules.py'
+      - 'ryzova/drivers/m0-device-registry.json'
+      - 'ryzova/drivers/m0-firmware-manifest.json'
+      - 'tests/test_m0_native_integration.py'
+      - 'tests/test_m0_family_api.c'
+      - '.github/workflows/m0-native-pci.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pci-native-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare generated native rules with reviewed registry
+        run: python3 scripts/m0_native_rules.py --check
+      - name: Verify read-only native interface and no auto binding
+        run: python3 -m unittest discover -s tests -p 'test_m0_native_integration.py' -v
+      - name: Validate portable family selector with strict C compiler
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -pedantic \
+            sys/src/9/port/ryzovadrvmatch.c tests/test_m0_family_api.c \
+            -o /tmp/m0-driver-matcher
+          /tmp/m0-driver-matcher
+      - name: Preserve host registry safety contract
+        run: python3 -m unittest discover -s tests -p 'test_m0_device_registry.py' -v
