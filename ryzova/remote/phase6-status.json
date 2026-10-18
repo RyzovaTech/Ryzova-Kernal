@@ -1,0 +1,34 @@
+{
+  "schema": "ryzova-phase6-experimental/v1",
+  "stages": [
+    "6.0",
+    "6.1",
+    "6.2",
+    "6.3"
+  ],
+  "default_enabled": false,
+  "transport": "authenticated-in-process-loopback",
+  "internet_network_supported": false,
+  "tls_peer_auth_supported": false,
+  "confidentiality_verified": false,
+  "remote_9p_client_wire_supported": true,
+  "remote_9p_network_mounted": false,
+  "remote_cache_page_size": 4096,
+  "remote_cache_max_pages": 64,
+  "remote_physical_ram_supported": false,
+  "delegated_task_types": [
+    "sum_squares",
+    "dot"
+  ],
+  "actual_remote_cpu_supported": false,
+  "native_kernel_code_modified": false,
+  "phase6_full_completion": false,
+  "main_merge_authorized": false,
+  "public_release_allowed": false,
+  "limitations": [
+    "In-process only; no external machines or TLS connection",
+    "Cache is pinned public data, not kernel memory or swap",
+    "Pure task protocol does not accelerate CPU or execute arbitrary programs",
+    "Native kernel 9P/memory/scheduler integration and security certification absent"
+  ]
+}

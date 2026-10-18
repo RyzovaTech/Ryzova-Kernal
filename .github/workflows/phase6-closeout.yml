@@ -1,0 +1,39 @@
+name: Phase 6.0-6.5 final research source acceptance
+on:
+  push:
+    branches: [main, 'phase6/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  phase6-complete-host-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Check ephemeral TLS certificate capability
+        run: openssl version
+      - name: Run complete Phase 6 host-only network and failure suites
+        run: python3 -m unittest discover -s tests -p 'test_phase6*.py' -v
+      - name: Generate strict source-only acceptance
+        run: python3 scripts/phase6_closeout.py
+      - name: Archive manifest only, never private keys
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6-closeout-${{ matrix.python-version }}
+          path: artifacts/phase6/phase6-closeout.json
+          if-no-files-found: warn
+          retention-days: 30
