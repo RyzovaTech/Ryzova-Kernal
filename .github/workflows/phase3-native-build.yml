@@ -2,7 +2,7 @@ name: Phase 3 AMD64 native source build (experimental)
 
 on:
   push:
-    branches: [main, 'phase6/native-9p-qemu-integration']
+    branches: [main, 'phase7/**']
     paths:
       - 'sys/src/9/**'
       - 'sys/include/**'
@@ -13,6 +13,7 @@ on:
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
       - 'scripts/phase6_native_9p.py'
+      - 'scripts/phase7_handoff.py'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -29,6 +30,7 @@ on:
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
       - 'scripts/phase6_native_9p.py'
+      - 'scripts/phase7_handoff.py'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -66,6 +68,8 @@ jobs:
       - name: Independently verify compiled kernel SHA256 from FAT boot disk (no public binary)
         if: always()
         run: python3 scripts/extract-9pc64.py native-build-overlay.qcow2
+      - name: Verify Phase 7 native QEMU evidence chain and readiness (research only)
+        run: python3 scripts/phase7_handoff.py
       - name: Remove huge disk images before logs upload
         if: always()
         run: rm -f 9front.qcow2.gz 9front.qcow2 native-build-overlay.qcow2
@@ -88,6 +92,7 @@ jobs:
             artifacts/phase3/phase4-1-stability.json
             artifacts/phase3/phase4-5-stress.json
             artifacts/phase3/phase6-native-9p.json
+            artifacts/phase3/phase7-entry.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn
           retention-days: 14

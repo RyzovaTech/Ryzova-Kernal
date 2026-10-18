@@ -1,0 +1,35 @@
+name: Phase 7 native 9P evidence acceptance unit tests
+on:
+  push:
+    branches: [main, 'phase7/**']
+    paths:
+      - 'scripts/phase7_handoff.py'
+      - 'scripts/phase6_native_9p.py'
+      - 'tests/test_phase7_handoff.py'
+      - '.github/workflows/phase7-entry.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  evidence-validator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Reject forged source, guest hash and missing QEMU artifacts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_phase7_handoff.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase6_native*.py' -v
+      - name: Compile evidence validator
+        run: python3 -m py_compile scripts/phase7_handoff.py
