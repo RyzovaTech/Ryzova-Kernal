@@ -1,0 +1,39 @@
+name: Phase 6.0-6.3 optional remote resources local PoC
+on:
+  push:
+    branches: ['phase6/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-remote-resource-prototype:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Verify no outbound network dependencies and bounded in-process remote services
+        run: |
+          python3 -m unittest discover -s tests -p 'test_phase6*.py' -v
+      - name: Static Python compilation
+        run: python3 -m compileall -q ryzova/remote tests/test_phase6_*.py
+      - name: Cross-phase safety and provenance report
+        run: python3 scripts/phase6_status.py
+      - name: Upload JSON evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6-host-evidence-${{ matrix.python-version }}
+          path: artifacts/phase6/phase6-0-3.json
+          if-no-files-found: warn
+          retention-days: 30
