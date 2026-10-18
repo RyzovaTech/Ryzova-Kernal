@@ -25,7 +25,8 @@ class M1UsbFamilySource(unittest.TestCase):
 
     def test_shared_usb_parser_bounds_endpoints_and_config_length(self):
         p=(ROOT/"sys/src/cmd/nusb/lib/parse.c").read_text()
-        self.assertIn("if((ep->maxpkt & 0x7FF) == 0)",p)
+        self.assertIn("if((GET2(dep->wMaxPacketSize) & 0x7FF) == 0)",p)
+        self.assertLess(p.index("if((GET2(dep->wMaxPacketSize) & 0x7FF) == 0)"),p.index("ep = mkep(d, id)"))
         self.assertIn("if(len < 2)",p)
         self.assertIn("if(l < Dconflen || n < l)",p)
         self.assertIn("n = l - Dconflen;",p)
