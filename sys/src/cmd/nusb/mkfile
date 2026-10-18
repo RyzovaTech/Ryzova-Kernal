@@ -5,6 +5,7 @@ DIRS=\
 	kb\
 	audio\
 	battery\
+	bt\
 	ether\
 	usbd\
 	disk\
