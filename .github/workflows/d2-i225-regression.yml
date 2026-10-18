@@ -9,7 +9,7 @@ on:
       - 'tests/test_i225_vmap_failure.py'
       - '.github/workflows/d2-i225-regression.yml'
   push:
-    branches: ['driver-fixes/d2-i225-mmio-failure']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
