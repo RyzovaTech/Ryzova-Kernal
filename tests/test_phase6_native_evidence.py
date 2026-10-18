@@ -19,6 +19,8 @@ class NativeGuestEvidenceTests(unittest.TestCase):
         self.assertEqual(len(guest_commands()),2)
         self.assertIn("mount -n",guest_commands()[0][1])
         self.assertIn("sha1sum -2 256",guest_commands()[1][1])
+        self.assertLess(guest_commands()[1][1].index("RYZOVA_RUNTIME_STAGE_15"),
+                        guest_commands()[1][1].index("RYZOVA_PHASE6_NATIVE_DONE"))
     def test_standalone_success(self):
         self.assertTrue(inspect_native_9p_serial(log(),SHA,6)["passed"])
     def test_wrong_commit_is_not_success(self):
