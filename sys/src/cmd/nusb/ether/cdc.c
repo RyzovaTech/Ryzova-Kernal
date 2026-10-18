@@ -7,6 +7,7 @@
 #include <thread.h>
 
 #include "usb.h"
+#include "../lib/m1class.h"
 #include "dat.h"
 
 #include <ip.h>
@@ -45,7 +46,7 @@ cdctransmit(Dev *ep, Block *b)
 	 * instead of a zero byte transaction. maybe we
 	 * should do the same?
 	 */
-	if((n % ep->maxpkt) == 0)
+	if(ep->maxpkt > 0 && (n % ep->maxpkt) == 0)
 		write(ep->dfd, "", 0);
 }
 
@@ -62,9 +63,9 @@ cdcinit(Dev *d)
 	for(i = 0; i < nelem(ud->ddesc); i++)
 		if((dd = ud->ddesc[i]) != nil){
 			b = (uchar*)&dd->data;
-			if(b[1] == Dfunction && b[2] == Fnether){
+			if(dd->data.bLength >= 4 && b[1] == Dfunction && b[2] == Fnether){
 				mac = loaddevstr(d, b[3]);
-				if(mac != nil && strlen(mac) != 12){
+				if(mac != nil && !m1cdcmacvalid(mac, strlen(mac))){
 					free(mac);
 					mac = nil;
 				}
