@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: M5 ARM64 PCI ECAM and Server Source Readiness
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/arm64/m5ecam.*'
+      - 'sys/src/9/arm64/pciqemu.c'
+      - 'sys/src/9/arm64/mkfile'
+      - 'sys/src/9/arm64/qemu'
+      - 'sys/src/9/pc64/pc64'
+      - 'scripts/m5_platform_audit.py'
+      - 'ryzova/drivers/m5-platform-matrix.json'
+      - 'tests/test_m5_ecam.c'
+      - 'tests/test_m5_platform.py'
+      - '.github/workflows/m5-arm64-server.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  arm64-ecam-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: GCC strict PCIe ECAM boundary testing
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -pedantic \
+            sys/src/9/arm64/m5ecam.c tests/test_m5_ecam.c \
+            -o /tmp/ryzova-m5-ecam
+          /tmp/ryzova-m5-ecam
+      - name: Clang independent PCIe ECAM boundary testing
+        run: |
+          clang -std=c99 -Wall -Wextra -Werror -pedantic \
+            sys/src/9/arm64/m5ecam.c tests/test_m5_ecam.c \
+            -o /tmp/ryzova-m5-clang
+          /tmp/ryzova-m5-clang
+      - name: Source checks and anti-false-certification tests
+        run: |
+          python3 -m unittest discover -s tests -p 'test_m5_platform.py' -v
+          python3 scripts/m5_platform_audit.py > /tmp/m5-readiness.json
+          python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/m5-readiness.json'))
+          assert x['source_profile_count']==3
+          assert x['arm64_native_boot_confirmed'] is False
+          assert x['newly_certified_models']==0
+          assert x['auto_binding'] is False
+          assert x['release_gate']=='blocked-pending-native-arm64-boot-and-lab'
+          PY
+      - name: Preserve completed M0-M4 AMD64 and legacy gates
+        run: |
+          python3 scripts/m0_native_rules.py --check
+          python3 -m unittest discover -s tests -p 'test_m0_native_integration.py' -v
+          python3 -m unittest discover -s tests -p 'test_m1_qualification.py' -v
+          python3 -m unittest discover -s tests -p 'test_m2_chipsets.py' -v
+          python3 -m unittest discover -s tests -p 'test_m3_modern_controllers.py' -v
+          python3 -m unittest discover -s tests -p 'test_m4_legacy_gate.py' -v
+      - name: Preserve architecture evidence report
+        uses: actions/upload-artifact@v4
+        with:
+          name: m5-source-only-platform-readiness
+          path: /tmp/m5-readiness.json
+          if-no-files-found: error
+          retention-days: 14
