@@ -23,6 +23,14 @@ class M1UsbFamilySource(unittest.TestCase):
         self.assertLess(p.index("m1usbdevdescvalid(b, n)"),p.index("dd = (DDev*)b;"))
         self.assertLess(p.index("n < Dconflen"),p.index("dc = (DConf*)b;"))
 
+    def test_shared_usb_parser_bounds_endpoints_and_config_length(self):
+        p=(ROOT/"sys/src/cmd/nusb/lib/parse.c").read_text()
+        self.assertIn("if((ep->maxpkt & 0x7FF) == 0)",p)
+        self.assertIn("if(len < 2)",p)
+        self.assertIn("if(l < Dconflen || n < l)",p)
+        self.assertIn("n = l - Dconflen;",p)
+        self.assertLess(p.index("if(l < Dconflen || n < l)"),p.index("n = l - Dconflen;"))
+
     def test_storage_rejects_overflow_and_invalid_bot_status(self):
         s=(ROOT/"sys/src/cmd/nusb/disk/disk.c").read_text()
         self.assertLess(s.index("m1diskcapacityvalid(lun->blocks, lun->lbsize)"),
