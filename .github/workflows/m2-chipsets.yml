@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: M2 Chipset Families and PCI Source Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/drivers/m2-chipset-families.json'
+      - 'ryzova/drivers/m0-device-registry.json'
+      - 'ryzova/drivers/m0-firmware-manifest.json'
+      - 'sys/src/9/port/ryzovapcirules.h'
+      - 'sys/src/9/port/ryzovadrvmatch.*'
+      - 'scripts/m2_chipset_audit.py'
+      - 'tests/test_m2_family_matches.c'
+      - 'tests/test_m2_chipsets.py'
+      - '.github/workflows/m2-chipsets.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chipset-registry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate M2 family source and firmware provenance
+        run: |
+          python3 scripts/m0_device_registry.py
+          python3 scripts/m0_native_rules.py --check
+          python3 -m unittest discover -s tests -p 'test_m2_chipsets.py' -v
+          python3 scripts/m2_chipset_audit.py > /tmp/m2-report.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('/tmp/m2-report.json'))
+          assert r['source_candidate_ids']==12
+          assert r['release_gate']=='blocked'
+          assert r['physical_verified_models']==0 and r['certified_models']==0
+          assert not r['auto_bind_allowed']
+          assert set(r['vendor_families'])=={'amd', 'intel', 'realtek'}
+          PY
+      - name: Strict GCC portable family matcher with 3072 revision vectors
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -pedantic \
+            sys/src/9/port/ryzovadrvmatch.c tests/test_m2_family_matches.c \
+            -o /tmp/ryzova-m2-candidates
+          /tmp/ryzova-m2-candidates
+      - name: Strict Clang portable family matcher
+        run: |
+          clang -std=c99 -Wall -Wextra -Werror -pedantic \
+            sys/src/9/port/ryzovadrvmatch.c tests/test_m2_family_matches.c \
+            -o /tmp/ryzova-m2-clang
+          /tmp/ryzova-m2-clang
+      - name: Preserve M0 and M1 matching and qualification gates
+        run: |
+          python3 -m unittest discover -s tests -p 'test_m0_device_registry.py' -v
+          python3 -m unittest discover -s tests -p 'test_m0_native_integration.py' -v
+          python3 -m unittest discover -s tests -p 'test_m1_qualification.py' -v
+          python3 -m unittest discover -s tests -p 'test_m1_class_integration.py' -v
