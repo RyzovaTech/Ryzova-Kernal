@@ -9,6 +9,7 @@ on:
       - 'amd64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
+      - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
       - 'scripts/extract-9pc64.py'
@@ -23,6 +24,7 @@ on:
       - 'amd64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
+      - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
       - 'scripts/extract-9pc64.py'
@@ -75,6 +77,8 @@ jobs:
             artifacts/phase3/host.log
             artifacts/phase3/fresh-boot-serial.log
             artifacts/phase3/fresh-kernel-qemu-host.log
+            artifacts/phase3/m2-chipset-probe-serial.log
+            artifacts/phase3/m2-qemu-host.log
             artifacts/phase3/result.txt
             artifacts/phase3/source-provenance.txt
             artifacts/phase3/9pc64.sha256
