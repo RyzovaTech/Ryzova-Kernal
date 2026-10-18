@@ -20,6 +20,7 @@ import threading
 import time
 
 from phase4_1_stability import STAGES as PHASE41_STAGES, check_stability_serial
+from phase4_5_stress import STAGES as PHASE45_STAGES, check_extended_serial
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "artifacts" / "phase3"
@@ -196,7 +197,7 @@ runtime_commands=[
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
-] + [command for _, command in PHASE41_STAGES]
+] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES]
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
@@ -261,7 +262,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                     bootstate["runtime_stage"]=i+1
                     guest.sendall((runtime_commands[i+1]+"\r").encode())
                     print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
-            if re.search(rb"(?:\r?\n)RYZOVA_RUNTIME_DONE(?:\r?\n)",bytes(bootlog)):
+            if re.search(rb"(?:\r?\n)RYZOVA_PHASE45_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
@@ -289,6 +290,10 @@ write_denied=(b"can't create: #Z/version: permission denied" in bytes(bootlog)
 # freshly built QEMU guest; parsing command echo text is insufficient.
 stability=check_stability_serial(bytes(bootlog))
 (OUT/"phase4-1-stability.json").write_text(json.dumps(stability, indent=2, sort_keys=True) + "\n")
+extended=check_extended_serial(bytes(bootlog))
+(OUT/"phase4-5-stress.json").write_text(json.dumps(extended, indent=2, sort_keys=True) + "\n")
+for label, ok in extended["checks"].items():
+    print("PHASE4.5", "PASS" if ok else "FAIL", label, flush=True)
 for label, ok in stability["checks"].items():
     print("PHASE4.1", "PASS" if ok else "FAIL", label, flush=True)
 
@@ -303,10 +308,11 @@ for label, ok in stability["checks"].items():
     f"V4 basic proc/net and per-process bind checks: {runtime_ok}\n"
     f"V4 9P ramfs, 9fat and HTTP checks: {regression_ok}\n"
     f"V4.1 bounded memory/process/scheduler checks: {stability['passed']}\n"
+    f"V4.5 bounded additional stress checks: {extended['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and write_denied and regression_ok and stability["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and write_denied and regression_ok and stability["passed"] and extended["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
-print("PASS V3/V4/4.1: source-built Ryzova kernel passed 9P/storage/network, bounded memory, process and scheduler regression checks.",flush=True)
+print("PASS V3/V4/4.1/4.5: source-built Ryzova kernel passed basic and bounded-extended QEMU checks.",flush=True)
 
