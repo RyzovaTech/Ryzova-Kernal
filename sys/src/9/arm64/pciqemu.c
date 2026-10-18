@@ -108,23 +108,34 @@ void
 pciintrenable(int tbdf, void (*f)(Ureg*, void*), void *a)
 {
 	Pcidev *p;
-	int i;
+	int i, freeidx;
 	Intvec *v;
 
+	if(f == nil){
+		print("pciintrenable: %T: nil handler rejected\n", tbdf);
+		return;
+	}
 	if((p = pcimatchtbdf(tbdf)) == nil){
 		print("pciintrenable: %T: unknown device\n", tbdf);
 		return;
 	}
 
+	freeidx = -1;
 	for(i = 0; i < nelem(vec); i++){
 		v = &vec[i];
-		if(v->f == nil){
-			v->p = p;
-			v->f = f;
-			v->a = a;
-			return;
-		}
+		if(v->f == f && v->p == p && v->a == a)
+			return;	/* repeated enable must not consume a second slot */
+		if(v->f == nil && freeidx < 0)
+			freeidx = i;
 	}
+	if(freeidx < 0){
+		print("pciintrenable: %T: PCI handler table full\n", tbdf);
+		return;
+	}
+	v = &vec[freeidx];
+	v->p = p;
+	v->a = a;
+	v->f = f;	/* publish the active handler last */
 }
 
 void
@@ -141,8 +152,11 @@ pciintrdisable(int tbdf, void (*f)(Ureg*, void*), void *a)
 
 	for(i = 0; i < nelem(vec); i++){
 		v = &vec[i];
-		if(v->p == p && v->f == f && v->a == a)
+		if(v->p == p && v->f == f && v->a == a){
 			v->f = nil;
+			v->a = nil;
+			v->p = nil;
+		}
 	}
 }
 
