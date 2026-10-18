@@ -13,7 +13,7 @@ def commands(cert_sha256):
     # Production cannot use this ephemeral test provisioning scheme.
     return (
       ("phase7-native-guest-tls-mount",
-       "echo x509 sha256="+cert_sha256+" > /tmp/ryzova7-trusted; "
+       "echo 'x509 sha256="+cert_sha256+"' > /tmp/ryzova7-trusted; "
        "mkdir -p /n/ryzova7; "
        "srv -enq 'tlsclient -n localhost -t /tmp/ryzova7-trusted tcp!10.0.2.2!15641' ryzova7; "
        "mount -n /srv/ryzova7 /n/ryzova7; "
