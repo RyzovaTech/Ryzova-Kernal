@@ -1,0 +1,41 @@
+name: Phase 5.9 experimental source acceptance and Phase 6 entry
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'phase5/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  complete-foundation-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Re-run all Phase 5.1–5.9 host tests
+        env:
+          PHASE5_CC: ${{ matrix.compiler }}
+          PHASE5_SANITIZE: '1'
+        run: |
+          python3 -m unittest discover -s tests -p 'test_phase5*.py' -v
+      - name: Generate source-only acceptance evidence
+        run: python3 scripts/phase5_9_acceptance.py
+      - name: Upload source-only JSON report, never executable binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-9-source-foundation-${{ matrix.compiler }}
+          path: artifacts/phase5/phase5-9-acceptance.json
+          if-no-files-found: warn
+          retention-days: 30
