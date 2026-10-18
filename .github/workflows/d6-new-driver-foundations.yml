@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: D6 experimental Bluetooth and VirtIO-GPU protocol unit tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/cmd/nusb/bt/**'
+      - 'sys/src/cmd/nusb/mkfile'
+      - 'sys/src/9/port/virtgpuwire.*'
+      - 'tests/test_d6_wire.c'
+      - 'tests/test_d6_wiring.py'
+      - '.github/workflows/d6-new-driver-foundations.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  d6-protocol-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile portable protocol units with strict GCC checks
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -pedantic \
+            sys/src/cmd/nusb/bt/hciwire.c \
+            sys/src/9/port/virtgpuwire.c \
+            tests/test_d6_wire.c \
+            -o /tmp/ryzova-d6-wire-test
+          /tmp/ryzova-d6-wire-test
+      - name: Verify opt-in Bluetooth entry point and unlinked GPU prototype
+        run: python3 -m unittest discover -s tests -p 'test_d6_wiring.py' -v
