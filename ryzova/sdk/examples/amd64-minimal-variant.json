@@ -1,0 +1,17 @@
+{
+  "schema": "ryzova-variant-profile/v1",
+  "name": "minimal-amd64-example",
+  "architecture": "amd64",
+  "kernel_abi": "experimental-0",
+  "interfaces": [
+    "Plan 9 9P",
+    "per-process namespaces",
+    "#Z read-only identity"
+  ],
+  "linux_binary_compatibility": false,
+  "windows_binary_compatibility": false,
+  "macos_binary_compatibility": false,
+  "boot_tested": false,
+  "redistributable": false,
+  "note": "Schema example only. No filesystem image or distro exists at this location."
+}

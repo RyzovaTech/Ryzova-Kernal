@@ -45,7 +45,7 @@ STAGES = (
     (
         "memory-after",
         "echo RYZOVA_SWAP_AFTER_BEGIN; cat /dev/swap; "
-        "echo RYZOVA_SWAP_AFTER_END; echo RYZOVA_RUNTIME_DONE",
+        "echo RYZOVA_SWAP_AFTER_END; echo RYZOVA_RUNTIME_DONE; echo RYZOVA_RUNTIME_STAGE_10",
     ),
 )
 

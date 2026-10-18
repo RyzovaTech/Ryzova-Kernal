@@ -1,0 +1,54 @@
+name: Phase 4.6-4.9 release evidence and variant checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check Phase 4.5-4.9 parser and release-gate tests
+        run: |
+          python3 -m unittest discover -s tests -p 'test_phase4_5_stress.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase4_release.py' -v
+      - name: Record exact kernel source and build input provenance
+        run: python3 scripts/phase4_provenance.py
+      - name: Validate downstream experimental ABI variant
+        run: python3 scripts/phase4_variant_gate.py
+      - name: Produce fail-closed release evidence report
+        run: python3 scripts/phase4_release_gate.py
+      - name: Verify release publication is still blocked
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/phase4_release_gate.py --enforce-release
+          status=$?
+          set -e
+          if [ "$status" -ne 2 ]; then
+            echo "ERROR: release gate must exit 2 (blocked); got $status"
+            exit 1
+          fi
+          echo "PASS: no automated release permission."
+      - name: Archive non-binary evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-5-9-evidence
+          path: artifacts/phase4/*.json
+          if-no-files-found: warn
+          retention-days: 30
