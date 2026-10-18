@@ -35,8 +35,8 @@ SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, tex
 subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "sys/src/cmd/nusb"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
-    f"Ryzova source commit: {SOURCE_SHA}\nKernel subtree archive sha256: {archive_hash}\n"
-    "Archive includes kernel source, sys/include, amd64/include from exactly the checked-out commit.\n"
+    f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
+    "Archive includes kernel, nusb user-space source, sys/include and amd64/include from exact commit.\n"
 )
 print("SOURCE_SHA", SOURCE_SHA, "ARCHIVE_SHA256", archive_hash, flush=True)
 
@@ -202,7 +202,7 @@ if not marks.get("install-fresh-bootfile") or not re.search(
 for component in m1_native_components:
     marker = "M1_" + component.upper() + "_STATUS_"
     if not marks.get("m1-usb-" + component) or not re.search(
-        r"(?:^|\\r?\\n)" + marker + r"\\s*(?:\\r?\\n)", text
+        r"(?:^|\r?\n)" + marker + r"\s*(?:\r?\n)", text
     ):
         print("FAIL M1 native user-space build:", component, file=sys.stderr)
         sys.exit(1)
