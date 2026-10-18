@@ -1,0 +1,10 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+# Phase 6.5 — Authenticated real TCP loopback PoC and native QEMU regression
+
+The integration suite uses actual IPv4 TCP sockets bound **only to 127.0.0.1**, encrypted with TLS **1.3**, plus TLS client certificates required by the server and verified server names/certificates by the client. The trusted leaf fingerprints are pinned and rechecked; the Phase 6.0 application-level message HMAC and replay checks also remain mandatory. The test generates short-lived RSA private keys/certificates at runtime through OpenSSL; it NEVER commits or uploads private keys.
+
+The allowlisted loopback transport carries the **actual 9P2000 message codec** (read-only `Tversion`, `Tattach`, `Twalk`, `Topen`, `Tread`, `Tclunk`) and a hash-pinned read-only 4096-byte page, as well as independently verified bounded arithmetic tasks. TCP packet framing, per-connection timeouts, maximum authenticated message lengths, certificate mismatch, unauthorized client, app-HMAC forgery, dropped server and output validation are covered in tests. Socket/TLS failures propagate errors and the optional Phase 6.4 circuit opens; it never silently fabricates resource data.
+
+**Security and operational limits:** this is a *loopback host-side network prototype*, NOT a verified transport to another PC across the Internet. Certificate keys are development-only; production still needs CA provisioning, renewal and revocation, robust concurrency and client session isolation, secure network peer lifecycle, and security audit. This is **not** native Ryzova Kernel remote RAM, remote CPU cores, 9P remote mounting, or device support. The Phase 3 native AMD64 source build/QEMU boot workflow runs independently as a **non-regression test** only; it does not execute the Python TLS service inside Ryzova QEMU.
+
+The user approved integrating the experimental research source once the 6.0–6.5 host test suite, all existing regression gates, and exact-commit native QEMU build/boot succeed. Preserve explicit product capability exclusions and track native integration as follow-up work.
