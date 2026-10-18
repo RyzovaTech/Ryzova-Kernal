@@ -98,6 +98,9 @@ link
 
 misc
 	pci		pcipc
+	# M0 read-only source-candidate diagnostics; no driver auto-binding.
+	ryzovadrvmatch
+	ryzovadrvprobe
 	archgeneric	devkbd i8259 i8253
 	archacpi	mp apic squidboy ec hpet
 	archmp		mp apic squidboy
