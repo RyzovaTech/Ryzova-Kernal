@@ -10,6 +10,18 @@ static Rzdrvrule rzpcirules[] = {
 	{RzbusPci, RzruleClassProtocol, 0x0000, 0x0000, 0x0c, 0x03, 0x30, 0, 255},
 	{RzbusPci, RzruleClass, 0x0000, 0x0000, 0x04, 0x03, 0x00, 0, 255},
 	{RzbusPci, RzruleExact, 0x8086, 0x15f3, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x8086, 0x100e, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x8086, 0x15c8, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x10ec, 0x8139, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x10ec, 0x8168, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x10ec, 0x8169, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x1022, 0x2000, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x8086, 0x27d8, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x8086, 0xa0c8, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x1022, 0x1487, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x1022, 0x15e3, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x8086, 0x4222, 0x00, 0x00, 0x00, 0, 255},
+	{RzbusPci, RzruleExact, 0x8086, 0x4227, 0x00, 0x00, 0x00, 0, 255},
 };
 
 static char *rzpciruleids[] = {
@@ -18,6 +30,18 @@ static char *rzpciruleids[] = {
 	"pci-xhci-class-candidate",
 	"pci-hda-class-candidate",
 	"pci-intel-i225-15f3-candidate",
+	"m2-intel-e1000-82540em-candidate",
+	"m2-intel-x550-15c8-candidate",
+	"m2-realtek-rtl8139-candidate",
+	"m2-realtek-rtl8168-candidate",
+	"m2-realtek-rtl8169-candidate",
+	"m2-amd-pcnet-2000-candidate",
+	"m2-intel-hda-ich7-candidate",
+	"m2-intel-hda-tigerlake-candidate",
+	"m2-amd-hda-matisse-candidate",
+	"m2-amd-hda-raven-candidate",
+	"m2-intel-wpi-4222-candidate",
+	"m2-intel-wpi-4227-candidate",
 };
 
 #endif

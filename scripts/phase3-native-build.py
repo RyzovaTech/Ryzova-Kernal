@@ -19,6 +19,7 @@ import sys
 import threading
 import time
 
+from m2_qemu_probe import run_probe
 from phase4_1_stability import STAGES as PHASE41_STAGES, check_stability_serial
 from phase4_5_stress import STAGES as PHASE45_STAGES, check_extended_serial
 
@@ -217,6 +218,10 @@ for component in m1_native_components:
         sys.exit(1)
 print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and cmp verified.",flush=True)
 
+# M2 tests the two emulated PCI chipsets ONLY in a later isolated QEMU
+# process, preserving the original VirtIO network for baseline 9P/HTTP checks.
+m2_enabled = (ROOT / "ryzova/drivers/m2-chipset-families.json").is_file()
+fresh_cmd = list(cmd)
 # Start a NEW QEMU process against the SAME disposable qcow2 overlay.
 # plan9.ini reads "bootfile=9pc64", and we have verified by cmp that this
 # filename contains the freshly compiled source-derived binary.
@@ -232,7 +237,7 @@ runtime_commands=[
 ] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES]
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
-    second=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
+    second=subprocess.Popen(fresh_cmd,stdout=host,stderr=subprocess.STDOUT)
     guest=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
     try:
         for _ in range(300):
@@ -329,6 +334,9 @@ boottext=bytes(bootlog).decode("utf-8",errors="replace")
 fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
 identity_ok=all(v in bytes(bootlog) for v in (b"Ryzova Kernel 0.1.0-dev", b"9front-derived", b"experimental-0"))
 m0_pci_ok=bool(re.search(rb"(?:\r?\n)RYZOVA_M0_PCI_OK(?:\r?\n)", bytes(bootlog)))
+# A separate disposable emulated PCI boot does not disturb baseline networking.
+# Its output is captured as independent evidence and must contain both IDs.
+m2_pci_ok=(not m2_enabled or run_probe(cmd, SER, MON, OUT))
 runtime_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)", bytes(bootlog)) for v in (b"RYZOVA_PROC_OK", b"RYZOVA_NET_OK")) and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 2
 # A failed output redirection causes Plan 9 rc to abort the current
 # command line. Probe it independently, then ensure a fresh subsequent
@@ -360,12 +368,13 @@ for label, ok in stability["checks"].items():
     f"V3 Ryzova identity device verified: {identity_ok}\n"
     f"V4 basic proc/net and per-process bind checks: {runtime_ok}\n"
     f"M0 native PCI candidate interface read: {m0_pci_ok}\n"
+    f"M2 emulated AMD/Realtek exact PCI candidates detected: {m2_pci_ok}\n"
     f"V4 9P ramfs, 9fat and HTTP checks: {regression_ok}\n"
     f"V4.1 bounded memory/process/scheduler checks: {stability['passed']}\n"
     f"V4.5 bounded additional stress checks: {extended['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
 print("PASS V3/V4/4.1/4.5: source-built Ryzova kernel passed basic and bounded-extended QEMU checks.",flush=True)

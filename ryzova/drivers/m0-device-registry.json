@@ -207,6 +207,186 @@
       "firmware_id": null,
       "evidence_level": "source-candidate",
       "binding_enabled": false
+    },
+    {
+      "id": "m2-intel-e1000-82540em-candidate",
+      "bus": "pci",
+      "driver": "etherigbe",
+      "source_file": "sys/src/9/pc/etherigbe.c",
+      "selector": {
+        "vendor_id": "8086",
+        "device_id": "100e"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-intel-x550-15c8-candidate",
+      "bus": "pci",
+      "driver": "etherx550",
+      "source_file": "sys/src/9/pc/etherx550.c",
+      "selector": {
+        "vendor_id": "8086",
+        "device_id": "15c8"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-realtek-rtl8139-candidate",
+      "bus": "pci",
+      "driver": "ether8139",
+      "source_file": "sys/src/9/pc/ether8139.c",
+      "selector": {
+        "vendor_id": "10ec",
+        "device_id": "8139"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-realtek-rtl8168-candidate",
+      "bus": "pci",
+      "driver": "ether8169",
+      "source_file": "sys/src/9/pc/ether8169.c",
+      "selector": {
+        "vendor_id": "10ec",
+        "device_id": "8168"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-realtek-rtl8169-candidate",
+      "bus": "pci",
+      "driver": "ether8169",
+      "source_file": "sys/src/9/pc/ether8169.c",
+      "selector": {
+        "vendor_id": "10ec",
+        "device_id": "8169"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-amd-pcnet-2000-candidate",
+      "bus": "pci",
+      "driver": "ether79c970",
+      "source_file": "sys/src/9/pc/ether79c970.c",
+      "selector": {
+        "vendor_id": "1022",
+        "device_id": "2000"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-intel-hda-ich7-candidate",
+      "bus": "pci",
+      "driver": "audiohda",
+      "source_file": "sys/src/9/pc/audiohda.c",
+      "selector": {
+        "vendor_id": "8086",
+        "device_id": "27d8"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-intel-hda-tigerlake-candidate",
+      "bus": "pci",
+      "driver": "audiohda",
+      "source_file": "sys/src/9/pc/audiohda.c",
+      "selector": {
+        "vendor_id": "8086",
+        "device_id": "a0c8"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-amd-hda-matisse-candidate",
+      "bus": "pci",
+      "driver": "audiohda",
+      "source_file": "sys/src/9/pc/audiohda.c",
+      "selector": {
+        "vendor_id": "1022",
+        "device_id": "1487"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-amd-hda-raven-candidate",
+      "bus": "pci",
+      "driver": "audiohda",
+      "source_file": "sys/src/9/pc/audiohda.c",
+      "selector": {
+        "vendor_id": "1022",
+        "device_id": "15e3"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-intel-wpi-4222-candidate",
+      "bus": "pci",
+      "driver": "etherwpi",
+      "source_file": "sys/src/9/pc/etherwpi.c",
+      "selector": {
+        "vendor_id": "8086",
+        "device_id": "4222"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": "wpi-3945abg-unreviewed",
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "m2-intel-wpi-4227-candidate",
+      "bus": "pci",
+      "driver": "etherwpi",
+      "source_file": "sys/src/9/pc/etherwpi.c",
+      "selector": {
+        "vendor_id": "8086",
+        "device_id": "4227"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": "wpi-3945abg-unreviewed",
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
     }
   ]
 }
