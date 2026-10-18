@@ -1788,7 +1788,7 @@ portstatus(Hci *hp, int port)
 	Ctlr *ctlr = hp->aux;
 	u32int psc, ps;
 
-	if(ctlr->port == nil || needrecover(ctlr))
+	if(ctlr->port == nil || port < 1 || port > hp->nports || needrecover(ctlr))
 		return 0;
 
 	ps = 0;
@@ -1839,7 +1839,7 @@ portenable(Hci *hp, int port, int on)
 	Ctlr *ctlr = hp->aux;
 	u32int *portsc;
 
-	if(on || ctlr->port == nil || needrecover(ctlr))
+	if(on || ctlr->port == nil || port < 1 || port > hp->nports || needrecover(ctlr))
 		return;
 	portsc = &ctlr->port[port-1].reg[PORTSC];
 	*portsc = (*portsc & ~(RW1CS|RW1S)) | PED;
@@ -1851,7 +1851,7 @@ portreset(Hci *hp, int port, int on)
 	Ctlr *ctlr = hp->aux;
 	u32int *portsc;
 
-	if(!on || ctlr->port == nil || needrecover(ctlr))
+	if(!on || ctlr->port == nil || port < 1 || port > hp->nports || needrecover(ctlr))
 		return;
 	portsc = &ctlr->port[port-1].reg[PORTSC];
 	*portsc = (*portsc & ~(RW1CS|RW1S)) | PR;
@@ -1863,7 +1863,7 @@ bhportreset(Hci *hp, int port, int on)
 	Ctlr *ctlr = hp->aux;
 	u32int *portsc;
 
-	if(!on || ctlr->port == nil || needrecover(ctlr))
+	if(!on || ctlr->port == nil || port < 1 || port > hp->nports || needrecover(ctlr))
 		return;
 	portsc = &ctlr->port[port-1].reg[PORTSC];
 	*portsc = (*portsc & ~(RW1CS|RW1S)) | WPR;
@@ -1875,7 +1875,7 @@ portpower(Hci *hp, int port, int on)
 	Ctlr *ctlr = hp->aux;
 	u32int *portsc;
 
-	if(ctlr->port == nil || needrecover(ctlr))
+	if(ctlr->port == nil || port < 1 || port > hp->nports || needrecover(ctlr))
 		return;
 	portsc = &ctlr->port[port-1].reg[PORTSC];
 	if(on)
