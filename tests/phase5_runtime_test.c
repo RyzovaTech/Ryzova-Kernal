@@ -36,7 +36,7 @@ int main(void)
     struct Output out={0};
     unsigned char guest[4096]={0}, other[1024]={0};
     enum RyzLinuxNode node=RYZ_NS_NONE;
-    int64_t fd, fd2;
+    int64_t fd;
     unsigned int i;
     char longpath[300];
 
