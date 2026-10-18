@@ -2,7 +2,7 @@
 
 LIB=usb.a$O
 OFILES=\
- 	dev.$O\
+	dev.$O\
 	m1class.$O\
 	dump.$O\
 	parse.$O\
