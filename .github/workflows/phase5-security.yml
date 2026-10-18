@@ -1,0 +1,31 @@
+name: Phase 5.6 compatibility security regression
+on:
+  push:
+    branches: ['phase5/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  parser-and-namespace-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Deterministic malformed binary and namespace fuzzing with UBSan
+        env:
+          PHASE5_CC: ${{ matrix.compiler }}
+          PHASE5_SANITIZE: '1'
+        run: python3 -m unittest discover -s tests -p 'test_phase5_6_security.py' -v
+      - name: Existing Linux ELF execution negative cases
+        env:
+          PHASE5_CC: ${{ matrix.compiler }}
+          PHASE5_SANITIZE: '1'
+        run: python3 -m unittest discover -s tests -p 'test_phase5_4.py' -v
