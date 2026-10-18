@@ -1,0 +1,12 @@
+{
+  "schema": "ryzova-m0-firmware-manifest/v1",
+  "entries": [
+    {
+      "id": "wpi-3945abg-unreviewed",
+      "path_hint": "/lib/firmware/wpi-3945abg",
+      "sha256": null,
+      "redistribution": "not-reviewed",
+      "payload_included": false
+    }
+  ]
+}

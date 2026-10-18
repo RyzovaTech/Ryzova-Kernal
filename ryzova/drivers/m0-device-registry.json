@@ -1,0 +1,100 @@
+{
+  "schema": "ryzova-m0-device-registry/v1",
+  "binding_enabled": false,
+  "rules": [
+    {
+      "id": "pci-nvme-class-candidate",
+      "bus": "pci",
+      "driver": "sdnvme",
+      "source_file": "sys/src/9/port/sdnvme.c",
+      "selector": {
+        "class": "01",
+        "subclass": "08",
+        "protocol": "02"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "pci-ahci-class-candidate",
+      "bus": "pci",
+      "driver": "sdiahci",
+      "source_file": "sys/src/9/pc/sdiahci.c",
+      "selector": {
+        "class": "01",
+        "subclass": "06",
+        "protocol": "01"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "pci-xhci-class-candidate",
+      "bus": "pci",
+      "driver": "usbxhcipci",
+      "source_file": "sys/src/9/port/usbxhcipci.c",
+      "selector": {
+        "class": "0c",
+        "subclass": "03",
+        "protocol": "30"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "pci-hda-class-candidate",
+      "bus": "pci",
+      "driver": "audiohda",
+      "source_file": "sys/src/9/pc/audiohda.c",
+      "selector": {
+        "class": "04",
+        "subclass": "03"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "pci-intel-i225-15f3-candidate",
+      "bus": "pci",
+      "driver": "etheri225",
+      "source_file": "sys/src/9/pc/etheri225.c",
+      "selector": {
+        "vendor_id": "8086",
+        "device_id": "15f3"
+      },
+      "revision_min": 0,
+      "revision_max": 255,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "usb-bt-hci-diagnostic-candidate",
+      "bus": "usb",
+      "driver": "bt",
+      "source_file": "sys/src/cmd/nusb/bt/bt.c",
+      "selector": {
+        "class": "e0",
+        "subclass": "01",
+        "protocol": "01"
+      },
+      "revision_min": 0,
+      "revision_max": 65535,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    }
+  ]
+}

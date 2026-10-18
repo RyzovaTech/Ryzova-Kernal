@@ -1,0 +1,62 @@
+{
+  "schema": "ryzova-m0-safety-contract/v1",
+  "policy": "fail-closed-source-only",
+  "required_checks": [
+    "firmware-provenance",
+    "dma-mapping",
+    "interrupt-quiesce",
+    "timeout-recovery",
+    "reset-and-disconnect",
+    "device-power"
+  ],
+  "families": [
+    {
+      "driver": "sdnvme",
+      "bus": "pci",
+      "checks": {
+        "firmware-provenance": "unverified",
+        "dma-mapping": "unverified",
+        "interrupt-quiesce": "unverified",
+        "timeout-recovery": "unverified",
+        "reset-and-disconnect": "unverified",
+        "device-power": "unverified"
+      }
+    },
+    {
+      "driver": "usbxhcipci",
+      "bus": "pci",
+      "checks": {
+        "firmware-provenance": "unverified",
+        "dma-mapping": "unverified",
+        "interrupt-quiesce": "unverified",
+        "timeout-recovery": "unverified",
+        "reset-and-disconnect": "unverified",
+        "device-power": "unverified"
+      }
+    },
+    {
+      "driver": "etheri225",
+      "bus": "pci",
+      "checks": {
+        "firmware-provenance": "unverified",
+        "dma-mapping": "unverified",
+        "interrupt-quiesce": "unverified",
+        "timeout-recovery": "unverified",
+        "reset-and-disconnect": "unverified",
+        "device-power": "unverified"
+      }
+    },
+    {
+      "driver": "bt",
+      "bus": "usb",
+      "checks": {
+        "firmware-provenance": "unverified",
+        "dma-mapping": "unverified",
+        "interrupt-quiesce": "unverified",
+        "timeout-recovery": "unverified",
+        "reset-and-disconnect": "unverified",
+        "device-power": "unverified"
+      }
+    }
+  ]
+}
