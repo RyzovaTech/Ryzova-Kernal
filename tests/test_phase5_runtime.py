@@ -18,9 +18,10 @@ class TestVirtualLinuxRuntime(unittest.TestCase):
             flags=["-std=c11","-O1","-Wall","-Wextra","-Werror","-pedantic"]
             if os.environ.get("PHASE5_SANITIZE")=="1":
                 flags+=["-fsanitize=undefined","-fno-sanitize-recover=all"]
-            subprocess.run([cc,*flags,str(COMMON/"namespace.c"),
+            build=subprocess.run([cc,*flags,str(COMMON/"namespace.c"),
                             str(COMMON/"syscall.c"),str(TEST),"-o",exe],
-                           check=True,capture_output=True,text=True)
+                           capture_output=True,text=True)
+            self.assertEqual(build.returncode,0,build.stdout+"\n"+build.stderr)
             r=subprocess.run([exe],check=True,capture_output=True,text=True,timeout=10)
             self.assertIn("PHASE5_2_3_VIRTUAL_RUNTIME_ALL_TESTS_PASS",r.stdout)
 if __name__=="__main__":
