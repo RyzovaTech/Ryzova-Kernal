@@ -13,8 +13,9 @@ read-only architecture diagnostic. On a booted Ryzova guest, read:
 
 The file is generated on demand from existing `Pcidev` records using
 `pcimatch()` without reconfiguring or attaching anything. It prints a bounded
-list of source candidates (max 24 rows from up to 512 enumerated PCI
-functions) and truthful summary counters. If the cap is hit, output states
+list of source candidates (max 8 rows from up to 512 enumerated PCI
+functions) and truthful summary counters. The 1536-byte report fits within
+an 8 KiB AMD64 kernel stack with substantially more headroom. If the cap is hit, output states
 `capped=1`; a PCI class match is **not** a proof that a driver works. Modern
 NVMe, AHCI, xHCI, HDA and a single Intel i225 ID are the five deliberately
 small initial PCI selectors. Source candidates for Bluetooth USB interfaces
