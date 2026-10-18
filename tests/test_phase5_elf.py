@@ -115,8 +115,8 @@ class ElfFoundationTests(unittest.TestCase):
         self.assert_invalid(fixture(entry=0x40010c))
     def test_non_user_or_high_address(self):
         self.assert_invalid(fixture(entry=0x1000))
-        self.assert_invalid(fixture(segments=[(1,5,0x100,0x7ffffffff100,8,32,4096)],
-                                   entry=0x7ffffffff100))
+        self.assert_invalid(fixture(segments=[(1,5,0x100,0x800000000100,8,32,4096)],
+                                   entry=0x800000000100))
     def test_mapped_memory_budget(self):
         self.assert_invalid(fixture(segments=[(1,5,0x100,0x400100,8,65*1024*1024,4096)]))
     def test_overlapping_mapped_pages(self):
