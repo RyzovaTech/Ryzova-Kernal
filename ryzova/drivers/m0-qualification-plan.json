@@ -1,0 +1,47 @@
+{
+  "schema": "ryzova-m0-qualification-plan/v1",
+  "release_policy": "human-evidence-required",
+  "platforms": [
+    {
+      "id": "modern-amd64",
+      "profile": "2020-2026 AMD64 desktop and laptop",
+      "description": "Modern PCIe, NVMe, xHCI, Intel/AMD desktops/laptops",
+      "min_physical_devices": 2,
+      "mandatory_tests": [
+        "boot",
+        "io-integrity",
+        "error-recovery",
+        "stress"
+      ],
+      "additional_tests": [
+        "pci-discovery",
+        "nvme-integrity",
+        "usb3-hotplug",
+        "network-throughput",
+        "display-mode",
+        "power-state"
+      ],
+      "qualified": false
+    },
+    {
+      "id": "legacy-amd64",
+      "profile": "pre-2020 AMD64 PC",
+      "description": "Legacy BIOS/UEFI, SATA/AHCI, earlier PCI/Ethernet, EHCI/USB",
+      "min_physical_devices": 2,
+      "mandatory_tests": [
+        "boot",
+        "io-integrity",
+        "error-recovery",
+        "stress"
+      ],
+      "additional_tests": [
+        "bios-and-uefi",
+        "sata-integrity",
+        "ehci-input",
+        "legacy-network",
+        "low-memory-boot"
+      ],
+      "qualified": false
+    }
+  ]
+}
