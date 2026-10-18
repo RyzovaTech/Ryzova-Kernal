@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: M0 PCI USB candidate registry safety
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/drivers/m0-device-registry.json'
+      - 'ryzova/drivers/m0-firmware-manifest.json'
+      - 'scripts/m0_device_registry.py'
+      - 'scripts/driver_inventory.py'
+      - 'tests/test_m0_device_registry.py'
+      - '.github/workflows/m0-device-registry.yml'
+      - 'sys/src/9/pc64/pc64'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  registry-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate M0 security and matching invariants
+        run: python3 -m unittest discover -s tests -p 'test_m0_device_registry.py' -v
+      - name: Validate the actual source-only registry
+        run: |
+          python3 scripts/m0_device_registry.py
+          python3 scripts/m0_device_registry.py --match pci --vendor 8086 --device 15f3 --classcode 02 --subclass 00 --protocol 00 --revision 01 > /tmp/m0-match.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/m0-match.json', encoding='utf-8') as f:
+              report = json.load(f)
+          assert report['driver'] == 'etheri225'
+          assert report['result'] == 'source-candidate'
+          assert report['hardware_verified'] is False
+          assert report['auto_bind_allowed'] is False
+          PY
+      - name: Preserve original D0 source inventory tests
+        run: python3 -m unittest discover -s tests -p 'test_driver_inventory.py' -v
