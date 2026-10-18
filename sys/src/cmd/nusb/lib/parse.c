@@ -158,6 +158,10 @@ Again:
 	ep->iface = ip;
 	ep->conf = c;
 	ep->maxpkt = GET2(dep->wMaxPacketSize);
+	if((ep->maxpkt & 0x7FF) == 0){
+		werrstr("invalid zero-sized USB endpoint");
+		return -1;
+	}
 	ep->ntds = 1 + ((ep->maxpkt >> 11) & 3);
 	ep->maxpkt &= 0x7FF;
 	ep->attrib = dep->bmAttributes;
@@ -208,6 +212,10 @@ parsedesc(Usbdev *d, Conf *c, uchar *b, int n)
 			break;
 
 	while(n > 2 && (len = b[0]) != 0 && len <= n){
+		if(len < 2){
+			werrstr("invalid short USB descriptor");
+			return -1;
+		}
 		if(usbdebug>1){
 			fprint(2, "%s:\t\tparsedesc %s %x[%d] %.*H\n",
 				argv0, dname(b[1]), b[1], b[0], len, b);
@@ -282,11 +290,11 @@ parseconf(Usbdev *d, Conf *c, uchar *b, int n)
 	c->attrib = dc->bmAttributes;
 	c->milliamps = dc->MaxPower*2;
 	l = GET2(dc->wTotalLength);
-	if(n < l){
-		werrstr("truncated configuration info");
+	if(l < Dconflen || n < l){
+		werrstr("truncated or invalid configuration info");
 		return -1;
 	}
-	n -= Dconflen;
+	n = l - Dconflen;
 	b += Dconflen;
 	nr = 0;
 	if(n > 0 && (nr=parsedesc(d, c, b, n)) < 0)
