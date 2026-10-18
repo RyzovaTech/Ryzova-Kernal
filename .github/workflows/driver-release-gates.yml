@@ -3,9 +3,9 @@ name: Ryzova driver D-series evidence and fail-closed gate
 
 on:
   push:
-    branches: ['driver-engineering/d0-3-through-d6-quality-gates']
+    branches: [main]
   pull_request:
-    branches: ['driver-audit/d0-2-pci-firmware-evidence']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
