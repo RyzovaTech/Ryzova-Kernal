@@ -19,6 +19,7 @@ import sys
 import threading
 import time
 
+from m2_qemu_nic import legacy_safe_network_command
 from phase4_1_stability import STAGES as PHASE41_STAGES, check_stability_serial
 from phase4_5_stress import STAGES as PHASE45_STAGES, check_extended_serial
 
@@ -333,7 +334,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 if pos >= 0 and b"term%" in tail[pos+len(marker)+1:]:
                     time.sleep(.15)
                     bootstate["runtime_stage"]=i+1
-                    guest.sendall((runtime_commands[i+1]+"\r").encode())
+                    guest.sendall((legacy_safe_network_command(runtime_commands[i+1], bytes(bootlog), m2_enabled)+"\r").encode())
                     print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
             if re.search(rb"(?:\r?\n)RYZOVA_PHASE45_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
