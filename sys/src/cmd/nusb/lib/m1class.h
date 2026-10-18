@@ -9,7 +9,7 @@
 int m1usbdevdescvalid(const unsigned char *buf, unsigned long n);
 int m1uac1freqvalid(const unsigned char *body, unsigned long desclen);
 int m1diskcapacityvalid(unsigned long long lastlba, unsigned long blocksize);
-int m1cdcmacvalid(const char *mac);
+int m1cdcmacvalid(const char *mac, unsigned long len);
 int m1hidpacketvalid(unsigned long packet, unsigned long limit);
 
 #endif
