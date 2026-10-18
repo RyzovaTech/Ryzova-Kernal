@@ -192,7 +192,7 @@ SER.unlink(missing_ok=True)
 MON.unlink(missing_ok=True)
 bootlog=bytearray()
 runtime_commands=[
-    "mkdir -p /tmp/ryzova-9p; ramfs -m /tmp/ryzova-9p; echo RYZOVA_RUNTIME_STAGE_0",
+    "mkdir -p /tmp/ryzova-9p; ramfs -m /tmp/ryzova-9p; cat '#P/drivercandidates' | grep 'auto-bind=no' > /dev/null && echo RYZOVA_M0_PCI_OK; echo RYZOVA_RUNTIME_STAGE_0",
     "echo RYZOVA_9P_DATA > /tmp/ryzova-9p/probe; grep RYZOVA_9P_DATA /tmp/ryzova-9p/probe > /dev/null && echo RYZOVA_9P_OK; echo RYZOVA_RUNTIME_STAGE_1",
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
@@ -232,7 +232,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 bootstate["user"]=True
                 print("FRESH KERNEL: userspace login reached",flush=True)
             if b"term%" in tail and bootstate["user"] and not bootstate["command"]:
-                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; cat '#P/drivercandidates' | grep 'auto-bind=no' > /dev/null && echo RYZOVA_M0_PCI_OK; test -d /proc && echo RYZOVA_PROC_OK; test -d /net && echo RYZOVA_NET_OK; mkdir -p /tmp/ryzova-ns; bind '#Z' /tmp/ryzova-ns; cat /tmp/ryzova-ns/version; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
+                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; test -d /proc && echo RYZOVA_PROC_OK; test -d /net && echo RYZOVA_NET_OK; mkdir -p /tmp/ryzova-ns; bind '#Z' /tmp/ryzova-ns; cat /tmp/ryzova-ns/version; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
                 bootstate["command"]=True
                 print("FRESH KERNEL: rc probe sent",flush=True)
             if re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)) and not bootstate["write_test"]:
