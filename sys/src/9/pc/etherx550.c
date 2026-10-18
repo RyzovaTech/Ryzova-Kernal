@@ -447,6 +447,8 @@ tproc(void *v)
 	}
 }
 
+static int m3waitreg(Ctlr*, int, u32int);
+
 static void
 rxinit(Ctlr *c)
 {
@@ -479,8 +481,8 @@ rxinit(Ctlr *c)
 	c->reg[Rdt] = c->rdt = 0;
 
 	c->reg[Rxdctl] = Renable;
-	while((c->reg[Rxdctl] & Renable) == 0)
-		;
+	if(m3waitreg(c, Rxdctl, Renable) < 0)
+		error("iX550: RX queue enable timeout");
 	/* TODO? bump the tail pointer RDT to enable descriptors
 		fetching by setting it to the ring length minus 1. Pg 145 */
 	c->reg[Rxctrl] |= Rxen;
@@ -665,31 +667,48 @@ shutdown(Ether *e)
 	detach(e->ctlr);
 }
 
+/*
+ * Poll only for a bounded interval. An absent, powered-down or failed
+ * controller may permanently return zero or all-ones registers.
+ */
+static int
+m3waitreg(Ctlr *c, int reg, u32int mask)
+{
+	int tries;
+	u32int v;
+
+	for(tries = 0; tries < 1000; tries++){
+		v = c->reg[reg];
+		if(v == ~0U)
+			return -1;
+		if((v & mask) == mask)
+			return 0;
+		delay(1);
+	}
+	return -1;
+}
+
 static int
 reset(Ctlr *c)
 {
 	int i;
 
-	while((c->reg[Eec] & AutoRd) == 0)
-		;
-	while((c->reg[Eemngctl] & CfgDone0) == 0)
-		;
-	while((c->reg[Eemngctl] & CfgDone1) == 0)
-		;
-	while((c->reg[Rdrxctl] & Dmaidone) == 0)
-		;
+	if(m3waitreg(c, Eec, AutoRd) < 0 ||
+	   m3waitreg(c, Eemngctl, CfgDone0|CfgDone1) < 0 ||
+	   m3waitreg(c, Rdrxctl, Dmaidone) < 0){
+		print("iX550: initial NVM/DMA readiness timeout\n");
+		return -1;
+	}
 	if(detach(c)){
 		print("iX550: reset timeout\n");
 		return -1;
 	}
-	while((c->reg[Eec] & AutoRd) == 0)
-		;
-	while((c->reg[Eemngctl] & CfgDone0) == 0)
-		;
-	while((c->reg[Eemngctl] & CfgDone1) == 0)
-		;
-	while((c->reg[Rdrxctl] & Dmaidone) == 0)
-		;
+	if(m3waitreg(c, Eec, AutoRd) < 0 ||
+	   m3waitreg(c, Eemngctl, CfgDone0|CfgDone1) < 0 ||
+	   m3waitreg(c, Rdrxctl, Dmaidone) < 0){
+		print("iX550: NVM/DMA readiness timeout after reset\n");
+		return -1;
+	}
 	readstats(c);
 	for(i = 0; i<nelem(c->stats); i++)
 		c->stats[i] = 0;
@@ -818,9 +837,16 @@ scan(void)
 	while(p = pcimatch(p, 0x8086, 0x15c8)){	/* X553/X550-AT 10GBASE-T */
 		pcimsix = 4;
 		pciregs = 0;
+		/* The NVM manageability register at 0x10110 must fit BAR0. */
 		if((p->mem[pciregs].bar & 1) != 0
-		|| (p->mem[pcimsix].bar & 1) != 0)
+		|| (p->mem[pcimsix].bar & 1) != 0
+		|| (p->mem[pciregs].bar & ~0xFULL) == 0
+		|| (p->mem[pcimsix].bar & ~0xFULL) == 0
+		|| p->mem[pciregs].size < (Eemngctl+1)*4
+		|| p->mem[pcimsix].size < 4){
+			print("iX550: invalid register or MSI-X BAR\n");
 			continue;
+		}
 		if(nctlr == nelem(ctlrtab)){
 			print("iX550: too many controllers\n");
 			return;
@@ -853,6 +879,7 @@ scan(void)
 		c->rbsz = ROUND(Mtu, 1024);
 		if(reset(c)){
 			print("iX550: can't reset\n");
+			pcidisable(p);
 			vunmap(mem, p->mem[pciregs].size);
 			vunmap(memmsi, p->mem[pcimsix].size);
 			free(c);
