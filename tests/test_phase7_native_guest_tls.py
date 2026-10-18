@@ -10,14 +10,15 @@ def log():
     return (b"\r\nRYZOVA_NATIVE_TLS_READ_BEGIN\r\n"+payload_for_commit(SHA).replace(b"\n",b"\r\n")+
       b"RYZOVA_NATIVE_TLS_READ_END\r\n"+
       hashlib.sha256(payload_for_commit(SHA)).hexdigest().encode()+b"\t/n/ryzova7/probe\r\n"+
-      b"RYZOVA_RUNTIME_STAGE_16\r\nRYZOVA_RUNTIME_STAGE_17\r\nRYZOVA_NATIVE_TLS_DONE\r\n")
+      b"RYZOVA_RUNTIME_STAGE_16\r\nRYZOVA_RUNTIME_STAGE_17\r\nRYZOVA_RUNTIME_STAGE_18\r\nRYZOVA_RUNTIME_STAGE_19\r\nRYZOVA_NATIVE_TLS_DONE\r\n")
 class NativeTLSProofTests(unittest.TestCase):
     def test_guest_command_requires_pinned_certificate_and_tlsclient(self):
         x=commands(THUMB)
-        self.assertEqual(len(x),2)
-        self.assertIn("tlsclient -n localhost -t",x[0][1])
-        self.assertIn("srv -enq",x[0][1])
-        self.assertIn("sha1sum -2 256",x[1][1])
+        self.assertEqual(len(x),4)
+        self.assertTrue(all(len(command)<230 for _,command in x))
+        self.assertIn("tlsclient -n localhost -t",x[1][1])
+        self.assertIn("srv -enq",x[1][1])
+        self.assertIn("sha1sum -2 256",x[3][1])
     def test_good_real_protocol_evidence(self):
         p=inspect(log(),SHA,THUMB,{"native_tls12_sessions":1,
           "native_tls_9p_frames":7,"upstream_tls13_sessions":1})

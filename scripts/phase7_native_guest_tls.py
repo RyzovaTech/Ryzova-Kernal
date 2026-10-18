@@ -12,19 +12,20 @@ def commands(cert_sha256):
     # A QEMU serial console is the TEST HARNESS trust provisioning channel.
     # Production cannot use this ephemeral test provisioning scheme.
     return (
-      ("phase7-native-guest-tls-mount",
+      ("phase7-native-tls-provision-test-pin",
        "echo 'x509 sha256="+cert_sha256+"' > /tmp/ryzova7-trusted; "
+       "echo RYZOVA_RUNTIME_STAGE_16"),
+      ("phase7-native-tls-connect-and-mount",
        "mkdir -p /n/ryzova7; "
        "srv -enq 'tlsclient -n localhost -t /tmp/ryzova7-trusted tcp!10.0.2.2!15641' ryzova7; "
-       "mount -n /srv/ryzova7 /n/ryzova7; "
-       "echo RYZOVA_NATIVE_TLS_READ_BEGIN; "
-       "cat /n/ryzova7/probe; echo RYZOVA_NATIVE_TLS_READ_END; "
-       "echo RYZOVA_RUNTIME_STAGE_16"),
-      ("phase7-native-guest-tls-sha256",
+       "mount -n /srv/ryzova7 /n/ryzova7; echo RYZOVA_RUNTIME_STAGE_17"),
+      ("phase7-native-tls-file-read",
+       "echo RYZOVA_NATIVE_TLS_READ_BEGIN; cat /n/ryzova7/probe; "
+       "echo RYZOVA_NATIVE_TLS_READ_END; echo RYZOVA_RUNTIME_STAGE_18"),
+      ("phase7-native-tls-digest",
        "sha1sum -2 256 /n/ryzova7/probe; "
-       "echo RYZOVA_RUNTIME_STAGE_17; echo RYZOVA_NATIVE_TLS_DONE"),
+       "echo RYZOVA_RUNTIME_STAGE_19; echo RYZOVA_NATIVE_TLS_DONE"),
     )
-
 
 def _line(data,s):
     return re.search(rb"(?:^|\r?\n)"+re.escape(s)+rb"(?:\r?\n|$)",data) is not None
@@ -40,7 +41,7 @@ def inspect(serial,commit,cert_sha256,metrics):
       "native_guest_sha256_matched":
         bool(re.search(rb"(?:^|\r?\n)"+re.escape(digest)+rb"\s+/n/ryzova7/probe(?:\r?\n|$)",serial)),
       "native_guest_tls_stages_completed":
-        _line(serial,b"RYZOVA_RUNTIME_STAGE_16") and _line(serial,b"RYZOVA_RUNTIME_STAGE_17")
+        all(_line(serial,("RYZOVA_RUNTIME_STAGE_"+str(i)).encode()) for i in range(16,20))
         and _line(serial,b"RYZOVA_NATIVE_TLS_DONE"),
       "server_negotiated_guest_tls12":
         type(metrics.get("native_tls12_sessions")) is int and metrics["native_tls12_sessions"]>=1,
