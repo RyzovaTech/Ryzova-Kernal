@@ -5,7 +5,7 @@ This is **real kernel linkage of the source-only candidate selector**, not hardw
 
 ## Runtime entry point
 
-The AMD64 `pc64` build links `ryzovadrvmatch.c` and `ryzovadrvprobe.c`.
+The AMD64 `pc64/mkfile` explicitly links `ryzovadrvmatch.c` and `ryzovadrvprobe.c` while leaving `pc64` device configuration unchanged. This avoids an M0-only change to bootfs firmware-packaging dependencies.
 After `pcicfginit()`, the boot code registers `#P/drivercandidates` as a
 read-only architecture diagnostic. On a booted Ryzova guest, read:
 
