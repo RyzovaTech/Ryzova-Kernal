@@ -7,6 +7,7 @@ on:
     paths:
       - 'sys/src/9/pc64/pc64'
       - 'sys/src/9/pc64/main.c'
+      - 'sys/src/9/pc64/mkfile'
       - 'sys/src/9/pc64/fns.h'
       - 'sys/src/9/port/ryzovadrvmatch.*'
       - 'sys/src/9/port/ryzovadrvprobe.c'
