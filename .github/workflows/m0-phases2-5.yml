@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: M0.2-M0.5 Driver discovery and safety qualification checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/m0_discovery.py'
+      - 'scripts/m0_device_registry.py'
+      - 'scripts/m0_safety_gate.py'
+      - 'scripts/m0_qualification.py'
+      - 'sys/src/9/port/ryzovadrvmatch.*'
+      - 'ryzova/drivers/m0-*'
+      - 'tests/test_m0_phases2_5.py'
+      - 'tests/test_m0_family_api.c'
+      - 'tests/test_m0_device_registry.py'
+      - '.github/workflows/m0-phases2-5.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed-infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate M0.1 registry and M0.2 to M0.5 fixtures
+        run: |
+          python3 -m unittest discover -s tests -p 'test_m0_device_registry.py' -v
+          python3 -m unittest discover -s tests -p 'test_m0_phases2_5.py' -v
+      - name: Compile independent portable C M0.3 family API
+        run: |
+          cc -std=c99 -pedantic -Wall -Wextra -Werror \
+            sys/src/9/port/ryzovadrvmatch.c tests/test_m0_family_api.c \
+            -o /tmp/ryzova-m0-family
+          /tmp/ryzova-m0-family
+      - name: Assert M0 safety and qualification never authorize release
+        run: |
+          mkdir -p artifacts/drivers
+          python3 scripts/m0_device_registry.py
+          python3 scripts/m0_safety_gate.py --output artifacts/drivers/m0-safety.json
+          python3 scripts/m0_qualification.py --output artifacts/drivers/m0-qualification.json
+          python3 - <<'PY'
+          import json
+          with open('artifacts/drivers/m0-safety.json') as f:
+              safety = json.load(f)
+          with open('artifacts/drivers/m0-qualification.json') as f:
+              qual = json.load(f)
+          assert safety['gate'] == 'blocked' and safety['auto_release_allowed'] is False
+          assert qual['overall'] == 'blocked' and qual['certified_hardware_models'] == 0
+          assert {p['id'] for p in qual['platforms']} == {'modern-amd64', 'legacy-amd64'}
+          PY
+      - name: Publish source-only evidence reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m0-infrastructure-source-only-evidence
+          path: |
+            artifacts/drivers/m0-safety.json
+            artifacts/drivers/m0-qualification.json
+          if-no-files-found: warn
+          retention-days: 14
