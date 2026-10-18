@@ -66,8 +66,11 @@ scanpci(void)
 				ctlrs[i] = ctlr;
 				break;
 			}
-		if(i >= nelem(ctlrs))
-			print("xhci: bug: more than %d controllers\n", nelem(ctlrs));
+		if(i >= nelem(ctlrs)){
+			print("xhci: maximum of %d controllers reached\\n", nelem(ctlrs));
+			vunmap(mmio, iosize);
+			free(ctlr);
+		}
 	}
 }
 
