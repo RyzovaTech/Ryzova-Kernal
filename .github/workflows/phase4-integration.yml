@@ -1,0 +1,34 @@
+name: Phase 4.2-4.4 integration and SDK checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  driver-build-sdk-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Integration contract and source SHA manifest
+        run: python3 scripts/phase4_integrity.py
+      - name: Phase 4 unit tests
+        run: python3 -m unittest discover -s tests -p 'test_phase4_integrity.py' -v
+      - name: Existing D-series driver regression unit suites
+        run: python3 -m unittest discover -s tests -p 'test_driver*.py' -v
+      - name: Archived evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-2-4-integration-evidence
+          path: artifacts/phase4/integrity.json
+          if-no-files-found: warn
