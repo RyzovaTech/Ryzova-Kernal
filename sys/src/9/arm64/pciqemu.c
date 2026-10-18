@@ -5,6 +5,7 @@
 #include "fns.h"
 #include "io.h"
 #include "../port/pci.h"
+#include "m5ecam.h"
 
 #define MMIOBASE 0x10000000
 #define ECAMBASE 0x3F000000
@@ -22,9 +23,15 @@ static uchar *ecam;
 static Intvec vec[32];
 
 static void*
-cfgaddr(int tbdf, int rno)
+cfgaddr(int tbdf, int rno, unsigned int width)
 {
-	return ecam + (BUSBNO(tbdf)<<20 | BUSDNO(tbdf)<<15 | BUSFNO(tbdf)<<12) + rno;
+	unsigned long off;
+
+	if(ecam == nil || BUSTYPE(tbdf) != BusPCI ||
+	   m5ecamoffset(BUSBNO(tbdf), BUSDNO(tbdf), BUSFNO(tbdf),
+		rno, width, ECAMSIZE, &off) < 0)
+		return nil;
+	return ecam + off;
 }
 
 int
@@ -32,7 +39,7 @@ pcicfgrw32(int tbdf, int rno, int data, int read)
 {
 	u32int *p;
 
-	if((p = cfgaddr(tbdf, rno & ~3)) != nil){
+	if((p = cfgaddr(tbdf, rno & ~3, 4)) != nil){
 		if(read)
 			data = *p;
 		else
@@ -48,7 +55,7 @@ pcicfgrw16(int tbdf, int rno, int data, int read)
 {
 	u16int *p;
 
-	if((p = cfgaddr(tbdf, rno & ~1)) != nil){
+	if((p = cfgaddr(tbdf, rno & ~1, 2)) != nil){
 		if(read)
 			data = *p;
 		else
@@ -64,7 +71,7 @@ pcicfgrw8(int tbdf, int rno, int data, int read)
 {
 	u8int *p;
 
-	if((p = cfgaddr(tbdf, rno)) != nil){
+	if((p = cfgaddr(tbdf, rno, 1)) != nil){
 		if(read)
 			data = *p;
 		else
@@ -150,8 +157,11 @@ pcicfginit(void)
 	fmtinstall('T', tbdffmt);
 
 	pcimaxdno = 32;
-	if(p = getconf("*pcimaxdno"))
+	if(p = getconf("*pcimaxdno")){
 		pcimaxdno = strtoul(p, 0, 0);
+		if(pcimaxdno < 1 || pcimaxdno > 32)
+			pcimaxdno = 32;
+	}
 
 	pciscan(0, &pciroot, nil);
 	if(pciroot == nil)
@@ -171,5 +181,9 @@ void
 pciqemulink(void)
 {
 	ecam = vmap(ECAMBASE, ECAMSIZE);
+	if(ecam == nil){
+		print("arm64 pci: ECAM window unavailable; PCI disabled\n");
+		return;
+	}
 	pcicfginit();
 }
