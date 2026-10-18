@@ -30,5 +30,6 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_phase6_native9p.py' -v
           python3 -m unittest discover -s tests -p 'test_phase7_handoff.py' -v
           python3 -m unittest discover -s tests -p 'test_phase7_closeout.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase7_native*.py' -v
       - name: Compile bridge source
         run: python3 -m py_compile ryzova/remote/native_bridge.py ryzova/remote/phase7_fixture.py

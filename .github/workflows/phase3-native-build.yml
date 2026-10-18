@@ -16,7 +16,7 @@ on:
       - 'scripts/phase6_native_9p.py'
       - 'scripts/phase7_handoff.py'
       - 'scripts/phase7_secure_closeout.py'
-      - 'scripts/phase7_secure_closeout.py'
+      - 'scripts/phase7_native_guest_tls.py'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -36,7 +36,7 @@ on:
       - 'scripts/phase6_native_9p.py'
       - 'scripts/phase7_handoff.py'
       - 'scripts/phase7_secure_closeout.py'
-      - 'scripts/phase7_secure_closeout.py'
+      - 'scripts/phase7_native_guest_tls.py'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -107,6 +107,7 @@ jobs:
             artifacts/phase3/phase6-native-9p.json
             artifacts/phase3/phase7-entry.json
             artifacts/phase3/phase7-secure-bridge.json
+            artifacts/phase3/phase7-native-guest-tls.json
             artifacts/phase3/phase7-secure-closeout.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn

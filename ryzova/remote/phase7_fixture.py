@@ -9,6 +9,7 @@ import tempfile
 import threading
 
 from ryzova.remote.native_bridge import SecureReadOnly9PPeer, Local9PTLSGateway
+from ryzova.remote.native_guest_tls import NativeGuestTLS12Endpoint
 from ryzova.remote.tlsloop import server_context, client_context
 
 
@@ -32,11 +33,14 @@ def _pin(certificate):
 
 
 class Ephemeral9PTLSFixture(AbstractContextManager):
-    def __init__(self, public_payload, gateway_port=0):
+    def __init__(self, public_payload, gateway_port=0, guest_tls_port=0):
         if not isinstance(public_payload, bytes) or not 0 < len(public_payload) <= 4096:
             raise ValueError("only one small public test fixture allowed")
         self.payload = public_payload
         self.gateway_port = gateway_port
+        self.guest_tls_port = guest_tls_port
+        self.guest_cert_sha256 = None
+        self._guest_tls = None
         self._directory = None
         self._peer = None
         self._gateway = None
@@ -49,6 +53,10 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
     @property
     def gateway(self):
         return self._gateway
+
+    @property
+    def guest_tls(self):
+        return self._guest_tls
 
     def start(self):
         if self._directory is not None:
@@ -65,7 +73,11 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
             self._gateway = Local9PTLSGateway(
                 client_context(str(cli_cert), str(cli_key), str(srv_cert)),
                 _pin(srv_cert), self._peer.server_address[1], self.gateway_port)
-            for listener in (self._peer, self._gateway):
+            self.guest_cert_sha256 = _pin(srv_cert)
+            self._guest_tls = NativeGuestTLS12Endpoint(
+                str(srv_cert), str(srv_key),
+                self._gateway.server_address[1], port=self.guest_tls_port)
+            for listener in (self._peer, self._gateway, self._guest_tls):
                 t = threading.Thread(target=listener.serve_forever,
                                      daemon=True, name="phase7-mtls-loopback")
                 t.start()
@@ -76,7 +88,7 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
         return self
 
     def close(self):
-        for listener in (self._gateway, self._peer):
+        for listener in (self._guest_tls, self._gateway, self._peer):
             if listener is not None:
                 listener.shutdown()
                 listener.server_close()
@@ -84,7 +96,8 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
             t.join(timeout=4)
             if t.is_alive():
                 raise RuntimeError("TLS 9P fixture thread did not stop")
-        self._gateway = self._peer = None
+        self._gateway = self._peer = self._guest_tls = None
+        self.guest_cert_sha256 = None
         self._threads.clear()
         if self._directory is not None:
             self._directory.cleanup()
