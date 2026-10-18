@@ -36,7 +36,7 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "sys/src/cmd/nusb"], check=True)
+subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
@@ -109,6 +109,17 @@ for component in m1_native_components:
         component.upper() + "_STATUS_$status; tail -n 15 /tmp/m1-" +
         component + ".log; echo PHASE3_END_" + str(stageindex)
     ))
+
+# M5.1 native ARM64 cross-build in an *actual* 9front AMD64 guest.
+# Reuse 7c/7l and installed cross-architecture libraries only if available.
+# Unlike a GCC helper test, this checks the real ARM64 Plan 9 kernel target.
+m5_arm64_native = (ROOT / "sys/src/9/arm64/m5ecam.c").is_file()
+if m5_arm64_native:
+    index=len(stages)
+    stages.append(("m5-arm64-native",
+        "cd /sys/src/9/arm64; mk 9qemu > /tmp/m5-arm64-native.log >[2=1]; "
+        "echo M5_ARM64_MK_STATUS_$status; tail -n 80 /tmp/m5-arm64-native.log; "
+        "ls -l 9qemu; echo PHASE3_END_" + str(index)))
 
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
@@ -219,6 +230,15 @@ for component in m1_native_components:
     ):
         print("FAIL M1 native user-space build:", component, file=sys.stderr)
         sys.exit(1)
+if m5_arm64_native:
+    if not marks.get("m5-arm64-native") or not re.search(
+        r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
+    ) or re.search(r"(?:^|\\r?\\n)ls:.*9qemu", text):
+        print("FAIL M5.1: native 7c/7l ARM64 QEMU kernel did not link",file=sys.stderr)
+        sys.exit(1)
+    (OUT / "m5-arm64-native-build.txt").write_text(
+        "Source SHA: " + SOURCE_SHA + "\\n"
+        "ARM64 9qemu native 7c/7l kernel build: PASS\\n")
 print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and cmp verified.",flush=True)
 
 # M2 tests the two emulated PCI chipsets ONLY in a later isolated QEMU
