@@ -192,13 +192,13 @@ SER.unlink(missing_ok=True)
 MON.unlink(missing_ok=True)
 bootlog=bytearray()
 runtime_commands=[
-    "mkdir -p /tmp/ryzova-9p; ramfs -m /tmp/ryzova-9p; cat '#P/drivercandidates' | grep 'auto-bind=no' > /dev/null && echo RYZOVA_M0_PCI_OK; echo RYZOVA_RUNTIME_STAGE_0",
+    "mkdir -p /tmp/ryzova-9p; ramfs -m /tmp/ryzova-9p; echo RYZOVA_RUNTIME_STAGE_0",
     "echo RYZOVA_9P_DATA > /tmp/ryzova-9p/probe; grep RYZOVA_9P_DATA /tmp/ryzova-9p/probe > /dev/null && echo RYZOVA_9P_OK; echo RYZOVA_RUNTIME_STAGE_1",
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
 ] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES]
-bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,runtime_test=False,runtime_stage=-1)
+bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
     guest=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
@@ -243,11 +243,31 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 guest.sendall(b"cat '#Z/version'; echo RYZOVA_RO_TEST_DONE | tr A-Z a-z\r")
                 bootstate["post_test"]=True
                 print("FRESH KERNEL: write denied; verifying device remains readable",flush=True)
-            if re.search(rb"(?:\r?\n)ryzova_ro_test_done(?:\r?\n)",bytes(bootlog)) and not bootstate["runtime_test"]:
-                guest.sendall((runtime_commands[0]+"\r").encode())
-                bootstate["runtime_test"]=True
-                bootstate["runtime_stage"]=0
-                print("FRESH KERNEL: 9P/storage/network stage 0 sent",flush=True)
+            if re.search(rb"(?:\r?\n)ryzova_ro_test_done(?:\r?\n)",bytes(bootlog)) and not bootstate["m0_probe_sent"]:
+                # Keep the existing namespace probe byte-for-byte intact. Send
+                # a short PCI read-only diagnostic as its own serial command.
+                tail=bytes(bootlog[-12000:])
+                marker=b"ryzova_ro_test_done"
+                pos=tail.rfind(b"\n"+marker+b"\r")
+                if pos < 0:
+                    pos=tail.rfind(b"\n"+marker+b"\n")
+                if pos >= 0 and b"term%" in tail[pos+len(marker)+1:]:
+                    time.sleep(.15)
+                    guest.sendall(b"cat '#P/drivercandidates' | grep 'auto-bind=no' > /dev/null && echo RYZOVA_M0_PCI_OK\r")
+                    bootstate["m0_probe_sent"]=True
+                    print("FRESH KERNEL: independent M0 PCI read-only probe sent",flush=True)
+            if bootstate["m0_probe_sent"] and not bootstate["runtime_test"]:
+                tail=bytes(bootlog[-12000:])
+                marker=b"RYZOVA_M0_PCI_OK"
+                pos=tail.rfind(b"\n"+marker+b"\r")
+                if pos < 0:
+                    pos=tail.rfind(b"\n"+marker+b"\n")
+                if pos >= 0 and b"term%" in tail[pos+len(marker)+1:]:
+                    time.sleep(.15)
+                    guest.sendall((runtime_commands[0]+"\r").encode())
+                    bootstate["runtime_test"]=True
+                    bootstate["runtime_stage"]=0
+                    print("FRESH KERNEL: 9P/storage/network stage 0 sent",flush=True)
             elif bootstate["runtime_test"] and bootstate["runtime_stage"] < len(runtime_commands)-1:
                 i=bootstate["runtime_stage"]
                 # Await the rc prompt AFTER the output marker. A marker alone
