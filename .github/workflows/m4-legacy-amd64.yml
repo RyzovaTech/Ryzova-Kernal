@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: M4 Legacy AMD64 Preservation and Controller Safety
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/pc/ether79c970.c'
+      - 'sys/src/9/pc/ether8139.c'
+      - 'scripts/phase3-native-build.py'
+      - 'scripts/m2_qemu_probe.py'
+      - 'scripts/m4_legacy_gate.py'
+      - 'tests/test_m4_legacy_gate.py'
+      - 'tests/test_m4_legacy_pc_safety.py'
+      - 'ryzova/drivers/m4-legacy-qualification.json'
+      - '.github/workflows/m4-legacy-amd64.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  legacy-pc-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify AMD PCnet and Realtek RTL8139 failure paths
+        run: python3 -m unittest discover -s tests -p 'test_m4_legacy_pc_safety.py' -v
+      - name: Verify legacy low-RAM guest and certification boundaries
+        run: |
+          python3 -m unittest discover -s tests -p 'test_m4_legacy_gate.py' -v
+          python3 scripts/m4_legacy_gate.py > /tmp/m4-gate.json
+          python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/m4-gate.json'))
+          assert x['gate']=='blocked-pending-real-hardware'
+          assert x['virtual_legacy_memory_mib']==384
+          assert x['class_families_tracked']==4
+          assert x['certified_models']==0 and x['verified_physical_models']==0
+          assert x['real_legacy_pcs_qualified'] is False
+          PY
+      - name: Preserve M0 M1 M2 and M3 safety gates
+        run: |
+          python3 scripts/m0_device_registry.py
+          python3 scripts/m0_native_rules.py --check
+          python3 -m unittest discover -s tests -p 'test_m0_device_registry.py' -v
+          python3 -m unittest discover -s tests -p 'test_m1_qualification.py' -v
+          python3 -m unittest discover -s tests -p 'test_m2_chipsets.py' -v
+          python3 -m unittest discover -s tests -p 'test_m3_modern_controllers.py' -v
