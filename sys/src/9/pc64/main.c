@@ -199,6 +199,8 @@ main(void)
 	if(i8237alloc != nil)
 		i8237alloc();
 	pcicfginit();
+	/* Register a read-only candidate listing; preserve all legacy probes. */
+	ryzovadrvprobeinit();
 	bootscreeninit();
 	printinit();
 	cpuidprint();
