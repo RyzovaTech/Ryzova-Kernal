@@ -1,7 +1,7 @@
 name: Phase 5.7 macOS Mach-O structural feasibility
 on:
   push:
-    branches: ['phase5/**']
+    branches: ['phase5/**', main]
   pull_request:
     branches: [main]
   workflow_dispatch:

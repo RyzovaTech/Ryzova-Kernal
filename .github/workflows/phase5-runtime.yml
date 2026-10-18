@@ -2,7 +2,7 @@ name: Phase 5.2-5.3 Linux syscall and namespace virtual-runtime tests
 
 on:
   push:
-    branches: ['phase5/**']
+    branches: ['phase5/**', main]
   pull_request:
     branches: [main]
   workflow_dispatch:
