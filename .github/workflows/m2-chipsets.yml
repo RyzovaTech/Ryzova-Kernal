@@ -13,6 +13,8 @@ on:
       - 'scripts/m2_chipset_audit.py'
       - 'tests/test_m2_family_matches.c'
       - 'tests/test_m2_chipsets.py'
+      - 'tests/test_m2_runtime_nic.py'
+      - 'scripts/m2_qemu_nic.py'
       - '.github/workflows/m2-chipsets.yml'
   push:
     branches: [main]
@@ -34,6 +36,7 @@ jobs:
           python3 scripts/m0_device_registry.py
           python3 scripts/m0_native_rules.py --check
           python3 -m unittest discover -s tests -p 'test_m2_chipsets.py' -v
+          python3 -m unittest discover -s tests -p 'test_m2_runtime_nic.py' -v
           python3 scripts/m2_chipset_audit.py > /tmp/m2-report.json
           python3 - <<'PY'
           import json
