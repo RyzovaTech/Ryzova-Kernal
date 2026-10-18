@@ -40,6 +40,9 @@ def inspect(base: Path, commit: str) -> dict:
                 "ready": False, "checks": {"all_runner_artifacts_available": False},
                 "error": type(exc).__name__}
     source_hash = hashlib.sha256(payload_for_commit(commit)).hexdigest()
+    if not isinstance(p9, dict) or not isinstance(kernel, dict):
+        return {"schema": "ryzova-phase7-entry-evidence/v1",
+                "ready": False, "checks": {"runner_documents_are_objects": False}}
     digests = [kernel.get(key) for key in (
         "guest_compiled_sha256", "guest_installed_sha256",
         "independently_extracted_host_sha256")]
@@ -71,7 +74,7 @@ def inspect(base: Path, commit: str) -> dict:
         "source_commit": commit,
         "ready": all(checks.values()),
         "checks": checks,
-        "kernel_sha256": digests[0] if len(set(map(str, digests))) == 1 else None,
+        "kernel_sha256": digests[0] if checks["source_built_kernel_guest_host_hashes_match"] else None,
         "test_file_sha256": source_hash,
         "native_tls_authentication_proven": False,
         "external_physical_peer_proven": False,
