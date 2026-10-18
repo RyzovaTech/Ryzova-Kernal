@@ -114,6 +114,7 @@ uintptr	paddr(void*);
 void	patwc(void*, int);
 int	pcibiosinit(int*, int*);
 void	pcicfginit(void);
+void	ryzovadrvprobeinit(void);
 int	(*pcicfgrw8)(int, int, int, int);
 int	(*pcicfgrw16)(int, int, int, int);
 int	(*pcicfgrw32)(int, int, int, int);
