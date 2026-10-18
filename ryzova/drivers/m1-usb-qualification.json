@@ -1,0 +1,77 @@
+{
+  "schema": "ryzova-m1-usb-qualification/v1",
+  "policy": "no-source-only-certification",
+  "platforms": [
+    "modern-amd64",
+    "legacy-amd64"
+  ],
+  "classes": [
+    {
+      "id": "usb-hid",
+      "driver": "kb",
+      "selectors": [
+        "usb-hid-boot-keyboard-candidate",
+        "usb-hid-boot-pointer-candidate"
+      ],
+      "required_tests": [
+        "native-build",
+        "interrupt-input",
+        "keyboard-rollover",
+        "pointer-move",
+        "detach-reconnect",
+        "legacy-low-memory"
+      ],
+      "certified": false
+    },
+    {
+      "id": "usb-mass-storage",
+      "driver": "disk",
+      "selectors": [
+        "usb-mass-storage-bot-candidate",
+        "usb-mass-storage-uas-candidate"
+      ],
+      "required_tests": [
+        "native-build",
+        "capacity-boundary",
+        "read-write-integrity",
+        "scsi-fault-recovery",
+        "disconnect-during-io",
+        "legacy-bot"
+      ],
+      "certified": false
+    },
+    {
+      "id": "usb-audio",
+      "driver": "audio",
+      "selectors": [
+        "usb-audio1-stream-candidate",
+        "usb-audio2-stream-candidate"
+      ],
+      "required_tests": [
+        "native-build",
+        "playback",
+        "capture",
+        "rate-switch",
+        "detach-reconnect",
+        "legacy-uac1"
+      ],
+      "certified": false
+    },
+    {
+      "id": "usb-cdc-ethernet",
+      "driver": "ether",
+      "selectors": [
+        "usb-cdc-ethernet-candidate"
+      ],
+      "required_tests": [
+        "native-build",
+        "link-up",
+        "dhcp-or-static-ip",
+        "packet-integrity",
+        "zero-length-packet",
+        "disconnect-recovery"
+      ],
+      "certified": false
+    }
+  ]
+}

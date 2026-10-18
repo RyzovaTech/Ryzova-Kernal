@@ -6,6 +6,7 @@
 #include <pcm.h>
 #pragma varargck type "!" Pcmdesc
 #include "usb.h"
+#include "../lib/m1class.h"
 
 enum {
 	Paudio1 = 0x00,
@@ -259,7 +260,7 @@ parseasdesc1(Desc *dd, Aconf *c)
 		break;
 
 	case 0x2402:	/* CS_INTERFACE, FORMAT_TYPE */
-		if(dd->data.bLength < 8 || b[1] != 1)
+		if(!m1uac1freqvalid(b, dd->data.bLength))
 			return -1;
 		c->channels = b[2];
 		c->bps = b[3];

@@ -95,6 +95,118 @@
       "firmware_id": null,
       "evidence_level": "source-candidate",
       "binding_enabled": false
+    },
+    {
+      "id": "usb-hid-boot-keyboard-candidate",
+      "bus": "usb",
+      "driver": "kb",
+      "source_file": "sys/src/cmd/nusb/kb/kb.c",
+      "selector": {
+        "class": "03",
+        "subclass": "01",
+        "protocol": "01"
+      },
+      "revision_min": 0,
+      "revision_max": 65535,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "usb-hid-boot-pointer-candidate",
+      "bus": "usb",
+      "driver": "kb",
+      "source_file": "sys/src/cmd/nusb/kb/kb.c",
+      "selector": {
+        "class": "03",
+        "subclass": "01",
+        "protocol": "02"
+      },
+      "revision_min": 0,
+      "revision_max": 65535,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "usb-mass-storage-bot-candidate",
+      "bus": "usb",
+      "driver": "disk",
+      "source_file": "sys/src/cmd/nusb/disk/disk.c",
+      "selector": {
+        "class": "08",
+        "subclass": "06",
+        "protocol": "50"
+      },
+      "revision_min": 0,
+      "revision_max": 65535,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "usb-mass-storage-uas-candidate",
+      "bus": "usb",
+      "driver": "disk",
+      "source_file": "sys/src/cmd/nusb/disk/disk.c",
+      "selector": {
+        "class": "08",
+        "subclass": "06",
+        "protocol": "62"
+      },
+      "revision_min": 0,
+      "revision_max": 65535,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "usb-audio1-stream-candidate",
+      "bus": "usb",
+      "driver": "audio",
+      "source_file": "sys/src/cmd/nusb/audio/audio.c",
+      "selector": {
+        "class": "01",
+        "subclass": "02",
+        "protocol": "00"
+      },
+      "revision_min": 0,
+      "revision_max": 65535,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "usb-audio2-stream-candidate",
+      "bus": "usb",
+      "driver": "audio",
+      "source_file": "sys/src/cmd/nusb/audio/audio.c",
+      "selector": {
+        "class": "01",
+        "subclass": "02",
+        "protocol": "20"
+      },
+      "revision_min": 0,
+      "revision_max": 65535,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
+    },
+    {
+      "id": "usb-cdc-ethernet-candidate",
+      "bus": "usb",
+      "driver": "ether",
+      "source_file": "sys/src/cmd/nusb/ether/ether.c",
+      "selector": {
+        "class": "02",
+        "subclass": "06",
+        "protocol": "00"
+      },
+      "revision_min": 0,
+      "revision_max": 65535,
+      "firmware_id": null,
+      "evidence_level": "source-candidate",
+      "binding_enabled": false
     }
   ]
 }

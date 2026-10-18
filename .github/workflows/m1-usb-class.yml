@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: M1 Universal USB Class Drivers Regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/cmd/nusb/lib/m1class.*'
+      - 'sys/src/cmd/nusb/lib/mkfile'
+      - 'sys/src/cmd/nusb/lib/parse.c'
+      - 'sys/src/cmd/nusb/kb/kb.c'
+      - 'sys/src/cmd/nusb/disk/disk.c'
+      - 'sys/src/cmd/nusb/audio/audio.c'
+      - 'sys/src/cmd/nusb/ether/cdc.c'
+      - 'ryzova/drivers/m0-device-registry.json'
+      - 'tests/test_m1_classguards.c'
+      - 'tests/test_m1_class_integration.py'
+      - 'tests/test_m1_qualification.py'
+      - 'scripts/m1_usb_qualification.py'
+      - 'ryzova/drivers/m1-usb-qualification.json'
+      - '.github/workflows/m1-usb-class.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  usb-source-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Portable USB validation compile with GCC
+        run: |
+          cc -std=c99 -pedantic -Wall -Wextra -Werror \
+            sys/src/cmd/nusb/lib/m1class.c tests/test_m1_classguards.c \
+            -o /tmp/ryzova-m1-usb-unit
+          /tmp/ryzova-m1-usb-unit
+      - name: Compile and run with Clang
+        run: |
+          clang -std=c99 -pedantic -Wall -Wextra -Werror \
+            sys/src/cmd/nusb/lib/m1class.c tests/test_m1_classguards.c \
+            -o /tmp/ryzova-m1-clang
+          /tmp/ryzova-m1-clang
+      - name: Source integration and precise USB class rules
+        run: |
+          python3 -m unittest discover -s tests -p 'test_m1_class_integration.py' -v
+          python3 scripts/m0_device_registry.py
+          python3 scripts/m0_native_rules.py --check
+          python3 -m unittest discover -s tests -p 'test_m1_qualification.py' -v
+          python3 scripts/m1_usb_qualification.py > /tmp/m1-qualification.json
+          python3 -c "import json; q=json.load(open('/tmp/m1-qualification.json')); assert q['status']=='blocked' and q['certified_models']==0"
+      - name: Preserve M0 fail-closed safety and modern/legacy tracks
+        run: |
+          python3 -m unittest discover -s tests -p 'test_m0_device_registry.py' -v
+          python3 -m unittest discover -s tests -p 'test_m0_phases2_5.py' -v
+          python3 -m unittest discover -s tests -p 'test_m0_native_integration.py' -v

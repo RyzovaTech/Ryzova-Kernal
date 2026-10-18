@@ -2,6 +2,7 @@
 #include <libc.h>
 #include <thread.h>
 #include "usb.h"
+#include "m1class.h"
 
 int
 parsedev(Dev *xd, uchar *b, int n)
@@ -9,6 +10,10 @@ parsedev(Dev *xd, uchar *b, int n)
 	Usbdev *d;
 	DDev *dd;
 
+	if(!m1usbdevdescvalid(b, n)){
+		werrstr("invalid or truncated device descriptor");
+		return -1;
+	}
 	d = xd->usb;
 	dd = (DDev*)b;
 	if(usbdebug>1)
@@ -103,6 +108,11 @@ parseendpt(Usbdev *d, Conf *c, Iface *ip, uchar *b, int n, Ep **epp)
 		return -1;
 	}
 	dep = (DEp *)b;
+	/* Reject malformed descriptors before creating or modifying endpoints. */
+	if((GET2(dep->wMaxPacketSize) & 0x7FF) == 0){
+		werrstr("invalid zero-sized USB endpoint");
+		return -1;
+	}
 
 	type = dep->bmAttributes & 0x03;
 	addr = dep->bEndpointAddress;
@@ -203,6 +213,10 @@ parsedesc(Usbdev *d, Conf *c, uchar *b, int n)
 			break;
 
 	while(n > 2 && (len = b[0]) != 0 && len <= n){
+		if(len < 2){
+			werrstr("invalid short USB descriptor");
+			return -1;
+		}
 		if(usbdebug>1){
 			fprint(2, "%s:\t\tparsedesc %s %x[%d] %.*H\n",
 				argv0, dname(b[1]), b[1], b[0], len, b);
@@ -258,6 +272,10 @@ parseconf(Usbdev *d, Conf *c, uchar *b, int n)
 	int	l;
 	int	nr;
 
+	if(b == nil || n < Dconflen){
+		werrstr("truncated configuration descriptor");
+		return -1;
+	}
 	dc = (DConf*)b;
 	if(usbdebug>1)
 		fprint(2, "%s:\tparseconf %.*H\n", argv0, Dconflen, b);
@@ -273,11 +291,11 @@ parseconf(Usbdev *d, Conf *c, uchar *b, int n)
 	c->attrib = dc->bmAttributes;
 	c->milliamps = dc->MaxPower*2;
 	l = GET2(dc->wTotalLength);
-	if(n < l){
-		werrstr("truncated configuration info");
+	if(l < Dconflen || n < l){
+		werrstr("truncated or invalid configuration info");
 		return -1;
 	}
-	n -= Dconflen;
+	n = l - Dconflen;
 	b += Dconflen;
 	nr = 0;
 	if(n > 0 && (nr=parsedesc(d, c, b, n)) < 0)

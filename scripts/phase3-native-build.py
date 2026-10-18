@@ -32,11 +32,11 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include"], check=True)
+subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "sys/src/cmd/nusb"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
-    f"Ryzova source commit: {SOURCE_SHA}\nKernel subtree archive sha256: {archive_hash}\n"
-    "Archive includes kernel source, sys/include, amd64/include from exactly the checked-out commit.\n"
+    f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
+    "Archive includes kernel, nusb user-space source, sys/include and amd64/include from exact commit.\n"
 )
 print("SOURCE_SHA", SOURCE_SHA, "ARCHIVE_SHA256", archive_hash, flush=True)
 
@@ -62,6 +62,14 @@ cmd = [
     "-monitor", f"unix:{MON},server=on,wait=off",
     "-no-reboot", "-no-shutdown",
 ]
+# M1 QEMU regression exposes generic emulated xHCI keyboard/mouse devices.
+# This is NOT equivalent to physical USB HID qualification.
+if (ROOT / "sys/src/cmd/nusb/lib/m1class.c").is_file():
+    cmd += [
+        "-device", "qemu-xhci,id=m1xhci",
+        "-device", "usb-kbd,bus=m1xhci.0",
+        "-device", "usb-mouse,bus=m1xhci.0",
+    ]
 # The 9front rc shell is used for ALL target compilation, not Linux gcc/make.
 stages = [
     ("guest-network", "ip/ipconfig -d ether /net/ether0; webfs; echo PHASE3_END_0"),
@@ -82,6 +90,22 @@ stages = [
      "cmp 9pc64 /n/9fat/9pc64; echo PHASE3_COPY_STATUS_$status; "
      "ls -l /n/9fat/9pc64; sha1sum -2 256 9pc64; sha1sum -2 256 /n/9fat/9pc64; echo PHASE3_END_5"),
 ]
+# M1 class drivers must compile with the actual Plan 9 toolchain, not only
+# GCC. Keep the 5 builds separate to avoid overlong rc serial commands.
+m1_native_components = ("lib", "kb", "disk", "audio", "ether") if (
+    ROOT / "sys/src/cmd/nusb/lib/m1class.c"
+).is_file() else ()
+for component in m1_native_components:
+    stageindex = len(stages)
+    stages.append((
+        "m1-usb-" + component,
+        "cd /sys/src/cmd/nusb/" + component +
+        "; mk " + ("install" if component != "lib" else "") +
+        " > /tmp/m1-" + component + ".log >[2=1]; echo M1_" +
+        component.upper() + "_STATUS_$status; tail -n 15 /tmp/m1-" +
+        component + ".log; echo PHASE3_END_" + str(stageindex)
+    ))
+
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
 marks = {}
@@ -136,7 +160,7 @@ with (OUT/"host.log").open("wb") as host:
                     session["stage"]+=1
                     session["sent"]=False
                     print("PASSED STAGE",ix,label,flush=True)
-                    if ix==5:
+                    if ix==len(stages)-1:
                         session["final"]=True
                         break
                 if time.monotonic()-stage_start>380:
@@ -183,6 +207,14 @@ if not marks.get("install-fresh-bootfile") or not re.search(
 ):
     print("FAIL: the fresh compiled binary was not byte-compared with the FAT bootfile",file=sys.stderr)
     sys.exit(1)
+# No source-only approval when a native user-space class driver fails.
+for component in m1_native_components:
+    marker = "M1_" + component.upper() + "_STATUS_"
+    if not marks.get("m1-usb-" + component) or not re.search(
+        r"(?:^|\r?\n)" + marker + r"\s*(?:\r?\n)", text
+    ):
+        print("FAIL M1 native user-space build:", component, file=sys.stderr)
+        sys.exit(1)
 print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and cmp verified.",flush=True)
 
 # Start a NEW QEMU process against the SAME disposable qcow2 overlay.

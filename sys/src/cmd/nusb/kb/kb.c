@@ -18,6 +18,7 @@
 #include <thread.h>
 #include <9p.h>
 #include "usb.h"
+#include "../lib/m1class.h"
 #include "hid.h"
 
 enum
@@ -708,7 +709,7 @@ readerproc(void* a)
 	for(;;){
 		if(f->ep == nil)
 			hdfatal(f, nil);
-		if(f->ep->maxpkt < 1 || f->ep->maxpkt > sizeof(p.p))
+		if(!m1hidpacketvalid(f->ep->maxpkt, sizeof(p.p)))
 			hdfatal(f, "hid: weird maxpkt");
 
 		memset(p.p, 0, sizeof(p.p));
