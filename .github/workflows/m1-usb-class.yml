@@ -15,6 +15,9 @@ on:
       - 'ryzova/drivers/m0-device-registry.json'
       - 'tests/test_m1_classguards.c'
       - 'tests/test_m1_class_integration.py'
+      - 'tests/test_m1_qualification.py'
+      - 'scripts/m1_usb_qualification.py'
+      - 'ryzova/drivers/m1-usb-qualification.json'
       - '.github/workflows/m1-usb-class.yml'
   push:
     branches: [main]
@@ -48,6 +51,9 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_m1_class_integration.py' -v
           python3 scripts/m0_device_registry.py
           python3 scripts/m0_native_rules.py --check
+          python3 -m unittest discover -s tests -p 'test_m1_qualification.py' -v
+          python3 scripts/m1_usb_qualification.py > /tmp/m1-qualification.json
+          python3 -c "import json; q=json.load(open('/tmp/m1-qualification.json')); assert q['status']=='blocked' and q['certified_models']==0"
       - name: Preserve M0 fail-closed safety and modern/legacy tracks
         run: |
           python3 -m unittest discover -s tests -p 'test_m0_device_registry.py' -v
