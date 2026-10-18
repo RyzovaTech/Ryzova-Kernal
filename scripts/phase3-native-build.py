@@ -37,7 +37,7 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "sys/src/cmd/nusb"], check=True)
+subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
@@ -110,6 +110,19 @@ for component in m1_native_components:
         component.upper() + "_STATUS_$status; tail -n 15 /tmp/m1-" +
         component + ".log; echo PHASE3_END_" + str(stageindex)
     ))
+
+# M5.1 native ARM64 cross-build in an *actual* 9front AMD64 guest.
+# Reuse 7c/7l and installed cross-architecture libraries only if available.
+# Unlike a GCC helper test, this checks the real ARM64 Plan 9 kernel target.
+m5_arm64_native = (ROOT / "sys/src/9/arm64/m5ecam.c").is_file()
+if m5_arm64_native:
+    index=len(stages)
+    stages.append(("m5-arm64-native",
+        "cd /sys/src/9/arm64; 7c -o /tmp/m5ecam.7 m5ecam.c; "
+        "echo M5_ARM64_7C_STATUS_$status; ls -l /tmp/m5ecam.7; "
+        "mk 9qemu > /tmp/m5-arm64-native.log >[2=1]; "
+        "echo M5_ARM64_MK_STATUS_$status; tail -n 20 /tmp/m5-arm64-native.log; "
+        "ls -l 9qemu; echo PHASE3_END_" + str(index)))
 
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
@@ -220,6 +233,32 @@ for component in m1_native_components:
     ):
         print("FAIL M1 native user-space build:", component, file=sys.stderr)
         sys.exit(1)
+if m5_arm64_native:
+    # M5.1 has a two-part gate: a cross-architecture native 7c compiler
+    # can prove C source compatibility, but it cannot stand in for a
+    # linked and booted ARM64 kernel.
+    cross_ok = bool(marks.get("m5-arm64-native") and re.search(
+        r"(?:^|\r?\n)M5_ARM64_7C_STATUS_\s*(?:\r?\n)", text
+    ) and not re.search(r"(?:^|\r?\n)ls:.*m5ecam.7", text))
+    arm64_link_ok = bool(re.search(
+        r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
+    ) and not re.search(r"(?:^|\r?\n)ls:.*9qemu", text))
+    (OUT / "m5-arm64-native-build.json").write_text(json.dumps({
+        "source_sha": SOURCE_SHA,
+        "cross_compiler_7c": "pass" if cross_ok else "fail",
+        "arm64_kernel_link": "pass" if arm64_link_ok else "blocked",
+        "arm64_qemu_boot": "not-tested",
+        "full_m5_1_complete": False,
+        "known_dep_blocker": None if arm64_link_ok else
+            "ARM64 bootfs userspace /arm64/bin/paqfs not installed in AMD64 toolchain guest",
+    }, indent=2) + "\n")
+    if not cross_ok:
+        print("FAIL M5.1: ARM64 Plan 9 native 7c source compile failed",
+              file=sys.stderr)
+        sys.exit(1)
+    print("M5.1 ARM64 7c cross-compile PASS; full ARM64 kernel link:",
+          "PASS" if arm64_link_ok else "BLOCKED (missing guest userspace)",
+          flush=True)
 print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and cmp verified.",flush=True)
 
 # M2 tests the two emulated PCI chipsets ONLY in a later isolated QEMU

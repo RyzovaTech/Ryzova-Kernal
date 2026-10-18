@@ -1,0 +1,84 @@
+{
+  "schema": "ryzova-m5-architecture-matrix/v1",
+  "policy": "source-readiness-not-hardware-certification",
+  "release_gate": "blocked-pending-native-arm64-boot-and-lab",
+  "certified_models": 0,
+  "automatic_cross_arch_driver_bind": false,
+  "profiles": [
+    {
+      "id": "arm64-qemu-server",
+      "architecture": "arm64",
+      "configuration": "sys/src/9/arm64/qemu",
+      "compiler_target": "arm64",
+      "required_link_drivers": [
+        "pciqemu",
+        "ethervirtio10",
+        "sdvirtio10",
+        "usbxhcipci"
+      ],
+      "safety_source": "sys/src/9/arm64/m5ecam.c",
+      "evidence": "source-integrated",
+      "native_compilation_verified": false,
+      "boot_verified": false,
+      "physical_verified": false,
+      "evidence_needed": [
+        "arm64-native-compiler-link",
+        "aarch64-qemu-boot",
+        "ecam-out-of-range-negative-test",
+        "virtio-net-traffic",
+        "virtio-storage-integrity",
+        "multi-core-irq-and-dma"
+      ]
+    },
+    {
+      "id": "amd64-server",
+      "architecture": "amd64",
+      "configuration": "sys/src/9/pc64/pc64",
+      "compiler_target": "amd64",
+      "required_link_drivers": [
+        "sdnvme",
+        "sdvirtio10",
+        "ethervirtio10",
+        "etherx550",
+        "usbxhcipci"
+      ],
+      "safety_source": "sys/src/9/pc/etherx550.c",
+      "evidence": "source-integrated-with-existing-qemu-boot",
+      "native_compilation_verified": true,
+      "boot_verified": true,
+      "physical_verified": false,
+      "evidence_needed": [
+        "physical-nvme-integrity",
+        "physical-10gbe-throughput",
+        "ecc-memory-behavior",
+        "dma-irq-stress",
+        "power-loss-recovery",
+        "multi-core-stress"
+      ]
+    },
+    {
+      "id": "legacy-amd64",
+      "architecture": "amd64",
+      "configuration": "sys/src/9/pc64/pc64",
+      "compiler_target": "amd64",
+      "required_link_drivers": [
+        "ether79c970",
+        "ether8139",
+        "sdiahci",
+        "usbehci"
+      ],
+      "safety_source": "sys/src/9/pc/ether79c970.c",
+      "evidence": "source-integrated-with-qemu-low-memory-discovery",
+      "native_compilation_verified": true,
+      "boot_verified": true,
+      "physical_verified": false,
+      "evidence_needed": [
+        "physical-old-pc-boot",
+        "sata-read-write-integrity",
+        "ehci-hid",
+        "ethernet-traffic",
+        "low-ram-recovery"
+      ]
+    }
+  ]
+}

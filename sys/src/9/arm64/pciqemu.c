@@ -5,6 +5,7 @@
 #include "fns.h"
 #include "io.h"
 #include "../port/pci.h"
+#include "m5ecam.h"
 
 #define MMIOBASE 0x10000000
 #define ECAMBASE 0x3F000000
@@ -22,9 +23,15 @@ static uchar *ecam;
 static Intvec vec[32];
 
 static void*
-cfgaddr(int tbdf, int rno)
+cfgaddr(int tbdf, int rno, unsigned int width)
 {
-	return ecam + (BUSBNO(tbdf)<<20 | BUSDNO(tbdf)<<15 | BUSFNO(tbdf)<<12) + rno;
+	unsigned long off;
+
+	if(ecam == nil || BUSTYPE(tbdf) != BusPCI ||
+	   m5ecamoffset(BUSBNO(tbdf), BUSDNO(tbdf), BUSFNO(tbdf),
+		rno, width, ECAMSIZE, &off) < 0)
+		return nil;
+	return ecam + off;
 }
 
 int
@@ -32,7 +39,7 @@ pcicfgrw32(int tbdf, int rno, int data, int read)
 {
 	u32int *p;
 
-	if((p = cfgaddr(tbdf, rno & ~3)) != nil){
+	if((p = cfgaddr(tbdf, rno & ~3, 4)) != nil){
 		if(read)
 			data = *p;
 		else
@@ -48,7 +55,7 @@ pcicfgrw16(int tbdf, int rno, int data, int read)
 {
 	u16int *p;
 
-	if((p = cfgaddr(tbdf, rno & ~1)) != nil){
+	if((p = cfgaddr(tbdf, rno & ~1, 2)) != nil){
 		if(read)
 			data = *p;
 		else
@@ -64,7 +71,7 @@ pcicfgrw8(int tbdf, int rno, int data, int read)
 {
 	u8int *p;
 
-	if((p = cfgaddr(tbdf, rno)) != nil){
+	if((p = cfgaddr(tbdf, rno, 1)) != nil){
 		if(read)
 			data = *p;
 		else
@@ -101,23 +108,34 @@ void
 pciintrenable(int tbdf, void (*f)(Ureg*, void*), void *a)
 {
 	Pcidev *p;
-	int i;
+	int i, freeidx;
 	Intvec *v;
 
+	if(f == nil){
+		print("pciintrenable: %T: nil handler rejected\n", tbdf);
+		return;
+	}
 	if((p = pcimatchtbdf(tbdf)) == nil){
 		print("pciintrenable: %T: unknown device\n", tbdf);
 		return;
 	}
 
+	freeidx = -1;
 	for(i = 0; i < nelem(vec); i++){
 		v = &vec[i];
-		if(v->f == nil){
-			v->p = p;
-			v->f = f;
-			v->a = a;
-			return;
-		}
+		if(v->f == f && v->p == p && v->a == a)
+			return;	/* repeated enable must not consume a second slot */
+		if(v->f == nil && freeidx < 0)
+			freeidx = i;
 	}
+	if(freeidx < 0){
+		print("pciintrenable: %T: PCI handler table full\n", tbdf);
+		return;
+	}
+	v = &vec[freeidx];
+	v->p = p;
+	v->a = a;
+	v->f = f;	/* publish the active handler last */
 }
 
 void
@@ -134,8 +152,11 @@ pciintrdisable(int tbdf, void (*f)(Ureg*, void*), void *a)
 
 	for(i = 0; i < nelem(vec); i++){
 		v = &vec[i];
-		if(v->p == p && v->f == f && v->a == a)
+		if(v->p == p && v->f == f && v->a == a){
 			v->f = nil;
+			v->a = nil;
+			v->p = nil;
+		}
 	}
 }
 
@@ -150,8 +171,11 @@ pcicfginit(void)
 	fmtinstall('T', tbdffmt);
 
 	pcimaxdno = 32;
-	if(p = getconf("*pcimaxdno"))
+	if(p = getconf("*pcimaxdno")){
 		pcimaxdno = strtoul(p, 0, 0);
+		if(pcimaxdno < 1 || pcimaxdno > 32)
+			pcimaxdno = 32;
+	}
 
 	pciscan(0, &pciroot, nil);
 	if(pciroot == nil)
@@ -171,5 +195,9 @@ void
 pciqemulink(void)
 {
 	ecam = vmap(ECAMBASE, ECAMSIZE);
+	if(ecam == nil){
+		print("arm64 pci: ECAM window unavailable; PCI disabled\n");
+		return;
+	}
 	pcicfginit();
 }

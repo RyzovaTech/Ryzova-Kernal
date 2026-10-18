@@ -46,6 +46,7 @@ OBJ=\
 	clock.$O\
 	fpu.$O\
 	main.$O\
+	m5ecam.$O\
 	mmu.$O\
 	mem.$O\
 	sysreg.$O\
