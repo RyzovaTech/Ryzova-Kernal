@@ -704,7 +704,9 @@ nvmepnpctlrs(void)
 	for(p = nil; p = pcimatch(p, 0, 0);){
 		if(p->ccrb != 1 || p->ccru != 8 || p->ccrp != 2)
 			continue;
-		if(p->mem[0].size == 0 || (p->mem[0].bar & 1) != 0)
+		if(p->mem[0].size < 0x1008 ||
+		   (p->mem[0].bar & 1) != 0 ||
+		   (p->mem[0].bar & ~0xFULL) == 0)
 			continue;
 		if((ctlr = malloc(sizeof(*ctlr))) == nil){
 			print("nvme: no memory for Ctlr\n");
@@ -724,6 +726,16 @@ nvmepnpctlrs(void)
 		}
 		ctlr->cap = ctlr->reg[Cap0];
 		ctlr->cap |= (u64int)ctlr->reg[Cap1]<<32;
+		/*
+		 * Admin SQ0/CQ0 doorbells start at 0x1000. The CAP.DSTRD
+		 * field supplies the stride; never access an absent BAR tail.
+		 */
+		ctlr->dstrd = (ctlr->cap >> 32) & 15;
+		if((u64int)p->mem[0].size <
+		   0x1000ULL + (4ULL << ctlr->dstrd) + 4){
+			print("nvme: BAR0 too small for admin doorbells\n");
+			goto Bad;
+		}
 
 		/* mask interrupts */
 		ctlr->ints = 0;
@@ -739,7 +751,6 @@ nvmepnpctlrs(void)
 		}
 
 		/* use 64K page size when possible */
-		ctlr->dstrd = (ctlr->cap >> 32) & 15;
 		for(i = (ctlr->cap >> 48) & 15; i < ((ctlr->cap >> 52) & 15); i++){
 			if(i >= 16-12)	/* 64K */
 				break;
