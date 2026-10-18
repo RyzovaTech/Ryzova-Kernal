@@ -484,7 +484,17 @@ amd79c970pci(void)
 
 	p = nil;
 	while(p = pcimatch(p, 0x1022, 0x2000)){
+		/*
+		 * 79C970 is a 32-byte I/O port device. An absent, MMIO,
+		 * truncated, or overflowing BAR must never reach inl/outl.
+		 */
+		if((p->mem[0].bar & 1) == 0 ||
+		   p->mem[0].size < Bdp+4 ||
+		   p->mem[0].size > 0x10000)
+			continue;
 		port = p->mem[0].bar & ~3;
+		if(port == 0 || port > 0x10000 - p->mem[0].size)
+			continue;
 		if(ioalloc(port, p->mem[0].size, 0, "amd79c970") < 0){
 			print("amd79c970: port 0x%uX in use\n", port);
 			continue;
@@ -506,10 +516,22 @@ amd79c970pci(void)
 	}
 }
 
+/* Reset failure cannot leave bus mastering active or pin the controller. */
+static int
+m4resetfail(Ether *ether, Ctlr *ctlr)
+{
+	ctlr->init = 0;
+	ctlr->active = 0;
+	pciclrbme(ctlr->pcidev);
+	pcidisable(ctlr->pcidev);
+	ether->ctlr = nil;
+	return -1;
+}
+
 static int
 reset(Ether* ether)
 {
-	int x;
+	int x, timeo;
 	uchar ea[Eaddrlen];
 	Ctlr *ctlr;
 
@@ -555,7 +577,7 @@ reset(Ether* ether)
 	}else{
 		print("#l%d: card doesn't talk right\n", ether->ctlrno);
 		iunlock(ctlr);
-		return -1;
+		return m4resetfail(ether, ctlr);
 	}
 
 	ctlr->iow(ctlr, Rap, 88);
@@ -575,7 +597,7 @@ reset(Ether* ether)
 		print("#l%d: unknown PCnet card version 0x%.7ux\n",
 			ether->ctlrno, x&0xFFFFFFF);
 		iunlock(ctlr);
-		return -1;
+		return m4resetfail(ether, ctlr);
 	}
 
 	/*
@@ -648,8 +670,24 @@ reset(Ether* ether)
 	ctlr->iow(ctlr, Rap, 0);
 	ctlr->iow(ctlr, Rdp, Init);
 
-	while(!(ctlr->ior(ctlr, Rdp) & Idon))
-		;
+	/*
+	 * A missing/failed controller must not hang old or low-RAM PCs
+	 * indefinitely while booting. Poll CSR0 for at most 100ms.
+	 */
+	for(timeo = 0; timeo < 1000; timeo++){
+		x = ctlr->ior(ctlr, Rdp);
+		if(x & Idon)
+			break;
+		if((x & 0xFFFF) == 0xFFFF || (x & Merr))
+			break;
+		microdelay(100);
+	}
+	if(timeo == 1000 || !(x & Idon)){
+		print("#l%d: PCnet initialization timeout/error\n", ether->ctlrno);
+		ctlr->iow(ctlr, Rdp, Stop);
+		iunlock(ctlr);
+		return m4resetfail(ether, ctlr);
+	}
 
 	/*
 	 * We used to set CSR0 to Idon|Stop here, and then

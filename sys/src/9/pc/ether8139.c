@@ -689,7 +689,16 @@ rtl8139match(Ether* edev, int id)
 		p = ctlr->pcidev;
 		if(((p->did<<16)|p->vid) != id)
 			continue;
+		/* Legacy RTL8139 registers extend through Phy2parm (0x80).
+		 * Never reserve or access a zero, truncated or overflowing I/O BAR.
+		 */
+		if((p->mem[0].bar & 1) == 0 ||
+		   p->mem[0].size < Phy2parm+4 ||
+		   p->mem[0].size > 0x10000)
+			continue;
 		port = p->mem[0].bar & ~3;
+		if(port == 0 || port > 0x10000 - p->mem[0].size)
+			continue;
 		if(edev->port != 0 && edev->port != port)
 			continue;
 

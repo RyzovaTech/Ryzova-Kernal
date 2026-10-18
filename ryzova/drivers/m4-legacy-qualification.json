@@ -1,0 +1,71 @@
+{
+  "schema": "ryzova-m4-legacy-qualification/v1",
+  "policy": "preserve-modern-and-legacy-no-source-only-certification",
+  "platforms": [
+    "modern-amd64",
+    "legacy-amd64"
+  ],
+  "qemu_legacy_memory_mib": 384,
+  "release_approval": false,
+  "hardware_models_certified": 0,
+  "families": [
+    {
+      "id": "amd-pcnet",
+      "driver": "ether79c970",
+      "source": "sys/src/9/pc/ether79c970.c",
+      "pci_candidate": "m2-amd-pcnet-2000-candidate",
+      "required_tests": [
+        "native-amd64-build",
+        "low-memory-qemu-boot",
+        "pci-io-bar-reject",
+        "init-timeout-recovery",
+        "physical-link-and-packet-integrity",
+        "hardware-hot-unplug"
+      ],
+      "physical_verified": false
+    },
+    {
+      "id": "realtek-rtl8139",
+      "driver": "ether8139",
+      "source": "sys/src/9/pc/ether8139.c",
+      "pci_candidate": "m2-realtek-rtl8139-candidate",
+      "required_tests": [
+        "native-amd64-build",
+        "low-memory-qemu-boot",
+        "pci-io-bar-reject",
+        "reset-and-irq-recovery",
+        "physical-link-and-packet-integrity",
+        "hardware-reboot"
+      ],
+      "physical_verified": false
+    },
+    {
+      "id": "legacy-sata-ahci",
+      "driver": "sdiahci",
+      "source": "sys/src/9/pc/sdiahci.c",
+      "pci_candidate": "pci-ahci-class-candidate",
+      "required_tests": [
+        "native-amd64-build",
+        "legacy-sata-disk-boot",
+        "read-write-integrity",
+        "disk-error-recovery",
+        "low-memory-iops-stress"
+      ],
+      "physical_verified": false
+    },
+    {
+      "id": "legacy-usb-ehci",
+      "driver": "usbehci",
+      "source": "sys/src/9/port/usbehci.c",
+      "pci_candidate": null,
+      "required_tests": [
+        "native-amd64-build",
+        "usb2-controller-enumeration",
+        "keyboard-mouse-input",
+        "disk-transfer-integrity",
+        "disconnect-resume"
+      ],
+      "physical_verified": false
+    }
+  ]
+}

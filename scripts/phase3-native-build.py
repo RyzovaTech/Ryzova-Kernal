@@ -348,7 +348,12 @@ identity_ok=all(v in bytes(bootlog) for v in (b"Ryzova Kernel 0.1.0-dev", b"9fro
 m0_pci_ok=bool(re.search(rb"(?:\r?\n)RYZOVA_M0_PCI_OK(?:\r?\n)", bytes(bootlog)))
 # A separate disposable emulated PCI boot does not disturb baseline networking.
 # Its output is captured as independent evidence and must contain both IDs.
-m2_pci_ok=(not m2_enabled or run_probe(cmd, SER, MON, OUT))
+# M4 additionally exercises AMD PCnet/RTL8139 enumeration at 384 MiB
+# without changing the full-memory baseline. No functional NIC certification.
+m4_legacy_enabled=(ROOT / "ryzova/drivers/m4-legacy-qualification.json").is_file()
+m2_pci_ok=(not m2_enabled or run_probe(
+    cmd, SER, MON, OUT, memory_mib=384 if m4_legacy_enabled else None
+))
 runtime_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)", bytes(bootlog)) for v in (b"RYZOVA_PROC_OK", b"RYZOVA_NET_OK")) and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 2
 # A failed output redirection causes Plan 9 rc to abort the current
 # command line. Probe it independently, then ensure a fresh subsequent
