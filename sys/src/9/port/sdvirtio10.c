@@ -329,7 +329,7 @@ vqinterrupt(Vqueue *q)
 			next = q->desc[next].next;
 		}
 		if(n == q->size || (uint)next >= (uint)q->size){
-			print("virtio: invalid used descriptor chain (head %d)\\n", id);
+			print("virtio: invalid used descriptor chain (head %d)\n", id);
 			continue;
 		}
 		if(r = q->rock[id]){
