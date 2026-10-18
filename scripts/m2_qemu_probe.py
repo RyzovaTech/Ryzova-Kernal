@@ -12,8 +12,8 @@ import socket
 import subprocess
 import time
 
-CANDIDATES = (b"m2-amd-pcnet-2000-candidate",
-              b"m2-realtek-rtl8139-candidate")
+CANDIDATES = ((b"1022:2000", b"m2-amd-pcnet-2000-candidate"),
+              (b"10ec:8139", b"m2-realtek-rtl8139-candidate"))
 
 
 def validate_serial(data):
@@ -21,9 +21,10 @@ def validate_serial(data):
     if not re.search(rb"(?:^|\r?\n)RYZOVA_M2_PCI_OK(?:\r?\n)", data):
         return False
     return all(
-        re.search(rb"(?:^|\r?\n)PCI\.[^\r\n]{1,180} candidate=" +
+        re.search(rb"(?:^|\r?\n)PCI\.[0-9]+\.[0-9]+\.[0-9]+ " +
+                  re.escape(pci_id) + rb" [^\r\n]{1,135}candidate=" +
                   re.escape(name) + rb" verified=no(?:\r?\n)", data)
-        for name in CANDIDATES
+        for pci_id, name in CANDIDATES
     )
 
 
@@ -49,7 +50,7 @@ def run_probe(base_cmd, serial_path, monitor_path, output_dir):
                     break
                 except (FileNotFoundError, ConnectionRefusedError):
                     if guest.poll() is not None:
-                        break
+                        raise RuntimeError("isolated M2 QEMU guest exited before serial connection")
                     time.sleep(.1)
             else:
                 raise RuntimeError("isolated M2 serial socket never became available")
