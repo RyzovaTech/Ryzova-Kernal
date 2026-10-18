@@ -2,7 +2,7 @@ name: Phase 3 AMD64 native source build (experimental)
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'phase6/native-9p-qemu-integration']
     paths:
       - 'sys/src/9/**'
       - 'sys/include/**'
