@@ -1,0 +1,14 @@
+{
+  "schema": "ryzova-build-profile/v1",
+  "name": "amd64-developer",
+  "architecture": "amd64",
+  "source_path": "sys/src/9/pc64",
+  "build_system": "9front-mk",
+  "guest_image_url": "https://build.9front.org/release/9front-11952.amd64.qcow2.gz",
+  "guest_image_sha256": "3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c",
+  "source_selection": "exact CI checkout",
+  "build_evidence": "artifacts/phase3/source-provenance.txt",
+  "kernel_binary_hash_evidence": "artifacts/phase3/9pc64.sha256",
+  "release_ready": false,
+  "notes": "Pinned guest enables repeatable verification inputs, not guaranteed bit-identical binaries across hosts."
+}

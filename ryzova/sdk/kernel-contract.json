@@ -1,0 +1,16 @@
+{
+  "schema": "ryzova-kernel-contract/v1",
+  "name": "Ryzova Kernel",
+  "architecture": "amd64",
+  "abi": "experimental-0",
+  "stability": "experimental",
+  "native_interfaces": [
+    "Plan 9 9P",
+    "per-process namespaces",
+    "#Z read-only identity"
+  ],
+  "linux_binary_compatibility": false,
+  "windows_binary_compatibility": false,
+  "macos_binary_compatibility": false,
+  "notes": "Informational interface map. No stable ABI promise. Consumer variants must bring compatible userspace and their own tests."
+}
