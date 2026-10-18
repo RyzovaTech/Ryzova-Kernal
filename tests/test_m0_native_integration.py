@@ -21,10 +21,13 @@ class M0NativeIntegration(unittest.TestCase):
 
     def test_kernel_configuration_compiles_native_matcher_and_adapter(self):
         config = (ROOT / "sys/src/9/pc64/pc64").read_text()
+        mkfile = (ROOT / "sys/src/9/pc64/mkfile").read_text()
         main = (ROOT / "sys/src/9/pc64/main.c").read_text()
         fns = (ROOT / "sys/src/9/pc64/fns.h").read_text()
-        self.assertIn("\tryzovadrvmatch\n", config)
-        self.assertIn("\tryzovadrvprobe\n", config)
+        self.assertIn("ryzovadrvmatch.$O", mkfile)
+        self.assertIn("ryzovadrvprobe.$O", mkfile)
+        self.assertNotIn("\tryzovadrvprobe\n", config)
+        self.assertNotIn("\tryzovadrvmatch\n", config)
         self.assertIn("void\tryzovadrvprobeinit(void);", fns)
         self.assertIn("ryzovadrvprobeinit();", main)
         self.assertLess(main.index("pcicfginit();"), main.index("ryzovadrvprobeinit();"))
