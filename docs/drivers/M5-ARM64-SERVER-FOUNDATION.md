@@ -33,6 +33,46 @@ ryzova/drivers/m5-platform-matrix.json and scripts/m5_platform_audit.py
 enforce evidence separation: fake ARM64 boots, hardware certification,
 driver enablement and deleting legacy support are rejected.
 
+## M5.1 — Cross-toolchain evidence and a discovered bootfs blocker
+
+The native 9front AMD64 build guest has been used to **attempt** the ARM64
+`mk 9qemu` target. The initial native target build failed, correctly, at
+the bootfs dependency `/arm64/bin/paqfs` (not installed in the AMD64
+development guest), before it could link a kernel. This is not a C
+compilation success and cannot be called an ARM64 boot.
+
+The next run probes the genuine Plan 9 `7c` cross compiler on the new
+`m5ecam.c` source, captures the outcome separately, and still attempts
+the full build. The ARM64 result JSON records three distinct outcomes:
+native cross-C compilation, full ARM64 kernel link, and ARM64 guest boot.
+Never treat a portable GCC test, a source inventory or ARM64 tool presence
+as a successful ARM64 guest boot.
+
+## M5.2 — ARM64 VirtIO network / storage
+
+The ARM64 QEMU kernel configuration already contains `ethervirtio10`
+and `sdvirtio10`. No new VirtIO functional device support is claimed.
+`scripts/m5_server_gates.py` requires separate verified ARM64 network
+traffic and block data-integrity evidence; untrusted serial markers
+alone cannot self-certify. Both functional gates remain blocked.
+
+## M5.3 — Server IRQ / multicore fault containment
+
+ARM64 PCI callback registration now refuses null handlers and duplicate
+allocations, reports a full 32-slot vector table, and clears all callback
+state when unregistering. This is an initial safety improvement, not
+complete SMP concurrency, GIC, DMA, IOMMU, MSI-X, hotplug or power-management
+qualification. A concurrent multithread IRQ teardown audit is required
+before the server platform can ship.
+
+## M5.4 — Modern server + legacy regression, M6 entry
+
+`m5_server_gates.py` separates ARM64 native toolchain evidence, ARM64
+VirtIO function, SMP/IRQ/DMA, AMD64 physical server evidence, and legacy
+AMD64 preservation. M6 **planning** is allowed with explicit blockers;
+M6 hardware release readiness is not approved. The M0–M4 regression
+suite and legacy profiles remain intact.
+
 ## Remaining M5 requirements (not yet complete)
 
 1. Build the ARM64 QEMU kernel using a native compatible 9front 7c/7l
