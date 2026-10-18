@@ -1,0 +1,37 @@
+name: Phase 5.2-5.3 Linux syscall and namespace virtual-runtime tests
+
+on:
+  push:
+    branches: ['phase5/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-compat-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run C ABI and namespace tests with UndefinedBehaviorSanitizer
+        env:
+          PHASE5_CC: ${{ matrix.compiler }}
+          PHASE5_SANITIZE: '1'
+        run: python3 -m unittest discover -s tests -p 'test_phase5_runtime.py' -v
+      - name: Compile C core in freestanding mode
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          "$CC" -std=c11 -ffreestanding -fno-builtin -O2 -Wall -Wextra -Werror -pedantic \
+            -c ryzova/compat/linux/syscall.c -o /tmp/ryzova-syscall.o
+          "$CC" -std=c11 -ffreestanding -fno-builtin -O2 -Wall -Wextra -Werror -pedantic \
+            -c ryzova/compat/linux/namespace.c -o /tmp/ryzova-namespace.o
