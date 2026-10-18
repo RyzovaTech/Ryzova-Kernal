@@ -232,7 +232,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                 bootstate["user"]=True
                 print("FRESH KERNEL: userspace login reached",flush=True)
             if b"term%" in tail and bootstate["user"] and not bootstate["command"]:
-                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; test -d /proc && echo RYZOVA_PROC_OK; test -d /net && echo RYZOVA_NET_OK; mkdir -p /tmp/ryzova-ns; bind '#Z' /tmp/ryzova-ns; cat /tmp/ryzova-ns/version; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
+                guest.sendall(b"cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; cat '#P/drivercandidates' | grep 'auto-bind=no' > /dev/null && echo RYZOVA_M0_PCI_OK; test -d /proc && echo RYZOVA_PROC_OK; test -d /net && echo RYZOVA_NET_OK; mkdir -p /tmp/ryzova-ns; bind '#Z' /tmp/ryzova-ns; cat /tmp/ryzova-ns/version; echo RYZOVA_FRESH_KERNEL | tr A-Z a-z\r")
                 bootstate["command"]=True
                 print("FRESH KERNEL: rc probe sent",flush=True)
             if re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)) and not bootstate["write_test"]:
@@ -276,6 +276,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
 boottext=bytes(bootlog).decode("utf-8",errors="replace")
 fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
 identity_ok=all(v in bytes(bootlog) for v in (b"Ryzova Kernel 0.1.0-dev", b"9front-derived", b"experimental-0"))
+m0_pci_ok=bool(re.search(rb"(?:\r?\n)RYZOVA_M0_PCI_OK(?:\r?\n)", bytes(bootlog)))
 runtime_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)", bytes(bootlog)) for v in (b"RYZOVA_PROC_OK", b"RYZOVA_NET_OK")) and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 2
 # A failed output redirection causes Plan 9 rc to abort the current
 # command line. Probe it independently, then ensure a fresh subsequent
@@ -306,12 +307,13 @@ for label, ok in stability["checks"].items():
     f"V3 rc userspace command verified: {fresh_rc_ok}\n"
     f"V3 Ryzova identity device verified: {identity_ok}\n"
     f"V4 basic proc/net and per-process bind checks: {runtime_ok}\n"
+    f"M0 native PCI candidate interface read: {m0_pci_ok}\n"
     f"V4 9P ramfs, 9fat and HTTP checks: {regression_ok}\n"
     f"V4.1 bounded memory/process/scheduler checks: {stability['passed']}\n"
     f"V4.5 bounded additional stress checks: {extended['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and write_denied and regression_ok and stability["passed"] and extended["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
 print("PASS V3/V4/4.1/4.5: source-built Ryzova kernel passed basic and bounded-extended QEMU checks.",flush=True)
