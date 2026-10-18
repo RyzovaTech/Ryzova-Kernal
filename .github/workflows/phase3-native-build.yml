@@ -7,6 +7,7 @@ on:
       - 'sys/src/9/**'
       - 'sys/include/**'
       - 'amd64/include/**'
+      - 'arm64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
       - 'scripts/m2_qemu_probe.py'
@@ -24,6 +25,7 @@ on:
       - 'sys/src/9/**'
       - 'sys/include/**'
       - 'amd64/include/**'
+      - 'arm64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
       - 'scripts/m2_qemu_probe.py'
@@ -65,6 +67,9 @@ jobs:
           qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-build-overlay.qcow2
       - name: Transfer exact Git checkout kernel source and run Plan 9 mk
         run: python3 scripts/phase3-native-build.py native-build-overlay.qcow2
+      - name: Evaluate M5 native ARM64 cross-build vs operational gates
+        if: always()
+        run: python3 scripts/m5_server_gates.py --cross-report artifacts/phase3/m5-arm64-native-build.json --output artifacts/phase3/m5-full-gates.json
       - name: Independently verify compiled kernel SHA256 from FAT boot disk (no public binary)
         if: always()
         run: python3 scripts/extract-9pc64.py native-build-overlay.qcow2
@@ -86,6 +91,8 @@ jobs:
             artifacts/phase3/m2-chipset-probe-serial.log
             artifacts/phase3/m2-qemu-host.log
             artifacts/phase3/result.txt
+            artifacts/phase3/m5-arm64-native-build.json
+            artifacts/phase3/m5-full-gates.json
             artifacts/phase3/source-provenance.txt
             artifacts/phase3/9pc64.sha256
             artifacts/phase3/kernel-provenance.json
