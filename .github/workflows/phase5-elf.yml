@@ -1,0 +1,44 @@
+name: Phase 5.0-5.1 ELF64 security and load-plan foundation
+
+on:
+  push:
+    branches: ['phase5/**', main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  elf64-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and test Linux ELF64 loader foundation
+        env:
+          PHASE5_CC: ${{ matrix.compiler }}
+        run: |
+          python3 -m unittest discover -s tests -p 'test_phase5_elf.py' -v
+      - name: Strict freestanding C core compilation
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          mkdir -p artifacts/phase5
+          "$CC" -std=c11 -ffreestanding -fno-builtin -O2 -Wall -Wextra -Werror \
+            -pedantic -c ryzova/compat/linux/elf64.c -o artifacts/phase5/elf64-core.o
+          echo "PHASE5_ELF_CORE_COMPILED=${{ matrix.compiler }}" > artifacts/phase5/result.txt
+      - name: Archive text evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-elf-checks-${{ matrix.compiler }}
+          path: artifacts/phase5/result.txt
+          if-no-files-found: warn
+          retention-days: 14

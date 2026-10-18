@@ -1,0 +1,23 @@
+{
+  "schema": "ryzova-phase5-9-acceptance/v1",
+  "completion_scope": "experimental-cross-platform-source-foundations",
+  "source_merge_requested_by_user": true,
+  "source_merge_requires_all_ci_green": true,
+  "source_only_review": true,
+  "linux_host_interpreter_verified": true,
+  "linux_native_ryzova_app_execution_verified": false,
+  "windows_application_execution_verified": false,
+  "macos_application_execution_verified": false,
+  "runtime_namespaces_kernel_mounted": false,
+  "production_compatibility_complete": false,
+  "public_binary_release_authorized": false,
+  "phase6_research_entry_allowed": true,
+  "remaining": [
+    "Linux guest-native ELF loader and syscall trap integration with source-built QEMU execution evidence",
+    "Linux /compat/linux kernel-mounted namespace and isolation validation",
+    "Windows NT/Win32 and DLL semantics, or documented platform exclusions",
+    "macOS Darwin/Mach and dyld semantics, or documented platform exclusions",
+    "Independent security review, legal and physical hardware release qualification"
+  ],
+  "notes": "This authorizes integrating experimental source into main at the user's request, not claiming working multi-platform app compatibility. CI does not itself grant release authorization."
+}
