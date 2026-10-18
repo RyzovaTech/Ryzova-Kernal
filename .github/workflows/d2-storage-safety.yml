@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: D2 storage error-path regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/port/sdnvme.c'
+      - 'sys/src/9/port/sdvirtio10.c'
+      - 'sys/src/9/pc/sdvirtio.c'
+      - 'tests/test_d2_storage_safety.py'
+      - '.github/workflows/d2-storage-safety.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  storage-source-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check storage safety invariants
+        run: python3 -m unittest discover -s tests -p 'test_d2_storage_safety.py' -v
