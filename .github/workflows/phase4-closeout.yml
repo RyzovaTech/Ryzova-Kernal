@@ -1,0 +1,36 @@
+name: Phase 4 closeout and Phase 5 experimental entry
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase4-closeout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run Phase 4 closeout negative/positive tests
+        run: python3 -m unittest discover -s tests -p 'test_phase4_closeout.py' -v
+      - name: Verify frozen baseline, integrity, experimental contract and release block
+        run: python3 scripts/phase4_closeout.py
+      - name: Store evidence, no kernel binary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-final-closeout-evidence
+          path: artifacts/phase4/final-closeout.json
+          if-no-files-found: warn
+          retention-days: 30
