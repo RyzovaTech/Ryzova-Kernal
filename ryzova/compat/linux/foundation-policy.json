@@ -1,0 +1,25 @@
+{
+  "schema": "ryzova-linux-compat-foundation/v1",
+  "phase": "5.0-5.1",
+  "architecture": "amd64",
+  "status": "experimental-load-plan-only",
+  "supported_format": "ELF64 little-endian x86-64 ET_EXEC static",
+  "max_program_headers": 32,
+  "max_load_segments": 16,
+  "max_mapped_bytes": 67108864,
+  "interpreter_support": false,
+  "et_dyn_support": false,
+  "tls_support": false,
+  "linux_syscalls_supported": false,
+  "process_execution_supported": false,
+  "namespace_mounted": false,
+  "security_rules": [
+    "W^X",
+    "user-address-bounds",
+    "file-range-validation",
+    "reject PT_INTERP/PT_DYNAMIC/PT_TLS",
+    "entrypoint-in-file-backed-executable-segment"
+  ],
+  "native_9front_loader_modified": false,
+  "ready_for_main_merge": false
+}
