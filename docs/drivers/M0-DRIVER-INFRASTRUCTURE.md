@@ -20,13 +20,21 @@
 
 These commands report an *unverified candidate*; they do not probe the NIC.
 
-## Remaining M0 gates (not implemented in M0.1)
+## M0.2–M0.5 implementation now available for review (source/prototype only)
 
-1. **M0.2 Real PCI/USB discovery snapshots** with bounded parsing, provenance SHA and exact device revisions; never confuse discovery with successful I/O.
-2. **M0.3 Reviewed kernel family-driver API** and opt-in probe adapter; no class-wide automatic claiming or disruption of existing independent 9front-derived probe paths. Modern AMD64 first, existing old-PC support regression-protected.
-3. **M0.4 Firmware/DMA/IRQ safety**: obtain legal rights, verify provenance/checksums, DMA isolation, reset and error propagation, safe disconnection.
-4. **M0.5 Reliability validation**: QEMU, legacy-PC, real 2020–2026 Intel/AMD PCs, stress, hotplug, recovery, suspend/resume and human-reviewed hardware test records.
-5. **M0.6 Million-scale runtime index**: compact read-only representation, bounded memory/lookup time, fuzz testing; later ARM64 and server adapters. This Python control-plane tool is NOT deployed in the kernel.
+- **M0.2 Linux sysfs discovery collector:** `scripts/m0_discovery.py --sysfs-root /sys` collects bounded, read-only PCI and USB device/interface snapshots and uses M0.1 matching to label unverified source candidates. This is a host-side development tool, **not** native Ryzova discovery. It records no serial numbers, certifies nothing, and makes no device changes. Only synthetic fixtures have been tested so far.
+- **M0.3 driver family API candidate:** `sys/src/9/port/ryzovadrvmatch.[ch]` is a portable C exact/class/revision matcher, tested with GCC. **It is deliberately not linked to pc64**, and it does not do PCI/USB enumeration, MMIO, IRQ, DMA, or driver binding.
+- **M0.4 safety gates:** `m0-safety-contract.json` and `scripts/m0_safety_gate.py` explicitly block firmware, DMA, interrupt and recovery readiness. Source audits never self-promote into physical release approvals.
+- **M0.5 modern and old PC qualification:** `m0-qualification-plan.json` and `scripts/m0_qualification.py` require BOTH modern AMD64 and legacy AMD64 lab qualification tracks; report zero hardware certifications until independently reviewed evidence is available.
+- **CI:** `m0-phases2-5.yml` compiles the experimental family selector, runs synthetic PCI/USB fixture tests, and ensures safety/qualification release remains blocked.
+
+### Still required before calling these stages complete
+
+1. Native Ryzova PCI/USB enumeration adapter, modern and legacy device tests, real signed/attested provenance and no runtime binding without review.
+2. Plan 9 compiler integration for portable C API, bounded DMA and IOMMU mapping, IRQ teardown, firmware validation and controlled error recovery.
+3. Repeatable QEMU boot/error injection plus physical modern and legacy PC hardware tests with independent human approval.
+4. End-to-end support metrics, device/driver collision handling, profiling on low-RAM legacy machines and firmware redistribution clearance.
+5. M0.6 million-scale compact runtime index, fuzzing and later ARM64/server adapters.
 
 ## Accurate scale accounting
 
