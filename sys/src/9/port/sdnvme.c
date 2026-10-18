@@ -255,7 +255,12 @@ nvmebio(SDunit *u, int lun, int write, void *a, long count, uvlong lba)
 	s = u->secsize;
 	p = a;
 	while(count > 0){
+		/* A namespace block larger than the DMA window cannot make progress. */
+		if(s == 0)
+			error("nvme: invalid namespace sector size");
 		m = (2*ctlr->mps - ((uintptr)p & ctlr->mps-1)) / s;
+		if(m == 0)
+			error("nvme: namespace sector exceeds transfer window");
 		if((n = count) > m)
 			n = m;
 		e = qcmd(&ws, ctlr, 0, write ? 0x01 : 0x02, nsid, p, n*s);
