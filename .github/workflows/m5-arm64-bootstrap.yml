@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: M5 ARM64 Native Bootstrap and M6 Entry Gates
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/phase3-native-build.py'
+      - 'scripts/m5_server_gates.py'
+      - 'scripts/m5_platform_audit.py'
+      - 'tests/test_m5_native_bootstrap.py'
+      - 'docs/drivers/M5-CLOSURE-TO-M6.md'
+      - '.github/workflows/m5-arm64-bootstrap.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile host scripts and validate M5 evidence
+        run: |
+          python3 -m py_compile scripts/phase3-native-build.py scripts/m5_platform_audit.py scripts/m5_server_gates.py
+          python3 -m unittest discover -s tests -p 'test_m5_native_bootstrap.py' -v
+          python3 -m unittest discover -s tests -p 'test_m5_server_gates.py' -v
+          python3 scripts/m5_server_gates.py > /tmp/m5-m6-entry.json
+          python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/m5-m6-entry.json'))
+          assert x['ready_for_m6_planning'] is True
+          assert x['ready_for_m6_hardware_release'] is False
+          assert x['m5_full_complete'] is False
+          assert x['physical_hardware_models_newly_certified'] == 0
+          PY
+      - name: Verify old PC and server safeguards
+        run: |
+          python3 -m unittest discover -s tests -p 'test_m5_platform.py' -v
+          python3 -m unittest discover -s tests -p 'test_m4_legacy_gate.py' -v
+          python3 -m unittest discover -s tests -p 'test_m3_modern_controllers.py' -v
