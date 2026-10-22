@@ -8,6 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 from ryzova.remote.phase7_fixture import Ephemeral9PTLSFixture
 from ryzova.remote.native_bridge import BridgeDenied, read_frame
 from ryzova.remote.p9 import MAX_FRAME, RERROR, RVERSION, ReadOnly9PClient, frame, unframe
@@ -167,6 +168,17 @@ class NativeIngressFailureAndQuotaTests(unittest.TestCase):
             self.assertEqual(result, [b"parallel"] * 3)
             self.assertGreaterEqual(f.guest_tls.tls12_sessions, 3)
             self.assertGreaterEqual(f.peer.secure_sessions, 3)
+
+    def test_partial_fixture_failure_releases_unstarted_servers(self):
+        f = Ephemeral9PTLSFixture(b"public")
+        with patch("ryzova.remote.phase7_fixture.NativeGuestTLS12Endpoint",
+                   side_effect=RuntimeError("simulated TLS listener failure")):
+            with self.assertRaisesRegex(RuntimeError, "simulated TLS listener failure"):
+                f.start()
+        self.assertIsNone(f._directory)
+        self.assertIsNone(f.peer)
+        self.assertIsNone(f.gateway)
+        self.assertIsNone(f.guest_tls)
 
     def test_reject_invalid_resource_limit_configuration(self):
         with self.assertRaises(ValueError):
