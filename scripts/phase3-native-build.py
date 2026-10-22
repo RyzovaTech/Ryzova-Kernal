@@ -257,20 +257,20 @@ if m5_arm64_native:
     # Distinguish 7c source, PCI port, bootfs userland, kernel link, and
     # real ARM64 guest boot. Only the checked states are advertised.
     cross_ok = bool(marks.get("m5-arm64-native") and re.search(
-        r"(?:^|\\r?\\n)M5_ARM64_7C_STATUS_\\s*(?:\\r?\\n)", text
-    ) and not re.search(r"(?:^|\\r?\\n)ls:.*m5ecam.7", text))
+        r"(?:^|\r?\n)M5_ARM64_7C_STATUS_\s*(?:\r?\n)", text
+    ) and not re.search(r"(?:^|\r?\n)ls:.*m5ecam.7", text))
     pci_cross_ok = bool(re.search(
-        r"(?:^|\\r?\\n)M5_ARM64_PCI_7C_STATUS_\\s*(?:\\r?\\n)", text
-    ) and not re.search(r"(?:^|\\r?\\n)ls:.*m5pciqemu.7", text))
+        r"(?:^|\r?\n)M5_ARM64_PCI_7C_STATUS_\s*(?:\r?\n)", text
+    ) and not re.search(r"(?:^|\r?\n)ls:.*m5pciqemu.7", text))
     paqfs_ok = bool(re.search(
-        r"(?:^|\\r?\\n)M5_ARM64_PAQFS_STATUS_\\s*(?:\\r?\\n)", text
+        r"(?:^|\r?\n)M5_ARM64_PAQFS_STATUS_\s*(?:\r?\n)", text
     ))
     factotum_ok = bool(re.search(
-        r"(?:^|\\r?\\n)M5_ARM64_FACTOTUM_STATUS_\\s*(?:\\r?\\n)", text
+        r"(?:^|\r?\n)M5_ARM64_FACTOTUM_STATUS_\s*(?:\r?\n)", text
     ))
     arm64_link_ok = bool(re.search(
-        r"(?:^|\\r?\\n)M5_ARM64_MK_STATUS_\\s*(?:\\r?\\n)", text
-    ) and not re.search(r"(?:^|\\r?\\n)ls:.*9qemu", text))
+        r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
+    ) and not re.search(r"(?:^|\r?\n)ls:.*9qemu", text))
     (OUT / "m5-arm64-native-build.json").write_text(json.dumps({
         "source_sha": SOURCE_SHA,
         "cross_compiler_7c": "pass" if cross_ok else "fail",
@@ -282,7 +282,7 @@ if m5_arm64_native:
         "full_m5_1_complete": False,
         "known_dep_blocker": None if arm64_link_ok else
             "ARM64 bootfs and target userland dependencies still missing",
-    }, indent=2) + "\\n")
+    }, indent=2) + "\n")
     if not cross_ok:
         print("FAIL M5.1: ARM64 Plan 9 native 7c source compile failed",
               file=sys.stderr)
