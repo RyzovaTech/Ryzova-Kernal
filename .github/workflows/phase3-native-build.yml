@@ -10,6 +10,7 @@ on:
       - 'arm64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
+      - 'scripts/m5_arm64_qemu_probe.py'
       - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
@@ -30,6 +31,7 @@ on:
       - 'arm64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
+      - 'scripts/m5_arm64_qemu_probe.py'
       - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
@@ -58,7 +60,7 @@ jobs:
       - name: Install isolated QEMU dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils file mtools
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-system-arm qemu-utils file mtools
       - name: Verify upstream source provenance
         run: bash scripts/verify-foundation.sh
       - name: Fetch and verify 9front native build guest image
@@ -73,7 +75,9 @@ jobs:
         run: python3 scripts/phase3-native-build.py native-build-overlay.qcow2
       - name: Evaluate M5 native ARM64 cross-build vs operational gates
         if: always()
-        run: python3 scripts/m5_server_gates.py --cross-report artifacts/phase3/m5-arm64-native-build.json --output artifacts/phase3/m5-full-gates.json
+        run: python3 scripts/m5_server_gates.py --cross-report artifacts/phase3/m5-arm64-native-build.json --arm64-serial artifacts/phase3/m5-arm64-boot-serial.log --output artifacts/phase3/m5-full-gates.json
+      - name: Probe actual ARM64 QEMU virt boot if native ARM64 uImage linked
+        run: python3 scripts/m5_arm64_qemu_probe.py native-build-overlay.qcow2
       - name: Independently verify compiled kernel SHA256 from FAT boot disk (no public binary)
         if: always()
         run: python3 scripts/extract-9pc64.py native-build-overlay.qcow2
@@ -98,6 +102,8 @@ jobs:
             artifacts/phase3/m2-qemu-host.log
             artifacts/phase3/result.txt
             artifacts/phase3/m5-arm64-native-build.json
+            artifacts/phase3/m5-arm64-qemu-probe.json
+            artifacts/phase3/m5-arm64-boot-serial.log
             artifacts/phase3/m5-full-gates.json
             artifacts/phase3/source-provenance.txt
             artifacts/phase3/9pc64.sha256
