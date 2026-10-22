@@ -140,7 +140,7 @@ if m5_arm64_native:
         "echo PHASE3_END_" + str(index)))
     index=len(stages)
     stages.append(("m5-arm64-full-link",
-        "cd /sys/src/9/arm64; mk 9qemu > /tmp/m5-arm64-native.log >[2=1]; "
+        "cd /sys/src/9/arm64; mk 9qemu 9qemu.u > /tmp/m5-arm64-native.log >[2=1]; "
         "echo M5_ARM64_MK_STATUS_$status; tail -n 30 /tmp/m5-arm64-native.log; "
         "ls -l 9qemu 9qemu.u; "
         "test -s 9qemu.u && cp 9qemu.u /n/9fat/9qemu.u; "
