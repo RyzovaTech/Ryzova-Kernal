@@ -142,7 +142,11 @@ if m5_arm64_native:
     stages.append(("m5-arm64-full-link",
         "cd /sys/src/9/arm64; mk 9qemu > /tmp/m5-arm64-native.log >[2=1]; "
         "echo M5_ARM64_MK_STATUS_$status; tail -n 30 /tmp/m5-arm64-native.log; "
-        "ls -l 9qemu 9qemu.u; echo PHASE3_END_" + str(index)))
+        "ls -l 9qemu 9qemu.u; "
+        "test -s 9qemu.u && cp 9qemu.u /n/9fat/9qemu.u; "
+        "echo M5_ARM64_COPY_STATUS_$status; "
+        "test -s 9qemu.u && sha1sum -2 256 9qemu.u; "
+        "echo PHASE3_END_" + str(index)))
 
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
