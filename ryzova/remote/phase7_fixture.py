@@ -37,6 +37,12 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
                  max_guest_sessions=8, max_guest_frames=256):
         if not isinstance(public_payload, bytes) or not 0 < len(public_payload) <= 4096:
             raise ValueError("only one small public test fixture allowed")
+        if (type(max_guest_sessions) is not int or
+                not 1 <= max_guest_sessions <= 32):
+            raise ValueError("guest TLS session limit must be 1..32")
+        if (type(max_guest_frames) is not int or
+                not 1 <= max_guest_frames <= 4096):
+            raise ValueError("guest 9P frame limit must be 1..4096")
         self.payload = public_payload
         self.gateway_port = gateway_port
         self.guest_tls_port = guest_tls_port
@@ -48,6 +54,7 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
         self._peer = None
         self._gateway = None
         self._threads = []
+        self._started_listeners = []
 
     @property
     def peer(self):
@@ -86,6 +93,7 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
                 t = threading.Thread(target=listener.serve_forever,
                                      daemon=True, name="phase7-mtls-loopback")
                 t.start()
+                self._started_listeners.append(listener)
                 self._threads.append(t)
         except Exception:
             self.close()
@@ -95,7 +103,10 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
     def close(self):
         for listener in (self._guest_tls, self._gateway, self._peer):
             if listener is not None:
-                listener.shutdown()
+                # shutdown() deadlocks when serve_forever() never started.
+                # Constructor errors can leave an unstarted peer/gateway.
+                if listener in self._started_listeners:
+                    listener.shutdown()
                 listener.server_close()
         for t in self._threads:
             t.join(timeout=4)
@@ -104,6 +115,7 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
         self._gateway = self._peer = self._guest_tls = None
         self.guest_cert_sha256 = None
         self._threads.clear()
+        self._started_listeners.clear()
         if self._directory is not None:
             self._directory.cleanup()
             self._directory = None
