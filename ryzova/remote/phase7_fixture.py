@@ -33,12 +33,15 @@ def _pin(certificate):
 
 
 class Ephemeral9PTLSFixture(AbstractContextManager):
-    def __init__(self, public_payload, gateway_port=0, guest_tls_port=0):
+    def __init__(self, public_payload, gateway_port=0, guest_tls_port=0,
+                 max_guest_sessions=8, max_guest_frames=256):
         if not isinstance(public_payload, bytes) or not 0 < len(public_payload) <= 4096:
             raise ValueError("only one small public test fixture allowed")
         self.payload = public_payload
         self.gateway_port = gateway_port
         self.guest_tls_port = guest_tls_port
+        self.max_guest_sessions = max_guest_sessions
+        self.max_guest_frames = max_guest_frames
         self.guest_cert_sha256 = None
         self._guest_tls = None
         self._directory = None
@@ -76,7 +79,9 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
             self.guest_cert_sha256 = _pin(srv_cert)
             self._guest_tls = NativeGuestTLS12Endpoint(
                 str(srv_cert), str(srv_key),
-                self._gateway.server_address[1], port=self.guest_tls_port)
+                self._gateway.server_address[1], port=self.guest_tls_port,
+                max_sessions=self.max_guest_sessions,
+                max_frames_per_session=self.max_guest_frames)
             for listener in (self._peer, self._gateway, self._guest_tls):
                 t = threading.Thread(target=listener.serve_forever,
                                      daemon=True, name="phase7-mtls-loopback")
