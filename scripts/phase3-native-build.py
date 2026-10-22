@@ -121,9 +121,28 @@ if m5_arm64_native:
     stages.append(("m5-arm64-native",
         "cd /sys/src/9/arm64; 7c -o /tmp/m5ecam.7 m5ecam.c; "
         "echo M5_ARM64_7C_STATUS_$status; ls -l /tmp/m5ecam.7; "
-        "mk 9qemu > /tmp/m5-arm64-native.log >[2=1]; "
-        "echo M5_ARM64_MK_STATUS_$status; tail -n 20 /tmp/m5-arm64-native.log; "
-        "ls -l 9qemu; echo PHASE3_END_" + str(index)))
+        "7c -o /tmp/m5pciqemu.7 pciqemu.c > /tmp/m5-pci-7c.log >[2=1]; "
+        "echo M5_ARM64_PCI_7C_STATUS_$status; tail -n 8 /tmp/m5-pci-7c.log; "
+        "ls -l /tmp/m5pciqemu.7; "
+        "echo PHASE3_END_" + str(index)))
+    index=len(stages)
+    stages.append(("m5-arm64-bootstrap",
+        "ls -l /arm64/lib/libc.a /arm64/bin/paqfs /arm64/bin/auth/factotum; "
+        "mkdir -p /arm64/bin/auth; "
+        "cd /sys/src/cmd/paqfs; objtype=arm64 mk 7.paqfs > /tmp/m5-paqfs.log >[2=1]; "
+        "echo M5_ARM64_PAQFS_STATUS_$status; tail -n 15 /tmp/m5-paqfs.log; "
+        "test -s 7.paqfs && cp 7.paqfs /arm64/bin/paqfs; "
+        "cd /sys/src/cmd/auth/factotum; "
+        "objtype=arm64 mk 7.factotum > /tmp/m5-factotum.log >[2=1]; "
+        "echo M5_ARM64_FACTOTUM_STATUS_$status; tail -n 15 /tmp/m5-factotum.log; "
+        "test -s 7.factotum && cp 7.factotum /arm64/bin/auth/factotum; "
+        "ls -l /arm64/bin/paqfs /arm64/bin/auth/factotum; "
+        "echo PHASE3_END_" + str(index)))
+    index=len(stages)
+    stages.append(("m5-arm64-full-link",
+        "cd /sys/src/9/arm64; mk 9qemu > /tmp/m5-arm64-native.log >[2=1]; "
+        "echo M5_ARM64_MK_STATUS_$status; tail -n 30 /tmp/m5-arm64-native.log; "
+        "ls -l 9qemu 9qemu.u; echo PHASE3_END_" + str(index)))
 
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
@@ -235,31 +254,44 @@ for component in m1_native_components:
         print("FAIL M1 native user-space build:", component, file=sys.stderr)
         sys.exit(1)
 if m5_arm64_native:
-    # M5.1 has a two-part gate: a cross-architecture native 7c compiler
-    # can prove C source compatibility, but it cannot stand in for a
-    # linked and booted ARM64 kernel.
+    # Distinguish 7c source, PCI port, bootfs userland, kernel link, and
+    # real ARM64 guest boot. Only the checked states are advertised.
     cross_ok = bool(marks.get("m5-arm64-native") and re.search(
-        r"(?:^|\r?\n)M5_ARM64_7C_STATUS_\s*(?:\r?\n)", text
-    ) and not re.search(r"(?:^|\r?\n)ls:.*m5ecam.7", text))
+        r"(?:^|\\r?\\n)M5_ARM64_7C_STATUS_\\s*(?:\\r?\\n)", text
+    ) and not re.search(r"(?:^|\\r?\\n)ls:.*m5ecam.7", text))
+    pci_cross_ok = bool(re.search(
+        r"(?:^|\\r?\\n)M5_ARM64_PCI_7C_STATUS_\\s*(?:\\r?\\n)", text
+    ) and not re.search(r"(?:^|\\r?\\n)ls:.*m5pciqemu.7", text))
+    paqfs_ok = bool(re.search(
+        r"(?:^|\\r?\\n)M5_ARM64_PAQFS_STATUS_\\s*(?:\\r?\\n)", text
+    ))
+    factotum_ok = bool(re.search(
+        r"(?:^|\\r?\\n)M5_ARM64_FACTOTUM_STATUS_\\s*(?:\\r?\\n)", text
+    ))
     arm64_link_ok = bool(re.search(
-        r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
-    ) and not re.search(r"(?:^|\r?\n)ls:.*9qemu", text))
+        r"(?:^|\\r?\\n)M5_ARM64_MK_STATUS_\\s*(?:\\r?\\n)", text
+    ) and not re.search(r"(?:^|\\r?\\n)ls:.*9qemu", text))
     (OUT / "m5-arm64-native-build.json").write_text(json.dumps({
         "source_sha": SOURCE_SHA,
         "cross_compiler_7c": "pass" if cross_ok else "fail",
+        "arm64_pci_driver_7c": "pass" if pci_cross_ok else "blocked",
+        "arm64_paqfs_userspace": "pass" if paqfs_ok else "blocked",
+        "arm64_factotum_userspace": "pass" if factotum_ok else "blocked",
         "arm64_kernel_link": "pass" if arm64_link_ok else "blocked",
         "arm64_qemu_boot": "not-tested",
         "full_m5_1_complete": False,
         "known_dep_blocker": None if arm64_link_ok else
-            "ARM64 bootfs userspace /arm64/bin/paqfs not installed in AMD64 toolchain guest",
-    }, indent=2) + "\n")
+            "ARM64 bootfs and target userland dependencies still missing",
+    }, indent=2) + "\\n")
     if not cross_ok:
         print("FAIL M5.1: ARM64 Plan 9 native 7c source compile failed",
               file=sys.stderr)
         sys.exit(1)
-    print("M5.1 ARM64 7c cross-compile PASS; full ARM64 kernel link:",
-          "PASS" if arm64_link_ok else "BLOCKED (missing guest userspace)",
-          flush=True)
+    print("M5 ARM64 native cross compiler:", cross_ok,
+          "PCI driver:", pci_cross_ok,
+          "paqfs:", paqfs_ok,
+          "factotum:", factotum_ok,
+          "linked kernel:", arm64_link_ok, flush=True)
 print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and cmp verified.",flush=True)
 
 # M2 tests the two emulated PCI chipsets ONLY in a later isolated QEMU
