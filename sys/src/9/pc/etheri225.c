@@ -1327,7 +1327,9 @@ i225pci(void)
 	for (p = nil; p = pcimatch(p, 0x8086, 0);) {
 		if (p->ccrb != 2 || p->ccru != 0)
 			continue;
-		if (p->mem[0].bar & 1)
+		/* An unassigned or empty BAR cannot contain valid controller MMIO. */
+		if ((p->mem[0].bar & 1) || p->mem[0].size == 0
+		|| (p->mem[0].bar & ~0xFULL) == 0)
 			continue;
 
 		switch (p->did) {
