@@ -73,11 +73,11 @@ jobs:
           qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-build-overlay.qcow2
       - name: Transfer exact Git checkout kernel source and run Plan 9 mk
         run: python3 scripts/phase3-native-build.py native-build-overlay.qcow2
+      - name: Probe actual ARM64 QEMU virt boot if native ARM64 uImage linked
+        run: python3 scripts/m5_arm64_qemu_probe.py native-build-overlay.qcow2
       - name: Evaluate M5 native ARM64 cross-build vs operational gates
         if: always()
         run: python3 scripts/m5_server_gates.py --cross-report artifacts/phase3/m5-arm64-native-build.json --arm64-serial artifacts/phase3/m5-arm64-boot-serial.log --output artifacts/phase3/m5-full-gates.json
-      - name: Probe actual ARM64 QEMU virt boot if native ARM64 uImage linked
-        run: python3 scripts/m5_arm64_qemu_probe.py native-build-overlay.qcow2
       - name: Independently verify compiled kernel SHA256 from FAT boot disk (no public binary)
         if: always()
         run: python3 scripts/extract-9pc64.py native-build-overlay.qcow2
