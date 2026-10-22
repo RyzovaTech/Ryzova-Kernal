@@ -625,6 +625,9 @@ readfirmware(void)
 	if(n <= 0)
 		error("can't stat firmware");
 	convM2D(dirbuf, n, &d, nil);
+	/* Refuse empty or unreasonable firmware images before allocating memory. */
+	if(d.length <= 0 || d.length > 16*1024*1024)
+		error("invalid wifi firmware size");
 	fw = smalloc(sizeof(*fw) + 16 + d.length);
 	data = (uchar*)(fw+1);
 	if(waserror()){
