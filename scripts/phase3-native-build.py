@@ -152,7 +152,7 @@ if m5_arm64_native:
     armstage("m5-arm64-link-check",
         "cd /sys/src/9/arm64; ls -l 9qemu 9qemu.u")
     armstage("m5-arm64-copy",
-        "cd /sys/src/9/arm64; test -s 9qemu.u && cp 9qemu.u /n/9fat/9qemu.u; "
+        "cd /sys/src/9/arm64; test -s 9qemu.u && cp 9qemu.u /n/9fat/9qemu.u && "
         "cmp 9qemu.u /n/9fat/9qemu.u; echo M5_ARM64_COPY_STATUS_$status")
     armstage("m5-arm64-hash",
         "cd /sys/src/9/arm64; test -s 9qemu.u && sha1sum -2 256 9qemu.u")
