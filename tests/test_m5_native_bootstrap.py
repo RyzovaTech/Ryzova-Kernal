@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """M5 ARM64 source/bootstrap evidence and M6 transition gates."""
+import ast
 import json
 import re
 import sys
@@ -29,6 +30,22 @@ class M5Bootstrap(unittest.TestCase):
         self.assertIn("if not cross_ok:",s)
         self.assertIn('"arm64_qemu_boot": "not-tested"',s)
         self.assertIn('"full_m5_1_complete": False',s)
+
+    def test_arm64_serial_stages_fit_safe_budget_and_have_unique_end_markers(self):
+        source=(ROOT/"scripts/phase3-native-build.py").read_text()
+        module=ast.parse(source)
+        branch=next(n for n in module.body if isinstance(n,ast.If)
+                    and isinstance(n.test,ast.Name) and n.test.id=="m5_arm64_native")
+        env={"m5_arm64_native":True,"stages":[("preexisting","")] * 11}
+        exec(compile(ast.Module(body=[branch],type_ignores=[]),
+                     "<m5-arm64-stages>","exec"),env)
+        built=env["stages"][11:]
+        self.assertEqual(len(built),10)
+        for ix,(name,command) in enumerate(built,11):
+            self.assertLessEqual(len(command),190, name)
+            self.assertTrue(command.endswith("; echo PHASE3_END_"+str(ix)),name)
+        self.assertTrue(any("M5_ARM64_7C_STATUS_" in c for _,c in built))
+        self.assertTrue(any("M5_ARM64_MK_STATUS_" in c for _,c in built))
 
     def test_shell_echo_does_not_count_as_native_evidence(self):
         s=(ROOT/"scripts/phase3-native-build.py").read_text()
