@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Phase 7: disposable native-QEMU 9P -> mTLS gateway -> 9P peer prototype.
+"""Phase 7 localhost 9P/mTLS gateway; opt-in Phase 8.1 peer authorization.
 
-The QEMU guest->gateway hop is still PLAINTEXT and UNAUTHENTICATED. Only
-the gateway->peer TCP hop is mutually TLS 1.3 authenticated. Binds loopback
-only and may be used only for public CI fixtures, never privileged mounts.
+Legacy Phase 7 guest-to-gateway TCP remains PLAINTEXT. Separately, the native
+guest TLS 1.2 ingress connects to this gateway. The gateway-to-peer hop is
+mutual TLS 1.3. No guest client credential is carried to the peer.
+Research listeners bind loopback; never mount sensitive host paths.
 """
 import hashlib
 import socket
@@ -11,6 +12,9 @@ import socketserver
 import ssl
 import struct
 import threading
+
+from ryzova.remote.phase8_9p_service import authorize_peer_request
+from ryzova.remote.phase8_trust import ResearchTrustPolicy, TrustDenied
 
 from ryzova.remote.native9p import Native9PConnection
 from ryzova.remote.p9 import MAX_FRAME, RERROR, frame, unframe
@@ -72,6 +76,11 @@ class _PeerHandler(socketserver.BaseRequestHandler):
                 _tls13_version(tls)
                 if _fingerprint(tls.getpeercert(binary_form=True)) != server.client_pin:
                     raise BridgeDenied("client certificate mismatch")
+                # Only opt-in Phase 8.1 peers enforce the new policy; existing
+                # Phase 7 QEMU/regression paths retain their original behavior.
+                if server.research_policy is not None:
+                    authorize_peer_request(
+                        server.research_policy, tls, server.policy_peer_id)
                 with server.metrics_lock:
                     server.secure_sessions += 1
                 while True:
@@ -79,10 +88,19 @@ class _PeerHandler(socketserver.BaseRequestHandler):
                     message, _, _ = unframe(request)
                     if message not in ALLOWED_9P:
                         raise BridgeDenied("unexpected write/privileged request")
+                    if server.research_policy is not None:
+                        # Recheck live immutable snapshot for each frame so
+                        # expiry/revocation and FID read scope fail closed.
+                        authorize_peer_request(
+                            server.research_policy, tls, server.policy_peer_id,
+                            packet=request, connection=connection)
                     response = connection.process(request)
                     tls.sendall(response)
                     with server.metrics_lock:
                         server.frames += 1
+        except TrustDenied:
+            with server.metrics_lock:
+                server.policy_denials += 1
         except (BridgeDenied, TimeoutError, OSError, ssl.SSLError, ValueError,
                 EOFError, struct.error):
             # EOF after a proper 9P exchange is normal; do not claim success
@@ -94,7 +112,12 @@ class SecureReadOnly9PPeer(socketserver.ThreadingTCPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, files, context, client_pin, port=0):
+    def __init__(self, files, context, client_pin, port=0,
+                 research_policy=None, policy_peer_id="gateway"):
+        if research_policy is not None and type(research_policy) is not ResearchTrustPolicy:
+            raise ValueError("research trust policy required")
+        if not isinstance(policy_peer_id, str) or not policy_peer_id:
+            raise ValueError("configured TLS peer identity required")
         if not isinstance(context, ssl.SSLContext):
             raise ValueError("TLS server context required")
         if not isinstance(files, dict) or set(files) != {"probe"} or not isinstance(files["probe"], bytes):
@@ -104,6 +127,10 @@ class SecureReadOnly9PPeer(socketserver.ThreadingTCPServer):
         self.files = files.copy()
         self.context = context
         self.client_pin = _pin(client_pin)
+        self.research_policy = research_policy
+        # Trusted server-side deployment configuration, never request text.
+        self.policy_peer_id = policy_peer_id
+        self.policy_denials = 0
         self.metrics_lock = threading.Lock()
         self.frames = 0
         self.secure_sessions = 0
