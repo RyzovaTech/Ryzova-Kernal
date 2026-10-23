@@ -47,6 +47,20 @@ class M5Bootstrap(unittest.TestCase):
         self.assertTrue(any("M5_ARM64_7C_STATUS_" in c for _,c in built))
         self.assertTrue(any("M5_ARM64_MK_STATUS_" in c for _,c in built))
 
+    def test_arm64_bootfs_install_and_fat_copy_must_be_evidenced(self):
+        s=(ROOT/"scripts/phase3-native-build.py").read_text()
+        self.assertIn('marks.get("m5-arm64-paqfs-install")', s)
+        self.assertIn('marks.get("m5-arm64-factotum-install")', s)
+        self.assertIn('M5_ARM64_PAQFS_INSTALL_', s)
+        self.assertIn('M5_ARM64_FACTOTUM_INSTALL_', s)
+        self.assertIn('marks.get("m5-arm64-copy")', s)
+        self.assertIn('marks.get("m5-arm64-hash")', s)
+        self.assertIn('cp 9qemu.u /n/9fat/9qemu.u && ', s)
+        self.assertIn('cmp 9qemu.u /n/9fat/9qemu.u', s)
+        self.assertIn('"arm64_fat_copy_verified": bool(arm64_fat_copy_ok)', s)
+        self.assertIn('"arm64_uimage_guest_sha256": image_hashes[-1]', s)
+        self.assertIn('"full_m5_1_complete": False', s)
+
     def test_shell_echo_does_not_count_as_native_evidence(self):
         s=(ROOT/"scripts/phase3-native-build.py").read_text()
         self.assertIn(r'r"(?:^|\r?\n)M5_ARM64_7C_STATUS_\s*(?:\r?\n)"',s)
