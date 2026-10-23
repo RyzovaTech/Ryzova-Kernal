@@ -117,36 +117,45 @@ for component in m1_native_components:
 # Unlike a GCC helper test, this checks the real ARM64 Plan 9 kernel target.
 m5_arm64_native = (ROOT / "sys/src/9/arm64/m5ecam.c").is_file()
 if m5_arm64_native:
-    index=len(stages)
-    stages.append(("m5-arm64-native",
+    # Plan 9's serial console can lose delimiters in long injected lines.
+    # Bound every interactive command and give each native prerequisite an
+    # independent end marker, rather than passing a >300-byte rc line.
+    def armstage(label, command):
+        index = len(stages)
+        payload = command + "; echo PHASE3_END_" + str(index)
+        if len(payload) > 190:
+            raise ValueError("M5 ARM64 serial stage exceeds safe command budget")
+        stages.append((label, payload))
+
+    armstage("m5-arm64-native",
         "cd /sys/src/9/arm64; 7c -o /tmp/m5ecam.7 m5ecam.c; "
-        "echo M5_ARM64_7C_STATUS_$status; ls -l /tmp/m5ecam.7; "
-        "7c -o /tmp/m5pciqemu.7 pciqemu.c > /tmp/m5-pci-7c.log >[2=1]; "
-        "echo M5_ARM64_PCI_7C_STATUS_$status; tail -n 8 /tmp/m5-pci-7c.log; "
-        "ls -l /tmp/m5pciqemu.7; "
-        "echo PHASE3_END_" + str(index)))
-    index=len(stages)
-    stages.append(("m5-arm64-bootstrap",
-        "ls -l /arm64/lib/libc.a /arm64/bin/paqfs /arm64/bin/auth/factotum; "
-        "mkdir -p /arm64/bin/auth; "
+        "echo M5_ARM64_7C_STATUS_$status; ls -l /tmp/m5ecam.7")
+    armstage("m5-arm64-pci",
+        "cd /sys/src/9/arm64; 7c -o /tmp/m5pciqemu.7 pciqemu.c > /tmp/m5-pci-7c.log >[2=1]; "
+        "echo M5_ARM64_PCI_7C_STATUS_$status; ls -l /tmp/m5pciqemu.7")
+    armstage("m5-arm64-paqfs",
         "cd /sys/src/cmd/paqfs; objtype=arm64 mk 7.paqfs > /tmp/m5-paqfs.log >[2=1]; "
-        "echo M5_ARM64_PAQFS_STATUS_$status; tail -n 15 /tmp/m5-paqfs.log; "
-        "test -s 7.paqfs && cp 7.paqfs /arm64/bin/paqfs; "
-        "cd /sys/src/cmd/auth/factotum; "
-        "objtype=arm64 mk 7.factotum > /tmp/m5-factotum.log >[2=1]; "
-        "echo M5_ARM64_FACTOTUM_STATUS_$status; tail -n 15 /tmp/m5-factotum.log; "
+        "echo M5_ARM64_PAQFS_STATUS_$status; tail -n 8 /tmp/m5-paqfs.log")
+    armstage("m5-arm64-paqfs-install",
+        "cd /sys/src/cmd/paqfs; test -s 7.paqfs && cp 7.paqfs /arm64/bin/paqfs; "
+        "echo M5_ARM64_PAQFS_INSTALL_$status; ls -l /arm64/bin/paqfs")
+    armstage("m5-arm64-factotum",
+        "cd /sys/src/cmd/auth/factotum; objtype=arm64 mk 7.factotum > /tmp/m5-factotum.log >[2=1]; "
+        "echo M5_ARM64_FACTOTUM_STATUS_$status; tail -n 8 /tmp/m5-factotum.log")
+    armstage("m5-arm64-factotum-install",
+        "mkdir -p /arm64/bin/auth; cd /sys/src/cmd/auth/factotum; "
         "test -s 7.factotum && cp 7.factotum /arm64/bin/auth/factotum; "
-        "ls -l /arm64/bin/paqfs /arm64/bin/auth/factotum; "
-        "echo PHASE3_END_" + str(index)))
-    index=len(stages)
-    stages.append(("m5-arm64-full-link",
+        "echo M5_ARM64_FACTOTUM_INSTALL_$status")
+    armstage("m5-arm64-full-link",
         "cd /sys/src/9/arm64; mk 9qemu 9qemu.u > /tmp/m5-arm64-native.log >[2=1]; "
-        "echo M5_ARM64_MK_STATUS_$status; tail -n 30 /tmp/m5-arm64-native.log; "
-        "ls -l 9qemu 9qemu.u; "
-        "test -s 9qemu.u && cp 9qemu.u /n/9fat/9qemu.u; "
-        "echo M5_ARM64_COPY_STATUS_$status; "
-        "test -s 9qemu.u && sha1sum -2 256 9qemu.u; "
-        "echo PHASE3_END_" + str(index)))
+        "echo M5_ARM64_MK_STATUS_$status; tail -n 24 /tmp/m5-arm64-native.log")
+    armstage("m5-arm64-link-check",
+        "cd /sys/src/9/arm64; ls -l 9qemu 9qemu.u")
+    armstage("m5-arm64-copy",
+        "cd /sys/src/9/arm64; test -s 9qemu.u && cp 9qemu.u /n/9fat/9qemu.u; "
+        "echo M5_ARM64_COPY_STATUS_$status")
+    armstage("m5-arm64-hash",
+        "cd /sys/src/9/arm64; test -s 9qemu.u && sha1sum -2 256 9qemu.u")
 
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
@@ -263,16 +272,16 @@ if m5_arm64_native:
     cross_ok = bool(marks.get("m5-arm64-native") and re.search(
         r"(?:^|\r?\n)M5_ARM64_7C_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*m5ecam.7", text))
-    pci_cross_ok = bool(re.search(
+    pci_cross_ok = bool(marks.get("m5-arm64-pci") and re.search(
         r"(?:^|\r?\n)M5_ARM64_PCI_7C_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*m5pciqemu.7", text))
-    paqfs_ok = bool(re.search(
+    paqfs_ok = bool(marks.get("m5-arm64-paqfs") and re.search(
         r"(?:^|\r?\n)M5_ARM64_PAQFS_STATUS_\s*(?:\r?\n)", text
     ))
-    factotum_ok = bool(re.search(
+    factotum_ok = bool(marks.get("m5-arm64-factotum") and re.search(
         r"(?:^|\r?\n)M5_ARM64_FACTOTUM_STATUS_\s*(?:\r?\n)", text
     ))
-    arm64_link_ok = bool(re.search(
+    arm64_link_ok = bool(marks.get("m5-arm64-full-link") and marks.get("m5-arm64-link-check") and re.search(
         r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*9qemu", text))
     (OUT / "m5-arm64-native-build.json").write_text(json.dumps({
