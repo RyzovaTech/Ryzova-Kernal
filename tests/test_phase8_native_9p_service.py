@@ -105,6 +105,11 @@ class Authenticated9PServiceTests(unittest.TestCase):
                 tls.sendall(req)
                 kind, tag, _ = unframe(read_frame(tls))
                 self.assertEqual((kind, tag), (RVERSION, 4))
+                # Peer frame counter may lag downstream socket delivery.
+                deadline = time.monotonic() + 2
+                while f.peer.frames < 1 and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertGreaterEqual(f.peer.frames, 1)
                 original_frames = f.peer.frames
                 old = f.peer.research_policy
                 f.peer.research_policy = old.revoke_peer(
