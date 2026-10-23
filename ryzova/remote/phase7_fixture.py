@@ -34,7 +34,8 @@ def _pin(certificate):
 
 class Ephemeral9PTLSFixture(AbstractContextManager):
     def __init__(self, public_payload, gateway_port=0, guest_tls_port=0,
-                 max_guest_sessions=8, max_guest_frames=256):
+                 max_guest_sessions=8, max_guest_frames=256,
+                 research_policy_factory=None):
         if not isinstance(public_payload, bytes) or not 0 < len(public_payload) <= 4096:
             raise ValueError("only one small public test fixture allowed")
         if (type(max_guest_sessions) is not int or
@@ -48,6 +49,9 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
         self.guest_tls_port = guest_tls_port
         self.max_guest_sessions = max_guest_sessions
         self.max_guest_frames = max_guest_frames
+        if research_policy_factory is not None and not callable(research_policy_factory):
+            raise ValueError("policy factory must be callable")
+        self.research_policy_factory = research_policy_factory
         self.guest_cert_sha256 = None
         self._guest_tls = None
         self._directory = None
@@ -76,10 +80,13 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
         try:
             srv_cert, srv_key = _cert(directory.name, "server")
             cli_cert, cli_key = _cert(directory.name, "client")
+            client_pin = _pin(cli_cert)
+            policy = (self.research_policy_factory(client_pin)
+                      if self.research_policy_factory is not None else None)
             self._peer = SecureReadOnly9PPeer(
                 {"probe": self.payload},
                 server_context(str(srv_cert), str(srv_key), str(cli_cert)),
-                _pin(cli_cert))
+                client_pin, research_policy=policy)
             self._gateway = Local9PTLSGateway(
                 client_context(str(cli_cert), str(cli_key), str(srv_cert)),
                 _pin(srv_cert), self._peer.server_address[1], self.gateway_port)
