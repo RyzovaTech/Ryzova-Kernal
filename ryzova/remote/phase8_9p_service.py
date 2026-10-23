@@ -7,9 +7,10 @@ NOT the Ryzova guest. There is no client identity propagation across the
 TLS1.2 guest -> ingress -> gateway chain.
 """
 import ssl
+import struct
 import time
 
-from ryzova.remote.p9 import TREAD, unframe
+from ryzova.remote.p9 import NinePError, TREAD, unframe
 from ryzova.remote.phase8_trust import ResearchTrustPolicy, TrustDenied
 
 
@@ -50,7 +51,8 @@ def authorize_peer_request(policy, tls, configured_peer_id, packet=None,
                 file_name = state[0]
                 if file_name == "/":
                     raise TrustDenied("remote read denied")
-        except (AttributeError, KeyError, TypeError, ValueError):
+        except (AttributeError, KeyError, TypeError, ValueError,
+                NinePError, struct.error):
             raise TrustDenied("remote read denied") from None
     policy.authorize_read(
         peer_id=configured_peer_id, cert_der=der, path=file_name,
