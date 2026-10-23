@@ -153,7 +153,7 @@ if m5_arm64_native:
         "cd /sys/src/9/arm64; ls -l 9qemu 9qemu.u")
     armstage("m5-arm64-copy",
         "cd /sys/src/9/arm64; test -s 9qemu.u && cp 9qemu.u /n/9fat/9qemu.u; "
-        "echo M5_ARM64_COPY_STATUS_$status")
+        "cmp 9qemu.u /n/9fat/9qemu.u; echo M5_ARM64_COPY_STATUS_$status")
     armstage("m5-arm64-hash",
         "cd /sys/src/9/arm64; test -s 9qemu.u && sha1sum -2 256 9qemu.u")
 
@@ -275,15 +275,22 @@ if m5_arm64_native:
     pci_cross_ok = bool(marks.get("m5-arm64-pci") and re.search(
         r"(?:^|\r?\n)M5_ARM64_PCI_7C_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*m5pciqemu.7", text))
-    paqfs_ok = bool(marks.get("m5-arm64-paqfs") and re.search(
-        r"(?:^|\r?\n)M5_ARM64_PAQFS_STATUS_\s*(?:\r?\n)", text
-    ))
-    factotum_ok = bool(marks.get("m5-arm64-factotum") and re.search(
-        r"(?:^|\r?\n)M5_ARM64_FACTOTUM_STATUS_\s*(?:\r?\n)", text
-    ))
+    paqfs_ok = bool(marks.get("m5-arm64-paqfs") and marks.get("m5-arm64-paqfs-install")
+        and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_STATUS_\s*(?:\r?\n)", text)
+        and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_INSTALL_\s*(?:\r?\n)", text)
+        and not re.search(r"(?:^|\r?\n)ls:.*arm64/bin/paqfs", text))
+    factotum_ok = bool(marks.get("m5-arm64-factotum") and marks.get("m5-arm64-factotum-install")
+        and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_STATUS_\s*(?:\r?\n)", text)
+        and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_INSTALL_\s*(?:\r?\n)", text))
     arm64_link_ok = bool(marks.get("m5-arm64-full-link") and marks.get("m5-arm64-link-check") and re.search(
         r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*9qemu", text))
+    # Recorded SHA is from the guest's native 9qemu.u stage, not the
+    # host-derived AMD64 image. The QEMU probe checks the FAT copy again.
+    image_hashes = re.findall(r"(?m)^([0-9a-f]{64})\s+9qemu\.u\s*$", text)
+    arm64_image_hash_ok = bool(marks.get("m5-arm64-hash") and image_hashes)
+    arm64_fat_copy_ok = bool(marks.get("m5-arm64-copy") and re.search(
+        r"(?:^|\r?\n)M5_ARM64_COPY_STATUS_\s*(?:\r?\n)", text))
     (OUT / "m5-arm64-native-build.json").write_text(json.dumps({
         "source_sha": SOURCE_SHA,
         "cross_compiler_7c": "pass" if cross_ok else "fail",
@@ -291,6 +298,8 @@ if m5_arm64_native:
         "arm64_paqfs_userspace": "pass" if paqfs_ok else "blocked",
         "arm64_factotum_userspace": "pass" if factotum_ok else "blocked",
         "arm64_kernel_link": "pass" if arm64_link_ok else "blocked",
+        "arm64_uimage_guest_sha256": image_hashes[-1] if arm64_image_hash_ok else None,
+        "arm64_fat_copy_verified": bool(arm64_fat_copy_ok),
         "arm64_qemu_boot": "not-tested",
         "full_m5_1_complete": False,
         "known_dep_blocker": None if arm64_link_ok else
