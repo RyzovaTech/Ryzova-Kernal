@@ -9,26 +9,26 @@ This document complements draft PR #51's M6 runtime qualification plan. It does 
 
 M6 observations are considered in strict order, always matched to the exact source HEAD:
 
-1. Native ARM64 \`7c\` compilation of M5 ECAM and PCI modules.
-2. Verified target ARM64 \`paqfs\` and \`factotum\` plus \`9qemu\` link.
-3. M5 QEMU probe report \`ryzova-m5-arm64-native-qemu/v1\` with independently compared uImage SHA-256 and observed boot output.
-4. **Future** host/guest runtime report \`ryzova-m6-arm64-guest-runtime/v1\` containing matched bidirectional VirtIO network hashes and positive packet counts, VirtIO block guest write/readback/host flush hashes, multicore IRQ recovery, and DMA bounds/teardown negatives.
+1. Native ARM64 `7c` compilation of M5 ECAM and PCI modules.
+2. Verified target ARM64 `paqfs` and `factotum` plus `9qemu` link.
+3. M5 QEMU probe report `ryzova-m5-arm64-native-qemu/v1` with independently compared uImage SHA-256 and observed boot output.
+4. **Future** host/guest runtime report `ryzova-m6-arm64-guest-runtime/v1` containing matched bidirectional VirtIO network hashes and positive packet counts, VirtIO block guest write/readback/host flush hashes, multicore IRQ recovery, and DMA bounds/teardown negatives.
 5. Separate independent physical lab review, owner-approved qualified models and explicit human release. Neither a serial transcript nor self-reported JSON can satisfy this last step.
 
 M6.2–M6.3 test fixture JSON is synthetic and validates the parser **only**. A passing unit test never means that VirtIO, SMP, GIC, DMA or IOMMU have run on ARM64 QEMU.
 
 ## Run the gate
 
-\`\`\`sh
+```sh
 python3 scripts/m6_runtime_evidence.py \
   --cross artifacts/phase3/m5-arm64-native-build.json \
   --boot artifacts/phase3/m5-arm64-qemu-probe.json \
   --runtime artifacts/m6/arm64-guest-runtime.json \
   --expected-head "$(git rev-parse HEAD)" \
   --output artifacts/m6/runtime-evidence.json
-\`\`\`
+```
 
-Any absent report leaves dependent checks false, and an absent ARM64 runtime report cannot become a success merely from AMD64 QEMU boot or ARM64 compilation. The optional \`--enforce-runtime\` exits nonzero unless all observational checks are consistent. Even when consistent, data is **unattested**, \`hardware_release_ready\` stays false and \`newly_certified_physical_models\` stays zero.
+Any absent report leaves dependent checks false, and an absent ARM64 runtime report cannot become a success merely from AMD64 QEMU boot or ARM64 compilation. The optional `--enforce-runtime` exits nonzero unless all observational checks are consistent. Even when consistent, data is **unattested**, `hardware_release_ready` stays false and `newly_certified_physical_models` stays zero.
 
 ## Next live test integration
 
