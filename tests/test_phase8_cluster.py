@@ -68,6 +68,19 @@ class UnifiedResourceTests(unittest.TestCase):
         self.assertEqual(registry.offers(NOW)[0].namespace,
                          "/cluster/nodes/remote-a")
 
+    def test_successive_jobs_are_distributed_across_allowed_nodes(self):
+        registry = self.registry()
+        self.admit(registry, offer("remote-a", PIN_A, slots=4,
+                                   latency_ms=1))
+        self.admit(registry, offer("remote-b", PIN_B, slots=4,
+                                   latency_ms=2))
+        coordinator = UnifiedCoordinator(
+            registry, {"remote-a": public_pure_handler,
+                       "remote-b": public_pure_handler}, enabled=True)
+        choices = [coordinator.submit(job(), now=NOW).node_id
+                   for _ in range(6)]
+        self.assertEqual(choices, ["remote-a", "remote-b"] * 3)
+
     def test_remote_requires_explicit_workload_opt_in(self):
         registry = self.registry()
         self.admit(registry, offer("remote-a", PIN_A))
