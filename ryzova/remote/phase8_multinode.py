@@ -11,6 +11,7 @@ import argparse
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import socket
 import socketserver
@@ -140,6 +141,12 @@ class NodeService(socketserver.ThreadingTCPServer):
 
     def __init__(self, address, *, context, controller_pin, node_id, node_pin,
                  payload=b"public 9p fixture", generation=1, slots=2):
+        try:
+            bind_ip = ipaddress.ip_address(address[0])
+        except (TypeError, ValueError, IndexError):
+            raise ValueError("literal private/loopback bind required") from None
+        if bind_ip.is_unspecified or not (bind_ip.is_private or bind_ip.is_loopback):
+            raise ValueError("public node listeners prohibited")
         if (type(payload) is not bytes or not 0 < len(payload) <= MAX_DATA
                 or not isinstance(context, ssl.SSLContext)
                 or context.verify_mode != ssl.CERT_REQUIRED
@@ -150,7 +157,8 @@ class NodeService(socketserver.ThreadingTCPServer):
             raise ValueError("invalid TLS node configuration")
         self.offer = NodeOffer(node_id, node_pin, frozenset({"compute", "storage"}),
                                frozenset({"amd64", "arm64"}), slots, 0, 5,
-                               int(time.time()) + 3600)
+                               int(time.time()) + 3600,
+                               generation=generation)
         self.controller_pin = controller_pin
         self.payload = payload
         self.context = context
