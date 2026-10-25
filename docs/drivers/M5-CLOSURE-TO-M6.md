@@ -21,6 +21,39 @@ The first native ARM64 9qemu build failed because the AMD64-only
 Each check is recorded independently in the native M5 evidence artifact.
 An ARM64 7c compile or even a 9qemu link is not an ARM64 QEMU boot.
 
+## 2026-10-25 native CI evidence: missing ARM64 target libraries
+
+PR #49 full native-build rerun https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/39900171436
+completed GitHub Actions successfully, but the actual ARM64 `paqfs`,
+`factotum`, `9qemu` linker and boot stages remained **blocked**.
+Native `7c` compiled `m5ecam.c` and `pciqemu.c`; the guest-side linker
+then failed with:
+
+```text
+7l -o 7.paqfs paqfs.7
+??none??: cannot open file: /arm64/lib/libc.a
+```
+
+The same missing library blocked `factotum`. The kernel reported that
+`/arm64/bin/paqfs` could not be made; the ARM64 QEMU probe correctly
+reported `not-booted-native-link-incomplete`. AMD64 fresh native QEMU,
+9P, TLS and storage/network regression tests passed on that runner.
+
+### Independent cross-library bootstrap attempt
+
+On the M5.5 branch, the native-build CI now transfers the repository's
+exact `sys/src/libc`, `libmp`, `libsec`, `libip`, `libdraw`,
+`libmemdraw`, `libmemlayer`, `libauth` and `libauthsrv` source
+into the pinned, disposable 9front guest. Each ARM64 `mk install`
+stage records the compiler result, then independently checks its
+`/arm64/lib/<name>.a` output. Missing archive, incomplete `mk`,
+missing serial marker or wrong install path blocks ARM64 linked status.
+
+The resulting artifacts and native build logs must be inspected to
+determine whether this succeeds and what the **next** blocker is.
+A successful CI workflow by itself remains insufficient evidence of a
+linked/booted ARM64 image or any real hardware certification.
+
 ## M6 release policy
 
 M6 *engineering planning* may start once M0-M5 source and safety changes
