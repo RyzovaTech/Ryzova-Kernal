@@ -140,9 +140,10 @@ class Authenticated9PServiceTests(unittest.TestCase):
                                   + b"X"))
                 kind, tag, _ = unframe(read_frame(tls))
                 self.assertEqual((kind, tag), (RERROR, 20))
+                # Counter is committed before returning the denial frame.
+                self.assertEqual(f.guest_tls.denied_writes, 1)
             self.assertEqual(f.peer.frames, 0)
             self.assertEqual(f.gateway.forwarded_frames, 0)
-            self.assertEqual(f.guest_tls.denied_writes, 1)
 
     def test_plain_boolean_tls_proof_cannot_bypass_socket_guard(self):
         policy = grant_policy("1" * 64)
