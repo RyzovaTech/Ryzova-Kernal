@@ -11,6 +11,8 @@ on:
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
       - 'scripts/m5_arm64_qemu_probe.py'
+      - 'scripts/m6_arm64_boot_acceptance.py'
+      - 'tests/test_m6_arm64_boot_acceptance.py'
       - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
@@ -32,6 +34,8 @@ on:
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
       - 'scripts/m5_arm64_qemu_probe.py'
+      - 'scripts/m6_arm64_boot_acceptance.py'
+      - 'tests/test_m6_arm64_boot_acceptance.py'
       - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
@@ -87,6 +91,16 @@ jobs:
         run: python3 scripts/phase7_handoff.py
       - name: Verify Phase 7 secure-gateway native QEMU bridge and research-only closeout
         run: python3 scripts/phase7_secure_closeout.py
+      # This remains a draft PR until *native* AArch64 boot evidence is present.
+      # Preserve all AMD64, network, storage and Phase 7 checks before this gate.
+      - name: Require M6.1 native ARM64 link and SHA-verified QEMU boot on M5.5 PR
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'm5/arm64-native-bootstrap-and-m6-gates'
+        run: |
+          python3 scripts/m6_arm64_boot_acceptance.py \
+            --cross artifacts/phase3/m5-arm64-native-build.json \
+            --boot artifacts/phase3/m5-arm64-qemu-probe.json \
+            --expected-head "$(git rev-parse HEAD)" \
+            --output artifacts/phase3/m6-arm64-boot-acceptance.json
       - name: Remove huge disk images before logs upload
         if: always()
         run: rm -f 9front.qcow2.gz 9front.qcow2 native-build-overlay.qcow2
@@ -107,6 +121,7 @@ jobs:
             artifacts/phase3/m5-arm64-qemu-probe.json
             artifacts/phase3/m5-arm64-boot-serial.log
             artifacts/phase3/m5-full-gates.json
+            artifacts/phase3/m6-arm64-boot-acceptance.json
             artifacts/phase3/source-provenance.txt
             artifacts/phase3/9pc64.sha256
             artifacts/phase3/kernel-provenance.json
