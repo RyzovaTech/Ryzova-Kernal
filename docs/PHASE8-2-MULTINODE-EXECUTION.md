@@ -33,6 +33,9 @@ from 8.2.0 are control-plane prototypes, not kernel integrations.
 `scripts/phase8_multinode_netns.py` sets up two **Linux network namespaces**
 with individual veth interfaces/subnets and separate Python server PIDs.
 The host controller reaches them over different virtual network links.
+Each remote process advertises only the actual native host ISA (AMD64 or
+ARM64), not artificial cross-architecture capacity; two network namespaces
+on the same Linux host do not demonstrate mixed-ISA hardware.
 It requires Linux root/iproute2 and runs only in an isolated CI runner;
 it fails instead of silently skipping if netns privileges are unavailable.
 
