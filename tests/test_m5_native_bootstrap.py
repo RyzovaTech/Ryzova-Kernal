@@ -40,12 +40,35 @@ class M5Bootstrap(unittest.TestCase):
         exec(compile(ast.Module(body=[branch],type_ignores=[]),
                      "<m5-arm64-stages>","exec"),env)
         built=env["stages"][11:]
-        self.assertEqual(len(built),10)
+        self.assertEqual(len(built),29)
         for ix,(name,command) in enumerate(built,11):
             self.assertLessEqual(len(command),190, name)
             self.assertTrue(command.endswith("; echo PHASE3_END_"+str(ix)),name)
         self.assertTrue(any("M5_ARM64_7C_STATUS_" in c for _,c in built))
         self.assertTrue(any("M5_ARM64_MK_STATUS_" in c for _,c in built))
+        libs = ("libc", "libmp", "libsec", "libip", "libdraw",
+                "libmemdraw", "libmemlayer", "libauth", "libauthsrv")
+        names = {name for name, _ in built}
+        self.assertIn("m5-arm64-libdirs", names)
+        for lib in libs:
+            self.assertIn("m5-arm64-build-" + lib, names)
+            self.assertIn("m5-arm64-verify-" + lib, names)
+            self.assertTrue(any("M5_ARM64_" + lib.upper() + "_STATUS_" in c
+                                for _, c in built))
+            self.assertTrue(any("M5_ARM64_" + lib.upper() + "_ARTIFACT_" in c
+                                for _, c in built))
+
+    def test_arm64_library_failures_cannot_be_marked_linked(self):
+        source=(ROOT/"scripts/phase3-native-build.py").read_text()
+        for path in ("sys/src/libc", "sys/src/libmp", "sys/src/libsec",
+                     "sys/src/libip", "sys/src/libdraw", "sys/src/libmemdraw",
+                     "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"):
+            self.assertIn('"' + path + '"', source)
+        self.assertIn('arm64_libraries_ok = all(arm64_libraries.values())', source)
+        self.assertIn('arm64_libraries_ok and paqfs_ok and factotum_ok', source)
+        self.assertIn('"arm64_bootstrap_libraries_complete": arm64_libraries_ok', source)
+        self.assertIn('marks.get("m5-arm64-verify-" + lib)', source)
+
 
     def test_arm64_bootfs_install_and_fat_copy_must_be_evidenced(self):
         s=(ROOT/"scripts/phase3-native-build.py").read_text()
