@@ -11,6 +11,8 @@ on:
       - 'tests/test_m5_native_bootstrap.py'
       - 'tests/test_m5_arm64_qemu_probe.py'
       - 'scripts/m5_arm64_qemu_probe.py'
+      - 'scripts/m6_arm64_boot_acceptance.py'
+      - 'tests/test_m6_arm64_boot_acceptance.py'
       - 'docs/drivers/M5-CLOSURE-TO-M6.md'
       - '.github/workflows/m5-arm64-bootstrap.yml'
   push:
@@ -30,8 +32,9 @@ jobs:
           persist-credentials: false
       - name: Compile host scripts and validate M5 evidence
         run: |
-          python3 -m py_compile scripts/phase3-native-build.py scripts/m5_platform_audit.py scripts/m5_server_gates.py scripts/m5_arm64_qemu_probe.py
+          python3 -m py_compile scripts/phase3-native-build.py scripts/m5_platform_audit.py scripts/m5_server_gates.py scripts/m5_arm64_qemu_probe.py scripts/m6_arm64_boot_acceptance.py
           python3 -m unittest discover -s tests -p 'test_m5_native_bootstrap.py' -v
+          python3 -m unittest discover -s tests -p 'test_m6_arm64_boot_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_m5_server_gates.py' -v
           python3 -m unittest discover -s tests -p 'test_m5_arm64_qemu_probe.py' -v
           python3 scripts/m5_server_gates.py > /tmp/m5-m6-entry.json
