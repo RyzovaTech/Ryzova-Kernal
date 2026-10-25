@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import platform
 import socket
 import socketserver
 import ssl
@@ -158,8 +159,17 @@ class NodeService(socketserver.ThreadingTCPServer):
                 or type(controller_pin) is not str or len(controller_pin) != 64
                 or type(node_pin) is not str or len(node_pin) != 64):
             raise ValueError("invalid TLS node configuration")
+        # A real node must not claim ARM64 capacity when its actual host
+        # CPU is AMD64 (or vice versa); architecture is locally observed.
+        machine = platform.machine().lower()
+        if machine in ("x86_64", "amd64"):
+            architecture = "amd64"
+        elif machine in ("aarch64", "arm64"):
+            architecture = "arm64"
+        else:
+            raise ValueError("unsupported native node architecture")
         self.offer = NodeOffer(node_id, node_pin, frozenset({"compute", "storage"}),
-                               frozenset({"amd64", "arm64"}), slots, 0, 5,
+                               frozenset({architecture}), slots, 0, 5,
                                int(time.time()) + 3600,
                                generation=generation)
         self.controller_pin = controller_pin
