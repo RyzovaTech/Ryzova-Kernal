@@ -7,6 +7,7 @@ from dataclasses import replace
 import base64
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
+import platform
 from pathlib import Path
 import socket
 import ssl
@@ -89,6 +90,22 @@ class MultiNodeTLSHostTests(unittest.TestCase):
             self.assertEqual(offer.node_id, name)
             self.assertEqual(offer.roles, frozenset({"compute", "storage"}))
         return now
+
+    def test_remote_nodes_report_actual_host_architecture(self):
+        host = platform.machine().lower()
+        expected = "arm64" if host in ("aarch64", "arm64") else "amd64"
+        for service in self.servers:
+            self.assertEqual(service.offer.architectures, frozenset({expected}))
+        now = self.discover()
+        wrong_arch = "amd64" if expected == "arm64" else "arm64"
+        registry = self.registry
+        coordinator = UnifiedCoordinator(
+            registry, {name: client.compute for name, client in self.clients.items()},
+            enabled=True)
+        with self.assertRaises(ResourceDenied):
+            coordinator.submit(Workload("sha256", b"public",
+                                        architecture=wrong_arch,
+                                        allow_remote=True), now=now)
 
     def test_real_two_independent_tls_services_9p_integrity(self):
         self.discover()
