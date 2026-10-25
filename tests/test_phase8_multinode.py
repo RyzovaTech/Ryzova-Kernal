@@ -169,6 +169,23 @@ class MultiNodeTLSHostTests(unittest.TestCase):
         self.assertEqual([offer.node_id for offer in self.registry.offers(now)],
                          ["node-b"])
 
+    def test_public_wildcard_node_listener_and_unverified_tls_context_denied(self):
+        controller, _ = self.files("controller")
+        cert, key = self.files("node-a")
+        with self.assertRaises(ValueError):
+            NodeService(
+                ("0.0.0.0", 0),
+                context=server_context(cert, key, controller),
+                controller_pin=digest_file(controller),
+                node_id="node-a", node_pin=digest_file(cert))
+        unverified = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        unverified.check_hostname = False
+        unverified.verify_mode = ssl.CERT_NONE
+        valid = self.clients["node-a"]
+        with self.assertRaises(ValueError):
+            RemoteNode("node-a", valid.address, "node-a",
+                       valid.expected_pin, unverified)
+
     def test_unknown_9p_write_is_refused_on_authenticated_channel(self):
         with self.clients["node-a"].connect() as tls:
             send_message(tls, {"op":"9p",
