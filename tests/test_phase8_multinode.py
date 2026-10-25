@@ -206,6 +206,15 @@ class MultiNodeTLSHostTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.clients["node-a"].compute("sha256", b"x" * 4097)
 
+    def test_per_session_request_quota_closes_authenticated_channel(self):
+        with self.clients["node-a"].connect() as tls:
+            for _ in range(64):
+                send_message(tls, {"op":"discover"})
+                self.assertIn("offer", recv_message(tls))
+            with self.assertRaises((TransportDenied, OSError, ssl.SSLError)):
+                send_message(tls, {"op":"discover"})
+                recv_message(tls)
+
     def test_concurrent_tls_sessions_have_independent_9p_fids(self):
         with ThreadPoolExecutor(max_workers=4) as pool:
             chunks = list(pool.map(
