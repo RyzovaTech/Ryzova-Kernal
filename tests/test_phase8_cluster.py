@@ -150,6 +150,26 @@ class UnifiedResourceTests(unittest.TestCase):
         with self.assertRaises(ResourceDenied):
             coordinator.submit(job(), now=NOW)
 
+    def test_unified_namespace_index_displays_resource_roles_not_mounts(self):
+        registry = self.registry()
+        self.admit(registry, offer("remote-a", PIN_A,
+                                   roles=frozenset({"compute", "storage",
+                                                    "gpu", "cache", "network"}),
+                                   architectures=frozenset({"amd64", "arm64"})))
+        self.admit(registry, offer("remote-b", PIN_B,
+                                   roles=frozenset({"device"})))
+        names = registry.namespace_index(NOW)
+        self.assertEqual(names, tuple(sorted((
+            "/cluster/nodes/remote-a", "/cluster/nodes/remote-b",
+            "/cluster/compute/amd64/remote-a",
+            "/cluster/compute/arm64/remote-a",
+            "/cluster/storage/remote-a", "/cluster/gpu/remote-a",
+            "/cluster/cache/remote-a", "/cluster/network/remote-a",
+            "/cluster/devices/remote-b",
+        ))))
+        self.assertNotIn("/cluster/storage/remote-b", names)
+        self.assertEqual(registry.namespace_index(NOW + 120), ())
+
     def test_quota_and_full_capacity(self):
         registry = self.registry()
         self.admit(registry, offer("remote-a", PIN_A, slots=1, busy=1))
