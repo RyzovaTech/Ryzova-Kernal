@@ -54,6 +54,28 @@ determine whether this succeeds and what the **next** blocker is.
 A successful CI workflow by itself remains insufficient evidence of a
 linked/booted ARM64 image or any real hardware certification.
 
+## M6.1 exact-head ARM64 boot acceptance (strict and non-certifying)
+
+The M5.5 PR now runs `scripts/m6_arm64_boot_acceptance.py` after the
+existing AMD64 fresh-build, 9P/TLS and network/storage regression evidence.
+On the M5.5 PR only, this check **fails the native CI job** if ARM64
+libraries, native `paqfs`/`factotum`, kernel link, FAT copy, host-verified
+SHA-256 or the actual AArch64 QEMU serial boot observation is missing.
+
+The negative result is saved to
+`artifacts/phase3/m6-arm64-boot-acceptance.json` and included in the
+uploaded native evidence artifact even when CI fails. Synthetic Python
+unit tests validate only that the evidence gate rejects bad/missing inputs;
+they do not provide ARM64 hardware/runtime evidence. No automatic
+9front sync, release authorization, driver ID certification or
+unreviewed binary redistribution is performed.
+
+This strict check is scoped to the M5.5 PR head ref so that independent
+existing AMD64 / legacy QEMU builds and unrelated security branches
+remain unaffected. When the gate passes, physical hardware certification
+still remains zero and further ARM64 VirtIO, SMP/GIC/IRQ and DMA/IOMMU
+functional verification is needed before a hardware release.
+
 ## M6 release policy
 
 M6 *engineering planning* may start once M0-M5 source and safety changes
