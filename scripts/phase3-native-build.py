@@ -38,7 +38,7 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum"], check=True)
+subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/libc", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
@@ -133,6 +133,22 @@ if m5_arm64_native:
     armstage("m5-arm64-pci",
         "cd /sys/src/9/arm64; 7c -o /tmp/m5pciqemu.7 pciqemu.c > /tmp/m5-pci-7c.log >[2=1]; "
         "echo M5_ARM64_PCI_7C_STATUS_$status; ls -l /tmp/m5pciqemu.7")
+    # Cross-link prerequisites: the pinned AMD64 9front guest has 7c/7l,
+    # but /arm64/lib/libc.a and other ARM64 archives are not preinstalled.
+    # Build from this exact Ryzova checkout, separately from host AMD64 libs.
+    arm64_libs = ("libc", "libmp", "libsec", "libip", "libdraw",
+                  "libmemdraw", "libmemlayer", "libauth", "libauthsrv")
+    armstage("m5-arm64-libdirs",
+        "mkdir -p /arm64/lib /arm64/bin/auth; echo M5_ARM64_LIBDIR_STATUS_$status")
+    for lib in arm64_libs:
+        armstage("m5-arm64-build-" + lib,
+            "cd /sys/src/" + lib + "; objtype=arm64 mk install > /tmp/m5-" + lib +
+            ".log >[2=1]; echo M5_ARM64_" + lib.upper() +
+            "_STATUS_$status; tail -n 4 /tmp/m5-" + lib + ".log")
+        armstage("m5-arm64-verify-" + lib,
+            "test -s /arm64/lib/" + lib + ".a; echo M5_ARM64_" +
+            lib.upper() + "_ARTIFACT_$status")
+
     armstage("m5-arm64-paqfs",
         "cd /sys/src/cmd/paqfs; objtype=arm64 mk 7.paqfs > /tmp/m5-paqfs.log >[2=1]; "
         "echo M5_ARM64_PAQFS_STATUS_$status; tail -n 8 /tmp/m5-paqfs.log")
@@ -275,6 +291,19 @@ if m5_arm64_native:
     pci_cross_ok = bool(marks.get("m5-arm64-pci") and re.search(
         r"(?:^|\r?\n)M5_ARM64_PCI_7C_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*m5pciqemu.7", text))
+    arm64_libraries = {
+        lib: bool(
+            marks.get("m5-arm64-libdirs")
+            and re.search(r"(?:^|\\r?\\n)M5_ARM64_LIBDIR_STATUS_\\s*(?:\\r?\\n)", text)
+            and marks.get("m5-arm64-build-" + lib)
+            and marks.get("m5-arm64-verify-" + lib)
+            and re.search(r"(?:^|\\r?\\n)M5_ARM64_" + lib.upper()
+                          + r"_STATUS_\\s*(?:\\r?\\n)", text)
+            and re.search(r"(?:^|\\r?\\n)M5_ARM64_" + lib.upper()
+                          + r"_ARTIFACT_\\s*(?:\\r?\\n)", text)
+        ) for lib in arm64_libs
+    }
+    arm64_libraries_ok = all(arm64_libraries.values())
     paqfs_ok = bool(marks.get("m5-arm64-paqfs") and marks.get("m5-arm64-paqfs-install")
         and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_STATUS_\s*(?:\r?\n)", text)
         and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_INSTALL_\s*(?:\r?\n)", text)
@@ -282,7 +311,8 @@ if m5_arm64_native:
     factotum_ok = bool(marks.get("m5-arm64-factotum") and marks.get("m5-arm64-factotum-install")
         and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_STATUS_\s*(?:\r?\n)", text)
         and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_INSTALL_\s*(?:\r?\n)", text))
-    arm64_link_ok = bool(marks.get("m5-arm64-full-link") and marks.get("m5-arm64-link-check") and re.search(
+    arm64_link_ok = bool(arm64_libraries_ok and paqfs_ok and factotum_ok
+        and marks.get("m5-arm64-full-link") and marks.get("m5-arm64-link-check") and re.search(
         r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*9qemu", text))
     # Recorded SHA is from the guest's native 9qemu.u stage, not the
@@ -295,6 +325,10 @@ if m5_arm64_native:
         "source_sha": SOURCE_SHA,
         "cross_compiler_7c": "pass" if cross_ok else "fail",
         "arm64_pci_driver_7c": "pass" if pci_cross_ok else "blocked",
+        "arm64_bootstrap_libraries": {
+            lib: "pass" if ok else "blocked" for lib, ok in arm64_libraries.items()
+        },
+        "arm64_bootstrap_libraries_complete": arm64_libraries_ok,
         "arm64_paqfs_userspace": "pass" if paqfs_ok else "blocked",
         "arm64_factotum_userspace": "pass" if factotum_ok else "blocked",
         "arm64_kernel_link": "pass" if arm64_link_ok else "blocked",
@@ -303,7 +337,7 @@ if m5_arm64_native:
         "arm64_qemu_boot": "not-tested",
         "full_m5_1_complete": False,
         "known_dep_blocker": None if arm64_link_ok else
-            "ARM64 bootfs and target userland dependencies still missing",
+            "ARM64 native libc/library bootstrap, bootfs or target link incomplete",
     }, indent=2) + "\n")
     if not cross_ok:
         print("FAIL M5.1: ARM64 Plan 9 native 7c source compile failed",
