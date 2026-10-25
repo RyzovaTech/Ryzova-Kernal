@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Temporary branch-scoped Actions recovery probe. No driver, TLS, or kernel changes.
+name: CI Runner Recovery Smoke
+on:
+  push:
+    branches: ['ci/actions-runner-recovery-20261025']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runner-startup:
+    name: Hosted runner startup (no checkout)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm runner executed first shell step
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "RYZOVA_CI_RUNNER_STARTED=1"
+          echo "OS=${RUNNER_OS}"
+          echo "ARCH=${RUNNER_ARCH}"
+          echo "SHA=${GITHUB_SHA}"
+          uname -a
+          python3 -V
+
+  checkout-health:
+    name: Checkout and source smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify checkout and Python stdlib
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f scripts/phase3-native-build.py
+          test -f sys/src/9/arm64/m5ecam.c
+          python3 -m py_compile scripts/phase3-native-build.py
+          echo "RYZOVA_CI_CHECKOUT_SMOKE=1"
