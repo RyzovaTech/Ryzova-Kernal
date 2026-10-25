@@ -42,7 +42,7 @@ subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), 
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
-    "Archive includes kernel, nusb user-space source, sys/include and amd64/include from exact commit.\n"
+    "Archive includes kernel, nusb, ARM64 target libraries, paqfs/factotum and architecture headers from exact commit.\n"
 )
 print("SOURCE_SHA", SOURCE_SHA, "ARCHIVE_SHA256", archive_hash, flush=True)
 
@@ -144,7 +144,7 @@ if m5_arm64_native:
         armstage("m5-arm64-build-" + lib,
             "cd /sys/src/" + lib + "; objtype=arm64 mk install > /tmp/m5-" + lib +
             ".log >[2=1]; echo M5_ARM64_" + lib.upper() +
-            "_STATUS_$status; tail -n 4 /tmp/m5-" + lib + ".log")
+            "_STATUS_$status; tail -n 18 /tmp/m5-" + lib + ".log")
         armstage("m5-arm64-verify-" + lib,
             "test -s /arm64/lib/" + lib + ".a; echo M5_ARM64_" +
             lib.upper() + "_ARTIFACT_$status")
