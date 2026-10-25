@@ -51,7 +51,9 @@ permissions:
 jobs:
   native-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Cross-building ARM64 libc + other libraries in the pinned 9front
+    # AMD64 TCG guest can exceed the previous AMD64-only 25-minute budget.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
