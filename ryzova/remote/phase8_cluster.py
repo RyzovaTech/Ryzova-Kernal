@@ -15,7 +15,7 @@ import re
 
 _NODE_ID = re.compile(r"[a-z][a-z0-9_-]{0,31}\Z")
 _PIN = re.compile(r"[0-9a-f]{64}\Z")
-_ROLES = frozenset(("compute", "storage", "gpu", "device", "cache"))
+_ROLES = frozenset(("compute", "storage", "gpu", "device", "cache", "network"))
 _ARCHES = frozenset(("amd64", "arm64"))
 _OPS = frozenset(("sha256", "byte_count"))
 
@@ -139,6 +139,22 @@ class ResourceRegistry:
             return ()
         return tuple(o for o in self._offers.values()
                      if o.lease_until > now and o.node_id not in self._quarantined)
+
+    def namespace_index(self, now):
+        """Bounded *proposed* per-role view, not an actual mounted 9P tree."""
+        paths = []
+        categories = {"storage": "storage", "gpu": "gpu",
+                      "device": "devices", "cache": "cache",
+                      "network": "network"}
+        for offer in self.offers(now):
+            paths.append(offer.namespace)
+            if "compute" in offer.roles:
+                for arch in sorted(offer.architectures):
+                    paths.append("/cluster/compute/" + arch + "/" + offer.node_id)
+            for role, directory in categories.items():
+                if role in offer.roles:
+                    paths.append("/cluster/" + directory + "/" + offer.node_id)
+        return tuple(sorted(paths))
 
 
 class UnifiedCoordinator:
