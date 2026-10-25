@@ -58,6 +58,14 @@ class M5Bootstrap(unittest.TestCase):
             self.assertTrue(any("M5_ARM64_" + lib.upper() + "_ARTIFACT_" in c
                                 for _, c in built))
 
+    def test_arm64_native_library_tcq_time_budget_is_bounded(self):
+        source=(ROOT/"scripts/phase3-native-build.py").read_text()
+        workflow=(ROOT/".github/workflows/phase3-native-build.yml").read_text()
+        self.assertIn("total_budget=1500 if m5_arm64_native else 750",source)
+        self.assertIn('label.startswith("m5-arm64-build-") else 380',source)
+        self.assertIn("timeout-minutes: 40",workflow)
+        self.assertIn("if time.monotonic()-stage_start>stage_budget:",source)
+
     def test_arm64_library_failures_cannot_be_marked_linked(self):
         source=(ROOT/"scripts/phase3-native-build.py").read_text()
         for path in ("sys/src/libc", "sys/src/libmp", "sys/src/libsec",
