@@ -155,10 +155,13 @@ class _GatewayHandler(socketserver.BaseRequestHandler):
                         request = read_frame(self.request)
                         kind, tag, cursor = unframe(request)
                         if kind not in ALLOWED_9P:
-                            self.request.sendall(frame(RERROR, tag,
-                                b"\x0b\x00read denied"))
+                            # Record denial before publishing the error
+                            # response; the reader may inspect counters
+                            # immediately after receiving RERROR.
                             with server.metrics_lock:
                                 server.denied_writes += 1
+                            self.request.sendall(frame(RERROR, tag,
+                                b"\x0b\x00read denied"))
                             continue
                         tls.sendall(request)
                         response = read_frame(tls)
