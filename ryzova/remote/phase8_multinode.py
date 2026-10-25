@@ -25,6 +25,7 @@ from ryzova.remote.phase8_cluster import NodeOffer, ResourceDenied, Workload
 
 MAX_ENVELOPE = 16384
 MAX_DATA = 4096
+MAX_REQUESTS_PER_SESSION = 64
 ALLOWED_9P = frozenset((100, 104, 108, 110, 112, 116, 120, 124))
 
 
@@ -104,7 +105,9 @@ class _NodeHandler(socketserver.BaseRequestHandler):
                     raise TransportDenied("controller identity denied")
                 # Created afresh for *each TLS session*; no cross-peer FIDs.
                 connection = Native9PConnection({"probe": node.payload})
-                while True:
+                # A credentialed peer still receives a strict per-session
+                # request quota; do not permit unbounded read/compute loops.
+                for _ in range(MAX_REQUESTS_PER_SESSION):
                     msg = recv_message(tls)
                     op = msg.get("op")
                     if op == "discover" and set(msg) == {"op"}:
