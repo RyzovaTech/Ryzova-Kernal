@@ -294,13 +294,13 @@ if m5_arm64_native:
     arm64_libraries = {
         lib: bool(
             marks.get("m5-arm64-libdirs")
-            and re.search(r"(?:^|\\r?\\n)M5_ARM64_LIBDIR_STATUS_\\s*(?:\\r?\\n)", text)
+            and re.search(r"(?:^|\r?\n)M5_ARM64_LIBDIR_STATUS_\s*(?:\r?\n)", text)
             and marks.get("m5-arm64-build-" + lib)
             and marks.get("m5-arm64-verify-" + lib)
-            and re.search(r"(?:^|\\r?\\n)M5_ARM64_" + lib.upper()
-                          + r"_STATUS_\\s*(?:\\r?\\n)", text)
-            and re.search(r"(?:^|\\r?\\n)M5_ARM64_" + lib.upper()
-                          + r"_ARTIFACT_\\s*(?:\\r?\\n)", text)
+            and re.search(r"(?:^|\r?\n)M5_ARM64_" + lib.upper()
+                          + r"_STATUS_\s*(?:\r?\n)", text)
+            and re.search(r"(?:^|\r?\n)M5_ARM64_" + lib.upper()
+                          + r"_ARTIFACT_\s*(?:\r?\n)", text)
         ) for lib in arm64_libs
     }
     arm64_libraries_ok = all(arm64_libraries.values())
