@@ -190,7 +190,10 @@ with (OUT/"host.log").open("wb") as host:
         client.setblocking(False)
         started=time.monotonic()
         stage_start=started
-        while time.monotonic()-started<750:
+        # Nine native ARM64 library cross-builds run under QEMU TCG and
+        # need a larger bound than the original AMD64-only source build.
+        total_budget=1500 if m5_arm64_native else 750
+        while time.monotonic()-started<total_budget:
             if proc.poll() is not None:
                 print("QEMU exited unexpectedly",flush=True)
                 break
@@ -230,7 +233,9 @@ with (OUT/"host.log").open("wb") as host:
                     if ix==len(stages)-1:
                         session["final"]=True
                         break
-                if time.monotonic()-stage_start>380:
+                stage_budget=(600 if m5_arm64_native and
+                              label.startswith("m5-arm64-build-") else 380)
+                if time.monotonic()-stage_start>stage_budget:
                     print("STAGE TIMEOUT",ix,label,flush=True)
                     break
         print("Stages:",marks,flush=True)
