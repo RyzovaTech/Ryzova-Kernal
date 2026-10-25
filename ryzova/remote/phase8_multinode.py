@@ -19,7 +19,7 @@ import struct
 import time
 
 from ryzova.remote.native9p import Native9PConnection
-from ryzova.remote.p9 import ReadOnly9PClient, unframe
+from ryzova.remote.p9 import NinePError, ReadOnly9PClient, unframe
 from ryzova.remote.phase8_cluster import NodeOffer, ResourceDenied, Workload
 
 MAX_ENVELOPE = 16384
@@ -64,8 +64,9 @@ def recv_message(sock):
 
 
 def digest_file(cert_path):
-    return hashlib.sha256(ssl.PEM_cert_to_DER_cert(
-        open(cert_path, encoding="utf-8").read())).hexdigest()
+    with open(cert_path, encoding="utf-8") as source:
+        pem = source.read()
+    return hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest()
 
 
 def server_context(cert_path, key_path, client_cert_path):
@@ -128,7 +129,7 @@ class _NodeHandler(socketserver.BaseRequestHandler):
                     else:
                         raise TransportDenied("operation denied")
         except (TransportDenied, EOFError, OSError, ssl.SSLError,
-                ValueError, TypeError, KeyError, struct.error):
+                NinePError, ValueError, TypeError, KeyError, struct.error):
             # Never downgrade to plaintext or replay an unverified request.
             pass
 
@@ -141,6 +142,9 @@ class NodeService(socketserver.ThreadingTCPServer):
                  payload=b"public 9p fixture", generation=1, slots=2):
         if (type(payload) is not bytes or not 0 < len(payload) <= MAX_DATA
                 or not isinstance(context, ssl.SSLContext)
+                or context.verify_mode != ssl.CERT_REQUIRED
+                or context.minimum_version != ssl.TLSVersion.TLSv1_3
+                or context.maximum_version != ssl.TLSVersion.TLSv1_3
                 or type(controller_pin) is not str or len(controller_pin) != 64
                 or type(node_pin) is not str or len(node_pin) != 64):
             raise ValueError("invalid TLS node configuration")
@@ -170,7 +174,11 @@ class RemoteNode:
     def __init__(self, node_id, address, tls_name, expected_pin, context):
         if (type(node_id) is not str or type(tls_name) is not str or
                 type(expected_pin) is not str or len(expected_pin) != 64 or
-                not isinstance(context, ssl.SSLContext)):
+                not isinstance(context, ssl.SSLContext)
+                or context.verify_mode != ssl.CERT_REQUIRED
+                or context.check_hostname is not True
+                or context.minimum_version != ssl.TLSVersion.TLSv1_3
+                or context.maximum_version != ssl.TLSVersion.TLSv1_3):
             raise ValueError("invalid node endpoint")
         self.node_id, self.address = node_id, address
         self.tls_name, self.expected_pin, self.context = tls_name, expected_pin, context
