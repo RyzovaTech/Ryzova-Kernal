@@ -40,9 +40,11 @@ class _NativeTLSHandler(socketserver.BaseRequestHandler):
                         packet = read_frame(tls)
                         kind, tag, _ = unframe(packet)
                         if kind not in ALLOWED_9P:
-                            tls.sendall(frame(RERROR, tag, b"\x0b\x00read denied"))
+                            # Commit the denial metric before writing
+                            # RERROR to avoid racing client assertions.
                             with srv.metrics_lock:
                                 srv.denied_writes += 1
+                            tls.sendall(frame(RERROR, tag, b"\x0b\x00read denied"))
                             continue
                         upstream.sendall(packet)
                         response = read_frame(upstream)

@@ -1,0 +1,38 @@
+name: Phase 8.1 authenticated 9P host socket regression
+on:
+  push:
+    branches: ['phase8/**']
+    paths:
+      - 'ryzova/remote/**'
+      - 'tests/test_phase8_native_9p_service.py'
+      - '.github/workflows/phase8-native-9p.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  authenticated-9p-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Check OpenSSL ephemeral certificate tool
+        run: openssl version
+      - name: Validate Phase 8 TLS-bound 9P authentication and recovery
+        run: |
+          python3 -m unittest discover -s tests -p 'test_phase8_trust.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase8_native_9p_service.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase7_secure_bridge.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase7_native*.py' -v
+      - name: Static source validation
+        run: python3 -m py_compile ryzova/remote/native_bridge.py ryzova/remote/phase8_9p_service.py ryzova/remote/phase7_fixture.py tests/test_phase8_native_9p_service.py

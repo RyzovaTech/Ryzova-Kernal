@@ -45,11 +45,15 @@ class Phase7GatewayTests(unittest.TestCase):
             s=socket.create_connection(("127.0.0.1",f.gateway.server_address[1]),timeout=4)
             s.settimeout(4)
             with s:
-                s.sendall(frame(118,9,struct.pack("<IQI",1,0,1)+b"X"))
-                kind,tag,_=unframe(read_frame(s))
-                self.assertEqual((kind,tag),(RERROR,9))
+                for tag,kind in ((9,118),(10,114),(11,126)):
+                    s.sendall(frame(kind,tag,struct.pack("<IQI",1,0,1)+b"X"))
+                    answer,reply_tag,_=unframe(read_frame(s))
+                    self.assertEqual((answer,reply_tag),(RERROR,tag))
+                    # The denial counter must precede a delivered RERROR:
+                    # do not rely on a polling/sleep workaround.
+                    self.assertEqual(f.gateway.denied_writes,tag-8)
             self.assertEqual(f.peer.frames,0)
-            self.assertEqual(f.gateway.denied_writes,1)
+            self.assertEqual(f.gateway.denied_writes,3)
 
     def test_wrong_pin_does_not_serve_remote_content(self):
         with Ephemeral9PTLSFixture(b"top-public") as f:
