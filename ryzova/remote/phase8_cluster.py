@@ -155,6 +155,7 @@ class UnifiedCoordinator:
         self.enabled = enabled
         self._handlers = dict(handlers)
         self._reserved = {}
+        self._completed = {}
 
     def choices(self, job, *, now, exclude=frozenset()):
         if not self.enabled or not self.registry.enabled or type(job) is not Workload:
@@ -172,9 +173,12 @@ class UnifiedCoordinator:
             used = node.busy + self._reserved.get(node.node_id, 0)
             if used >= node.slots:
                 continue
-            # Free capacity is preferred over a busy node, then lower latency;
-            # tie-break by node name so scheduling is deterministic.
-            eligible.append(((used / node.slots, node.latency_ms, node.node_id), node))
+            # Free capacity first; spread successive independent jobs across
+            # spare nodes by normalized successful placements. Ties use
+            # bounded latency, then node ID for reproducible decisions.
+            completed = self._completed.get(node.node_id, 0)
+            eligible.append(((used / node.slots, completed / node.slots,
+                              node.latency_ms, node.node_id), node))
         return tuple(node for _, node in sorted(eligible, key=lambda item: item[0]))
 
     def submit(self, job, *, now, max_attempts=2):
@@ -196,6 +200,8 @@ class UnifiedCoordinator:
                     valid = type(value) is int and 0 <= value <= len(job.payload)
                 if not valid:
                     raise ResourceDenied("untrusted task response")
+                self._completed[node.node_id] = (
+                    self._completed.get(node.node_id, 0) + 1)
                 return TaskReceipt(node.node_id, job.kind, value, attempt)
             except Exception:
                 # Bad/failed trusted adapter is never silently retried on the
