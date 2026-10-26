@@ -1,0 +1,56 @@
+name: Phase 8.2 real isolated multi-node TLS 9P and compute evidence
+on:
+  push:
+    branches: ['phase8/**']
+    paths:
+      - 'ryzova/remote/phase8_multinode.py'
+      - 'ryzova/remote/phase8_cluster.py'
+      - 'tests/test_phase8_multinode.py'
+      - 'scripts/phase8_multinode_netns.py'
+      - '.github/workflows/phase8-multinode-transport.yml'
+  pull_request:
+    branches: [main, 'phase8/**']
+    paths:
+      - 'ryzova/remote/phase8_multinode.py'
+      - 'ryzova/remote/phase8_cluster.py'
+      - 'tests/test_phase8_multinode.py'
+      - 'scripts/phase8_multinode_netns.py'
+      - '.github/workflows/phase8-multinode-transport.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  independent-tls-node-sockets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Validate OpenSSL and local multi-node TLS service tests
+        run: |
+          openssl version
+          python3 -m unittest discover -s tests -p 'test_phase8_multinode.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase8_cluster.py' -v
+          python3 -m py_compile ryzova/remote/phase8_multinode.py scripts/phase8_multinode_netns.py
+  two-network-namespaces:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install iproute2 for real isolated node network namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends iproute2 openssl
+      - name: Mandatory real two-netns mTLS + 9P + compute + partition/recovery
+        run: |
+          sudo env PYTHONPATH="$GITHUB_WORKSPACE" python3 scripts/phase8_multinode_netns.py
