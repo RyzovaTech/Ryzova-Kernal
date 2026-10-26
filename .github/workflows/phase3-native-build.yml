@@ -17,6 +17,7 @@ on:
       - 'scripts/phase7_handoff.py'
       - 'scripts/phase7_secure_closeout.py'
       - 'scripts/phase7_native_guest_tls.py'
+      - 'scripts/phase8_guest_identity.py'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -37,6 +38,7 @@ on:
       - 'scripts/phase7_handoff.py'
       - 'scripts/phase7_secure_closeout.py'
       - 'scripts/phase7_native_guest_tls.py'
+      - 'scripts/phase8_guest_identity.py'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -83,7 +85,7 @@ jobs:
         run: python3 scripts/phase7_secure_closeout.py
       - name: Remove huge disk images before logs upload
         if: always()
-        run: rm -f 9front.qcow2.gz 9front.qcow2 native-build-overlay.qcow2
+        run: rm -f 9front.qcow2.gz 9front.qcow2 native-build-overlay.qcow2 artifacts/phase3/guest-identity-cert.pem artifacts/phase3/guest-identity-key.pem
       - name: Archive native guest source/build evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -108,6 +110,7 @@ jobs:
             artifacts/phase3/phase7-entry.json
             artifacts/phase3/phase7-secure-bridge.json
             artifacts/phase3/phase7-native-guest-tls.json
+            artifacts/phase3/phase8-guest-identity.json
             artifacts/phase3/phase7-secure-closeout.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn
