@@ -10,6 +10,7 @@ from __future__ import annotations
 import http.server
 import json
 import os
+import shutil
 from pathlib import Path
 import re
 import select
@@ -29,6 +30,7 @@ sys.path.insert(0, str(ROOT))
 from ryzova.remote.phase7_fixture import Ephemeral9PTLSFixture
 from phase7_secure_closeout import gateway_metrics_report
 from phase7_native_guest_tls import commands as native_tls_commands, inspect as inspect_native_tls
+from phase8_guest_identity import commands as guest_identity_commands, inspect as inspect_guest_identity
 OUT = ROOT / "artifacts" / "phase3"
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "network-probe.txt").write_text("RYZOVA_NETWORK_DATA\n")
@@ -52,7 +54,7 @@ class LocalHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print("HTTP:", fmt % args, flush=True)
 
-server = http.server.ThreadingHTTPServer(("0.0.0.0", 8000), LocalHandler)
+server = http.server.ThreadingHTTPServer(("127.0.0.1", 8000), LocalHandler)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 
 cmd = [
@@ -268,8 +270,14 @@ m2_enabled = (ROOT / "ryzova/drivers/m2-chipset-families.json").is_file()
 fresh_cmd = list(cmd)
 # QEMU guest -> plaintext CI-host 9P gateway -> pinned mutual TLS 1.3
 # -> separate, read-only 9P2000 localhost peer. Public fixture only.
-tls_fixture = Ephemeral9PTLSFixture(payload_for_commit(SOURCE_SHA), gateway_port=15640, guest_tls_port=15641).start()
+tls_fixture = Ephemeral9PTLSFixture(payload_for_commit(SOURCE_SHA), gateway_port=15640, guest_tls_port=15641,
+    enable_guest_identity=True, authenticated_guest_port=15642).start()
 guest_cert_pin = tls_fixture.guest_cert_sha256
+guest_client_pin = tls_fixture.guest_client_pin
+credential_paths = [OUT / "guest-identity-cert.pem", OUT / "guest-identity-key.pem"]
+for original, target in zip((tls_fixture.guest_client_cert, tls_fixture.guest_client_key), credential_paths):
+    shutil.copyfile(original, target)
+    target.chmod(0o600)
 print("PHASE7 native read-only 9P gateway and mutual TLS peer started", flush=True)
 
 # Start a NEW QEMU process against the SAME disposable qcow2 overlay.
@@ -284,7 +292,7 @@ runtime_commands=[
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
-] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)]
+] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)] + list(guest_identity_commands())
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(fresh_cmd,stdout=host,stderr=subprocess.STDOUT)
@@ -369,7 +377,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                     bootstate["runtime_stage"]=i+1
                     guest.sendall((runtime_commands[i+1]+"\r").encode())
                     print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
-            if re.search(rb"(?:\r?\n)RYZOVA_NATIVE_TLS_DONE(?:\r?\n)",bytes(bootlog)):
+            if re.search(rb"(?:\r?\n)RYZOVA_GUEST_IDENTITY_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
@@ -379,6 +387,12 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         except subprocess.TimeoutExpired: second.kill()
         guest.close()
         server.shutdown()
+        for path in credential_paths:
+            path.unlink(missing_ok=True)
+        guest_identity_metrics = {
+            "sessions": tls_fixture.authenticated_guest_tls.authenticated_guest_sessions,
+            "frames": tls_fixture.authenticated_guest_tls.forwarded_frames,
+        }
         guest_tls_metrics = {
             "native_tls12_sessions": tls_fixture.guest_tls.tls12_sessions,
             "native_tls_9p_frames": tls_fixture.guest_tls.forwarded_frames,
@@ -394,6 +408,12 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
         tls_fixture.close()
 
 boottext=bytes(bootlog).decode("utf-8",errors="replace")
+guest_identity_evidence = inspect_guest_identity(
+    bytes(bootlog), SOURCE_SHA, guest_client_pin,
+    guest_identity_metrics["sessions"], guest_identity_metrics["frames"])
+(OUT / "phase8-guest-identity.json").write_text(
+    json.dumps(guest_identity_evidence, indent=2, sort_keys=True) + "\n")
+print("NATIVE GUEST IDENTITY", guest_identity_evidence["passed"], flush=True)
 fresh_rc_ok=bool(re.search(rb"(?:\r?\n)ryzova_fresh_kernel(?:\r?\n)",bytes(bootlog)))
 identity_ok=all(v in bytes(bootlog) for v in (b"Ryzova Kernel 0.1.0-dev", b"9front-derived", b"experimental-0"))
 m0_pci_ok=bool(re.search(rb"(?:\r?\n)RYZOVA_M0_PCI_OK(?:\r?\n)", bytes(bootlog)))
@@ -457,7 +477,7 @@ for label,ok in native_9p_evidence["checks"].items():
     f"V7 native 9front tlsclient pinned TLS1.2 9P: {guest_tls_evidence['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"] and guest_identity_evidence["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
 print("PASS native 9front tlsclient pinned TLS1.2 guest ingress and host mutual TLS1.3 peer; native 9P guest SHA, M2/M4 preserved.",flush=True)

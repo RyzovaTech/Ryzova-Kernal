@@ -238,6 +238,41 @@ class MultiNodeTLSHostTests(unittest.TestCase):
                 lambda _: self.clients["node-b"].read_probe(), range(4)))
         self.assertEqual(chunks, [b"fixture node-b"] * 4)
 
+    def test_node_admission_precedes_tls_handshake_and_recovers(self):
+        service = self.servers[0]
+        service.max_sessions = 1
+        def wait(predicate):
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                if predicate():
+                    return
+                time.sleep(0.01)
+            self.fail("node admission state did not converge")
+        with socket.create_connection(service.server_address, timeout=3):
+            wait(lambda: service.active_sessions == 1)
+            with socket.create_connection(service.server_address, timeout=3) as excess:
+                excess.settimeout(3)
+                self.assertEqual(excess.recv(1), b"")
+            self.assertEqual(service.peak_sessions, 1)
+            self.assertEqual(service.rejected_connections, 1)
+        wait(lambda: service.active_sessions == 0)
+        self.assertEqual(self.clients["node-a"].read_probe(), b"fixture node-a")
+        wait(lambda: service.active_sessions == 0)
+
+    def test_configured_node_request_quota_closes_and_releases_slot(self):
+        service = self.servers[0]
+        service.max_frames_per_session = 2
+        with self.clients["node-a"].connect() as tls:
+            for _ in range(2):
+                send_message(tls, {"op": "discover"})
+                self.assertIn("offer", recv_message(tls))
+            self.assertEqual(tls.recv(1), b"")
+        deadline = time.monotonic() + 3
+        while service.active_sessions and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(service.active_sessions, 0)
+        self.assertEqual(service.frame_quota_closes, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

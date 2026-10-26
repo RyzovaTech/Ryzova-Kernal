@@ -21,6 +21,7 @@ import struct
 import time
 
 from ryzova.remote.native9p import Native9PConnection
+from ryzova.remote.listener_limits import BoundedTCPServer, bounded_limit
 from ryzova.remote.p9 import NinePError, ReadOnly9PClient, unframe
 from ryzova.remote.phase8_cluster import NodeOffer, ResourceDenied, Workload
 
@@ -105,10 +106,10 @@ class _NodeHandler(socketserver.BaseRequestHandler):
                                                 node.controller_pin)):
                     raise TransportDenied("controller identity denied")
                 # Created afresh for *each TLS session*; no cross-peer FIDs.
-                connection = Native9PConnection({"probe": node.payload})
+                connection = Native9PConnection({"probe": node.payload}, max_fids=node.max_fids)
                 # A credentialed peer still receives a strict per-session
                 # request quota; do not permit unbounded read/compute loops.
-                for _ in range(MAX_REQUESTS_PER_SESSION):
+                for _ in range(node.max_frames_per_session):
                     msg = recv_message(tls)
                     op = msg.get("op")
                     if op == "discover" and set(msg) == {"op"}:
@@ -133,18 +134,22 @@ class _NodeHandler(socketserver.BaseRequestHandler):
                         send_message(tls, {"frame": base64.b64encode(response).decode("ascii")})
                     else:
                         raise TransportDenied("operation denied")
+                node.record_frame_quota_close()
         except (TransportDenied, EOFError, OSError, ssl.SSLError,
                 NinePError, ValueError, TypeError, KeyError, struct.error):
             # Never downgrade to plaintext or replay an unverified request.
             pass
 
 
-class NodeService(socketserver.ThreadingTCPServer):
+class NodeService(BoundedTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
     def __init__(self, address, *, context, controller_pin, node_id, node_pin,
-                 payload=b"public 9p fixture", generation=1, slots=2):
+                 payload=b"public 9p fixture", generation=1, slots=2,
+                 max_sessions=8, max_requests_per_session=MAX_REQUESTS_PER_SESSION,
+                 max_fids=256):
+        self.max_fids = bounded_limit(max_fids, 4096, "FID limit")
         try:
             bind_ip = ipaddress.ip_address(address[0])
         except (TypeError, ValueError, IndexError):
@@ -175,7 +180,8 @@ class NodeService(socketserver.ThreadingTCPServer):
         self.controller_pin = controller_pin
         self.payload = payload
         self.context = context
-        super().__init__(address, _NodeHandler)
+        super().__init__(address, _NodeHandler, max_sessions=max_sessions,
+                         max_frames_per_session=max_requests_per_session)
 
     def offer_dict(self):
         offer = self.offer
