@@ -102,4 +102,66 @@ class Native9PTests(unittest.TestCase):
         self.assertEqual(kind,RERROR)
         kind,_,_=unframe(p.process(frame(TWRITE,4,struct.pack("<IQI",1,0,1)+b"x")))
         self.assertEqual(kind,RERROR)
-if __name__=="__main__":unittest.main()
+
+
+class Native9PStateTests(unittest.TestCase):
+    def connection(self, max_fids=256):
+        conn = Native9PConnection({"probe": b"public"}, max_fids=max_fids)
+        self.send(conn, TVERSION, struct.pack("<I", 8192) + string("9P2000"))
+        self.send(conn, TATTACH, struct.pack("<II", 1, 0xffffffff)
+                  + string("glenda") + string(""))
+        return conn
+
+    def send(self, conn, kind, body):
+        return unframe(conn.process(frame(kind, 1, body)))[0]
+
+    def test_rejected_requests_never_commit_connection_state(self):
+        operations = (
+            (TVERSION, struct.pack("<I", 512) + string("9P2000")),
+            (TATTACH, struct.pack("<II", 3, 0xffffffff) + string("u") + string("")),
+            (TWALK, struct.pack("<IIH", 1, 3, 1) + string("probe")),
+            (TWALK, struct.pack("<IIH", 1, 3, 0)),
+            (TWALK, struct.pack("<IIH", 1, 1, 1) + string("probe")),
+            (TOPEN, struct.pack("<IB", 1, 0)),
+            (TCLUNK, struct.pack("<I", 1)),
+        )
+        for kind, body in operations:
+            for malformed in [body + b"X"] + [body[:n] for n in range(len(body))]:
+                with self.subTest(kind=kind, size=len(malformed)):
+                    conn = self.connection()
+                    before = (conn.fids.copy(), conn.negotiated, conn.msize)
+                    self.assertEqual(self.send(conn, kind, malformed), RERROR)
+                    self.assertEqual((conn.fids, conn.negotiated, conn.msize), before)
+
+    def test_rejected_attach_cannot_be_opened(self):
+        conn = self.connection()
+        body = struct.pack("<II", 42, 0xffffffff) + string("u") + string("")
+        self.assertEqual(self.send(conn, TATTACH, body + b"X"), RERROR)
+        self.assertEqual(self.send(conn, TOPEN, struct.pack("<IB", 42, 0)), RERROR)
+        self.assertEqual(self.send(conn, TATTACH, body), RATTACH)
+        self.assertEqual(self.send(conn, TOPEN, struct.pack("<IB", 42, 0)), ROPEN)
+
+    def test_fid_budget_reclaimed_by_clunk_and_version(self):
+        conn = self.connection(max_fids=2)
+        clone = lambda old, new: struct.pack("<IIH", old, new, 0)
+        self.assertEqual(self.send(conn, TWALK, clone(1, 2)), RWALK)
+        self.assertEqual(self.send(conn, TWALK, clone(1, 3)), RERROR)
+        attach = struct.pack("<II", 3, 0xffffffff) + string("u") + string("")
+        self.assertEqual(self.send(conn, TATTACH, attach), RERROR)
+        self.assertEqual(len(conn.fids), 2)
+        self.assertEqual(self.send(conn, TWALK, clone(1, 1)), RWALK)
+        self.assertEqual(self.send(conn, TCLUNK, struct.pack("<I", 2)), RCLUNK)
+        self.assertEqual(self.send(conn, TWALK, clone(1, 3)), RWALK)
+        self.assertEqual(self.send(conn, TVERSION,
+                         struct.pack("<I", 8192) + string("9P2000")), RVERSION)
+        self.assertEqual(conn.fids, {})
+
+    def test_invalid_fid_limits_rejected(self):
+        for limit in (0, -1, 4097, True, 1.5, None):
+            with self.subTest(limit=limit), self.assertRaises(ValueError):
+                Native9PConnection({"probe": b"x"}, max_fids=limit)
+
+
+if __name__ == "__main__":
+    unittest.main()
+

@@ -12,6 +12,8 @@ import socket
 import socketserver
 import struct
 
+from ryzova.remote.listener_limits import BoundedTCPServer, bounded_limit
+
 from ryzova.remote.p9 import (
     MAX_FRAME, RATTACH, RCLUNK, RERROR, ROPEN, RREAD, RVERSION, RWALK,
     TATTACH, TCLUNK, TOPEN, TREAD, TVERSION, TWALK, Cursor, NinePError,
@@ -50,8 +52,9 @@ def _stat(name: str, data: bytes | None) -> bytes:
 class Native9PConnection:
     """Each TCP session has a separate fid table, avoiding cross-client reuse."""
 
-    def __init__(self, files: dict[str, bytes]):
+    def __init__(self, files: dict[str, bytes], *, max_fids=256):
         self.files = files
+        self.max_fids = bounded_limit(max_fids, 4096, "FID limit")
         self.fids: dict[int, tuple[str, bool]] = {}
         self.negotiated = False
         self.msize = MAX_FRAME
@@ -66,9 +69,20 @@ class Native9PConnection:
     def process(self, packet: bytes) -> bytes:
         kind, tag, cur = unframe(packet)
         try:
-            answer, content = self._handle(kind, cur)
+            # Stage state changes until the entire request has been parsed.
+            # In particular, trailing bytes must not commit attach/open/clunk
+            # or a version reset when the response is RERROR.
+            staged = Native9PConnection(self.files, max_fids=self.max_fids)
+            staged.fids = self.fids.copy()
+            staged.negotiated = self.negotiated
+            staged.msize = self.msize
+            answer, content = staged._handle(kind, cur)
             cur.done()
-            return frame(answer, tag, content)
+            response = frame(answer, tag, content)
+            self.fids = staged.fids
+            self.negotiated = staged.negotiated
+            self.msize = staged.msize
+            return response
         except (ValueError, KeyError, UnicodeError, NinePError, PermissionError,
                 FileNotFoundError, struct.error):
             return frame(RERROR, tag, _s("read-only test service: request denied"))
@@ -96,14 +110,16 @@ class Native9PConnection:
             fid, afid = cur.unpack("<I"), cur.unpack("<I")
             cur.string()  # uname is not interpreted as OS authorization
             aname = cur.string()
-            if fid in self.fids or afid != 0xffffffff or aname:
+            if (fid in self.fids or len(self.fids) >= self.max_fids
+                    or afid != 0xffffffff or aname):
                 raise PermissionError()
             self.fids[fid] = ("/", False)
             return RATTACH, _qid("/")
         if kind == TWALK:
             fid, newfid, count = cur.unpack("<I"), cur.unpack("<I"), cur.unpack("<H")
             if (fid not in self.fids or (newfid in self.fids and fid != newfid) or
-                    count > 1):
+                    count > 1 or (newfid not in self.fids and
+                                  len(self.fids) >= self.max_fids)):
                 raise NinePError("only one-level walk")
             old, opened = self.fids[fid]
             if opened:
@@ -165,10 +181,10 @@ class Native9PConnection:
 
 class _TCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
-        conn = Native9PConnection(self.server.files)
+        conn = Native9PConnection(self.server.files, max_fids=self.server.max_fids)
         self.request.settimeout(8)
         try:
-            while True:
+            for _ in range(self.server.max_frames_per_session):
                 header = self._read(4)
                 if header is None:
                     break
@@ -181,6 +197,8 @@ class _TCPHandler(socketserver.BaseRequestHandler):
                 response = conn.process(header + body)
                 self.request.sendall(response)
                 self.server.frames += 1
+            else:
+                self.server.record_frame_quota_close()
         except (OSError, NinePError, struct.error):
             pass
 
@@ -194,11 +212,13 @@ class _TCPHandler(socketserver.BaseRequestHandler):
         return bytes(buf)
 
 
-class Native9PTCPServer(socketserver.ThreadingTCPServer):
+class Native9PTCPServer(BoundedTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(self, files: dict[str, bytes], port=15640):
+    def __init__(self, files: dict[str, bytes], port=15640, *, max_sessions=8,
+                 max_frames_per_session=256, max_fids=256):
+        self.max_fids = bounded_limit(max_fids, 4096, "FID limit")
         if not isinstance(files, dict) or len(files) != 1:
             raise ValueError("one public read-only fixture only")
         for name, value in files.items():
@@ -209,4 +229,7 @@ class Native9PTCPServer(socketserver.ThreadingTCPServer):
         self.frames = 0
         # Never listen on a public interface. Slirp's 10.0.2.2 reaches the
         # QEMU host's loopback address. If unavailable, verification fails.
-        super().__init__(("127.0.0.1", port), _TCPHandler)
+        super().__init__(("127.0.0.1", port), _TCPHandler,
+                         max_sessions=max_sessions,
+                         max_frames_per_session=max_frames_per_session)
+
