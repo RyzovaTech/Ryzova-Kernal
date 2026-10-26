@@ -1,0 +1,38 @@
+name: Phase 8.2 unified resource coordinator research safety
+on:
+  push:
+    branches: ['phase8/**']
+    paths:
+      - 'ryzova/remote/phase8_cluster.py'
+      - 'tests/test_phase8_cluster.py'
+      - '.github/workflows/phase8-unified-resources.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/remote/phase8_cluster.py'
+      - 'tests/test_phase8_cluster.py'
+      - '.github/workflows/phase8-unified-resources.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  research-control-plane:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Exercise fail-closed Option B admission and automatic scheduling
+        run: |
+          python3 -m unittest discover -s tests -p 'test_phase8_cluster.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase8_trust.py' -v
+      - name: Compile Phase 8.2 reference model
+        run: python3 -m py_compile ryzova/remote/phase8_cluster.py tests/test_phase8_cluster.py
