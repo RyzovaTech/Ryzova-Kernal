@@ -40,14 +40,14 @@ class M5Bootstrap(unittest.TestCase):
         exec(compile(ast.Module(body=[branch],type_ignores=[]),
                      "<m5-arm64-stages>","exec"),env)
         built=env["stages"][11:]
-        self.assertEqual(len(built),39)
+        self.assertEqual(len(built),41)
         for ix,(name,command) in enumerate(built,11):
             self.assertLessEqual(len(command),190, name)
             self.assertTrue(command.endswith("; echo PHASE3_END_"+str(ix)),name)
         self.assertTrue(any("M5_ARM64_7C_STATUS_" in c for _,c in built))
         self.assertTrue(any("M5_ARM64_MK_STATUS_" in c for _,c in built))
         libs = ("libc", "libbio", "libflate", "libString", "libthread", "lib9p",
-                "libmp", "libsec", "libip", "libdraw",
+                "libmp", "libsec", "libip", "libndb", "libdraw",
                 "libmemdraw", "libmemlayer", "libauth", "libauthsrv")
         names = {name for name, _ in built}
         self.assertIn("m5-arm64-libdirs", names)
@@ -72,7 +72,7 @@ class M5Bootstrap(unittest.TestCase):
         for path in ("sys/src/libc", "sys/src/libbio", "sys/src/libflate",
                      "sys/src/libString", "sys/src/libthread", "sys/src/lib9p",
                      "sys/src/libmp", "sys/src/libsec",
-                     "sys/src/libip", "sys/src/libdraw", "sys/src/libmemdraw",
+                     "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw",
                      "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"):
             self.assertIn('"' + path + '"', source)
         self.assertIn('arm64_libraries_ok = all(arm64_libraries.values())', source)

@@ -38,7 +38,7 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/libc", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
+subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/libc", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
@@ -137,7 +137,7 @@ if m5_arm64_native:
     # but /arm64/lib/libc.a and other ARM64 archives are not preinstalled.
     # Build from this exact Ryzova checkout, separately from host AMD64 libs.
     arm64_libs = ("libc", "libbio", "libflate", "libString", "libthread", "lib9p",
-                  "libmp", "libsec", "libip", "libdraw",
+                  "libmp", "libsec", "libip", "libndb", "libdraw",
                   "libmemdraw", "libmemlayer", "libauth", "libauthsrv")
     armstage("m5-arm64-libdirs",
         "mkdir -p /arm64/lib /arm64/bin/auth; echo M5_ARM64_LIBDIR_STATUS_$status")
