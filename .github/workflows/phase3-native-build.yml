@@ -10,6 +10,9 @@ on:
       - 'arm64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
+      - 'scripts/m5_arm64_qemu_probe.py'
+      - 'scripts/m6_arm64_boot_acceptance.py'
+      - 'tests/test_m6_arm64_boot_acceptance.py'
       - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
@@ -31,6 +34,9 @@ on:
       - 'arm64/include/**'
       - 'ryzova/**'
       - 'scripts/phase3-native-build.py'
+      - 'scripts/m5_arm64_qemu_probe.py'
+      - 'scripts/m6_arm64_boot_acceptance.py'
+      - 'tests/test_m6_arm64_boot_acceptance.py'
       - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
@@ -50,17 +56,20 @@ permissions:
 
 jobs:
   native-build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    runs-on: ubuntu-24.04
+    # Cross-building ARM64 libc + other libraries in the pinned 9front
+    # AMD64 TCG guest can exceed the previous AMD64-only 25-minute budget.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Install isolated QEMU dependencies
+        timeout-minutes: 8
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils file mtools
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends qemu-system-x86 qemu-system-arm qemu-utils file mtools
       - name: Verify upstream source provenance
         run: bash scripts/verify-foundation.sh
       - name: Fetch and verify 9front native build guest image
@@ -73,9 +82,11 @@ jobs:
           qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-build-overlay.qcow2
       - name: Transfer exact Git checkout kernel source and run Plan 9 mk
         run: python3 scripts/phase3-native-build.py native-build-overlay.qcow2
+      - name: Probe actual ARM64 QEMU virt boot if native ARM64 uImage linked
+        run: python3 scripts/m5_arm64_qemu_probe.py native-build-overlay.qcow2
       - name: Evaluate M5 native ARM64 cross-build vs operational gates
         if: always()
-        run: python3 scripts/m5_server_gates.py --cross-report artifacts/phase3/m5-arm64-native-build.json --output artifacts/phase3/m5-full-gates.json
+        run: python3 scripts/m5_server_gates.py --cross-report artifacts/phase3/m5-arm64-native-build.json --arm64-serial artifacts/phase3/m5-arm64-boot-serial.log --output artifacts/phase3/m5-full-gates.json
       - name: Independently verify compiled kernel SHA256 from FAT boot disk (no public binary)
         if: always()
         run: python3 scripts/extract-9pc64.py native-build-overlay.qcow2
@@ -83,6 +94,16 @@ jobs:
         run: python3 scripts/phase7_handoff.py
       - name: Verify Phase 7 secure-gateway native QEMU bridge and research-only closeout
         run: python3 scripts/phase7_secure_closeout.py
+      # This remains a draft PR until *native* AArch64 boot evidence is present.
+      # Preserve all AMD64, network, storage and Phase 7 checks before this gate.
+      - name: Require M6.1 native ARM64 link and SHA-verified QEMU boot on M5.5 PR
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'm5/arm64-native-bootstrap-and-m6-gates'
+        run: |
+          python3 scripts/m6_arm64_boot_acceptance.py \
+            --cross artifacts/phase3/m5-arm64-native-build.json \
+            --boot artifacts/phase3/m5-arm64-qemu-probe.json \
+            --expected-head "$(git rev-parse HEAD)" \
+            --output artifacts/phase3/m6-arm64-boot-acceptance.json
       - name: Remove huge disk images before logs upload
         if: always()
         run: rm -f 9front.qcow2.gz 9front.qcow2 native-build-overlay.qcow2 artifacts/phase3/guest-identity-cert.pem artifacts/phase3/guest-identity-key.pem
@@ -100,7 +121,10 @@ jobs:
             artifacts/phase3/m2-qemu-host.log
             artifacts/phase3/result.txt
             artifacts/phase3/m5-arm64-native-build.json
+            artifacts/phase3/m5-arm64-qemu-probe.json
+            artifacts/phase3/m5-arm64-boot-serial.log
             artifacts/phase3/m5-full-gates.json
+            artifacts/phase3/m6-arm64-boot-acceptance.json
             artifacts/phase3/source-provenance.txt
             artifacts/phase3/9pc64.sha256
             artifacts/phase3/kernel-provenance.json

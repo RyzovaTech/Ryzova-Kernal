@@ -40,11 +40,11 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb"], check=True)
+subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/libc", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
-    "Archive includes kernel, nusb user-space source, sys/include and amd64/include from exact commit.\n"
+    "Archive includes kernel, nusb, ARM64 target libraries, paqfs/factotum and architecture headers from exact commit.\n"
 )
 print("SOURCE_SHA", SOURCE_SHA, "ARCHIVE_SHA256", archive_hash, flush=True)
 
@@ -119,13 +119,62 @@ for component in m1_native_components:
 # Unlike a GCC helper test, this checks the real ARM64 Plan 9 kernel target.
 m5_arm64_native = (ROOT / "sys/src/9/arm64/m5ecam.c").is_file()
 if m5_arm64_native:
-    index=len(stages)
-    stages.append(("m5-arm64-native",
+    # Plan 9's serial console can lose delimiters in long injected lines.
+    # Bound every interactive command and give each native prerequisite an
+    # independent end marker, rather than passing a >300-byte rc line.
+    def armstage(label, command):
+        index = len(stages)
+        payload = command + "; echo PHASE3_END_" + str(index)
+        if len(payload) > 190:
+            raise ValueError("M5 ARM64 serial stage exceeds safe command budget")
+        stages.append((label, payload))
+
+    armstage("m5-arm64-native",
         "cd /sys/src/9/arm64; 7c -o /tmp/m5ecam.7 m5ecam.c; "
-        "echo M5_ARM64_7C_STATUS_$status; ls -l /tmp/m5ecam.7; "
-        "mk 9qemu > /tmp/m5-arm64-native.log >[2=1]; "
-        "echo M5_ARM64_MK_STATUS_$status; tail -n 20 /tmp/m5-arm64-native.log; "
-        "ls -l 9qemu; echo PHASE3_END_" + str(index)))
+        "echo M5_ARM64_7C_STATUS_$status; ls -l /tmp/m5ecam.7")
+    armstage("m5-arm64-pci",
+        "cd /sys/src/9/arm64; 7c -o /tmp/m5pciqemu.7 pciqemu.c > /tmp/m5-pci-7c.log >[2=1]; "
+        "echo M5_ARM64_PCI_7C_STATUS_$status; ls -l /tmp/m5pciqemu.7")
+    # Cross-link prerequisites: the pinned AMD64 9front guest has 7c/7l,
+    # but /arm64/lib/libc.a and other ARM64 archives are not preinstalled.
+    # Build from this exact Ryzova checkout, separately from host AMD64 libs.
+    arm64_libs = ("libc", "libbio", "libflate", "libString", "libthread", "lib9p",
+                  "libmp", "libsec", "libip", "libndb", "libdraw",
+                  "libmemdraw", "libmemlayer", "libauth", "libauthsrv")
+    armstage("m5-arm64-libdirs",
+        "mkdir -p /arm64/lib /arm64/bin/auth; echo M5_ARM64_LIBDIR_STATUS_$status")
+    for lib in arm64_libs:
+        armstage("m5-arm64-build-" + lib,
+            "cd /sys/src/" + lib + "; objtype=arm64 mk install > /tmp/m5-" + lib +
+            ".log >[2=1]; echo M5_ARM64_" + lib.upper() +
+            "_STATUS_$status; tail -n 18 /tmp/m5-" + lib + ".log")
+        armstage("m5-arm64-verify-" + lib,
+            "test -s /arm64/lib/" + lib + ".a; echo M5_ARM64_" +
+            lib.upper() + "_ARTIFACT_$status")
+
+    armstage("m5-arm64-paqfs",
+        "cd /sys/src/cmd/paqfs; objtype=arm64 mk 7.paqfs > /tmp/m5-paqfs.log >[2=1]; "
+        "echo M5_ARM64_PAQFS_STATUS_$status; tail -n 8 /tmp/m5-paqfs.log")
+    armstage("m5-arm64-paqfs-install",
+        "cd /sys/src/cmd/paqfs; test -s 7.paqfs && cp 7.paqfs /arm64/bin/paqfs; "
+        "echo M5_ARM64_PAQFS_INSTALL_$status; ls -l /arm64/bin/paqfs")
+    armstage("m5-arm64-factotum",
+        "cd /sys/src/cmd/auth/factotum; objtype=arm64 mk 7.factotum > /tmp/m5-factotum.log >[2=1]; "
+        "echo M5_ARM64_FACTOTUM_STATUS_$status; tail -n 8 /tmp/m5-factotum.log")
+    armstage("m5-arm64-factotum-install",
+        "mkdir -p /arm64/bin/auth; cd /sys/src/cmd/auth/factotum; "
+        "test -s 7.factotum && cp 7.factotum /arm64/bin/auth/factotum; "
+        "echo M5_ARM64_FACTOTUM_INSTALL_$status")
+    armstage("m5-arm64-full-link",
+        "cd /sys/src/9/arm64; mk 9qemu 9qemu.u > /tmp/m5-arm64-native.log >[2=1]; "
+        "echo M5_ARM64_MK_STATUS_$status; tail -n 24 /tmp/m5-arm64-native.log")
+    armstage("m5-arm64-link-check",
+        "cd /sys/src/9/arm64; ls -l 9qemu 9qemu.u")
+    armstage("m5-arm64-copy",
+        "cd /sys/src/9/arm64; test -s 9qemu.u && cp 9qemu.u /n/9fat/9qemu.u && "
+        "cmp 9qemu.u /n/9fat/9qemu.u; echo M5_ARM64_COPY_STATUS_$status")
+    armstage("m5-arm64-hash",
+        "cd /sys/src/9/arm64; test -s 9qemu.u && sha1sum -2 256 9qemu.u")
 
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
@@ -144,7 +193,10 @@ with (OUT/"host.log").open("wb") as host:
         client.setblocking(False)
         started=time.monotonic()
         stage_start=started
-        while time.monotonic()-started<750:
+        # Nine native ARM64 library cross-builds run under QEMU TCG and
+        # need a larger bound than the original AMD64-only source build.
+        total_budget=1500 if m5_arm64_native else 750
+        while time.monotonic()-started<total_budget:
             if proc.poll() is not None:
                 print("QEMU exited unexpectedly",flush=True)
                 break
@@ -184,7 +236,9 @@ with (OUT/"host.log").open("wb") as host:
                     if ix==len(stages)-1:
                         session["final"]=True
                         break
-                if time.monotonic()-stage_start>380:
+                stage_budget=(600 if m5_arm64_native and
+                              label.startswith("m5-arm64-build-") else 380)
+                if time.monotonic()-stage_start>stage_budget:
                     print("STAGE TIMEOUT",ix,label,flush=True)
                     break
         print("Stages:",marks,flush=True)
@@ -237,31 +291,71 @@ for component in m1_native_components:
         print("FAIL M1 native user-space build:", component, file=sys.stderr)
         sys.exit(1)
 if m5_arm64_native:
-    # M5.1 has a two-part gate: a cross-architecture native 7c compiler
-    # can prove C source compatibility, but it cannot stand in for a
-    # linked and booted ARM64 kernel.
+    # Distinguish 7c source, PCI port, bootfs userland, kernel link, and
+    # real ARM64 guest boot. Only the checked states are advertised.
     cross_ok = bool(marks.get("m5-arm64-native") and re.search(
         r"(?:^|\r?\n)M5_ARM64_7C_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*m5ecam.7", text))
-    arm64_link_ok = bool(re.search(
+    pci_cross_ok = bool(marks.get("m5-arm64-pci") and re.search(
+        r"(?:^|\r?\n)M5_ARM64_PCI_7C_STATUS_\s*(?:\r?\n)", text
+    ) and not re.search(r"(?:^|\r?\n)ls:.*m5pciqemu.7", text))
+    arm64_libraries = {
+        lib: bool(
+            marks.get("m5-arm64-libdirs")
+            and re.search(r"(?:^|\r?\n)M5_ARM64_LIBDIR_STATUS_\s*(?:\r?\n)", text)
+            and marks.get("m5-arm64-build-" + lib)
+            and marks.get("m5-arm64-verify-" + lib)
+            and re.search(r"(?:^|\r?\n)M5_ARM64_" + lib.upper()
+                          + r"_STATUS_\s*(?:\r?\n)", text)
+            and re.search(r"(?:^|\r?\n)M5_ARM64_" + lib.upper()
+                          + r"_ARTIFACT_\s*(?:\r?\n)", text)
+        ) for lib in arm64_libs
+    }
+    arm64_libraries_ok = all(arm64_libraries.values())
+    paqfs_ok = bool(marks.get("m5-arm64-paqfs") and marks.get("m5-arm64-paqfs-install")
+        and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_STATUS_\s*(?:\r?\n)", text)
+        and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_INSTALL_\s*(?:\r?\n)", text)
+        and not re.search(r"(?:^|\r?\n)ls:.*arm64/bin/paqfs", text))
+    factotum_ok = bool(marks.get("m5-arm64-factotum") and marks.get("m5-arm64-factotum-install")
+        and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_STATUS_\s*(?:\r?\n)", text)
+        and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_INSTALL_\s*(?:\r?\n)", text))
+    arm64_link_ok = bool(arm64_libraries_ok and paqfs_ok and factotum_ok
+        and marks.get("m5-arm64-full-link") and marks.get("m5-arm64-link-check") and re.search(
         r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*9qemu", text))
+    # Recorded SHA is from the guest's native 9qemu.u stage, not the
+    # host-derived AMD64 image. The QEMU probe checks the FAT copy again.
+    image_hashes = re.findall(r"(?m)^([0-9a-f]{64})\s+9qemu\.u\s*$", text)
+    arm64_image_hash_ok = bool(marks.get("m5-arm64-hash") and image_hashes)
+    arm64_fat_copy_ok = bool(marks.get("m5-arm64-copy") and re.search(
+        r"(?:^|\r?\n)M5_ARM64_COPY_STATUS_\s*(?:\r?\n)", text))
     (OUT / "m5-arm64-native-build.json").write_text(json.dumps({
         "source_sha": SOURCE_SHA,
         "cross_compiler_7c": "pass" if cross_ok else "fail",
+        "arm64_pci_driver_7c": "pass" if pci_cross_ok else "blocked",
+        "arm64_bootstrap_libraries": {
+            lib: "pass" if ok else "blocked" for lib, ok in arm64_libraries.items()
+        },
+        "arm64_bootstrap_libraries_complete": arm64_libraries_ok,
+        "arm64_paqfs_userspace": "pass" if paqfs_ok else "blocked",
+        "arm64_factotum_userspace": "pass" if factotum_ok else "blocked",
         "arm64_kernel_link": "pass" if arm64_link_ok else "blocked",
+        "arm64_uimage_guest_sha256": image_hashes[-1] if arm64_image_hash_ok else None,
+        "arm64_fat_copy_verified": bool(arm64_fat_copy_ok),
         "arm64_qemu_boot": "not-tested",
         "full_m5_1_complete": False,
         "known_dep_blocker": None if arm64_link_ok else
-            "ARM64 bootfs userspace /arm64/bin/paqfs not installed in AMD64 toolchain guest",
+            "ARM64 native libc/library bootstrap, bootfs or target link incomplete",
     }, indent=2) + "\n")
     if not cross_ok:
         print("FAIL M5.1: ARM64 Plan 9 native 7c source compile failed",
               file=sys.stderr)
         sys.exit(1)
-    print("M5.1 ARM64 7c cross-compile PASS; full ARM64 kernel link:",
-          "PASS" if arm64_link_ok else "BLOCKED (missing guest userspace)",
-          flush=True)
+    print("M5 ARM64 native cross compiler:", cross_ok,
+          "PCI driver:", pci_cross_ok,
+          "paqfs:", paqfs_ok,
+          "factotum:", factotum_ok,
+          "linked kernel:", arm64_link_ok, flush=True)
 print("PASS: native mk returned success; new kernel copied to /n/9fat/9pc64 and cmp verified.",flush=True)
 
 # M2 tests the two emulated PCI chipsets ONLY in a later isolated QEMU
