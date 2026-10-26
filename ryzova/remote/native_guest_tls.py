@@ -11,6 +11,9 @@ import socketserver
 import ssl
 import struct
 import threading
+import hashlib
+import hmac
+import re
 
 from ryzova.remote.native_bridge import ALLOWED_9P, BridgeDenied, read_frame
 from ryzova.remote.p9 import RERROR, frame, unframe
@@ -28,6 +31,16 @@ class _NativeTLSHandler(socketserver.BaseRequestHandler):
                 tls.settimeout(6)
                 if tls.version() != "TLSv1.2":
                     raise BridgeDenied("native 9front TLS version mismatch")
+                if srv.guest_client_pin is not None:
+                    # Bind identity to the live TLS client certificate, never
+                    # to 9P uname, a request boolean or a forwarded header.
+                    der = tls.getpeercert(binary_form=True)
+                    if (tls.context.verify_mode != ssl.CERT_REQUIRED or not der
+                            or not hmac.compare_digest(hashlib.sha256(der).hexdigest(),
+                                                       srv.guest_client_pin)):
+                        raise BridgeDenied("guest certificate mismatch")
+                    with srv.metrics_lock:
+                        srv.authenticated_guest_sessions += 1
                 with srv.metrics_lock:
                     srv.tls12_sessions += 1
                 # One upstream socket per admitted guest session. Never replay
@@ -69,7 +82,8 @@ class NativeGuestTLS12Endpoint(socketserver.ThreadingTCPServer):
 
     def __init__(self, certificate, key, gateway_port, port=15641,
                  max_sessions=DEFAULT_MAX_SESSIONS,
-                 max_frames_per_session=DEFAULT_MAX_FRAMES):
+                 max_frames_per_session=DEFAULT_MAX_FRAMES, *,
+                 guest_ca=None, guest_client_pin=None, guest_identity=None):
         if type(gateway_port) is not int or not 0 < gateway_port < 65536:
             raise ValueError("upstream gateway port required")
         if type(max_sessions) is not int or not 1 <= max_sessions <= 32:
@@ -81,6 +95,18 @@ class NativeGuestTLS12Endpoint(socketserver.ThreadingTCPServer):
         ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.maximum_version = ssl.TLSVersion.TLSv1_2
         ctx.load_cert_chain(certfile=certificate, keyfile=key)
+        if any(v is not None for v in (guest_ca, guest_client_pin, guest_identity)):
+            if (not isinstance(guest_ca, str) or not guest_ca
+                    or type(guest_client_pin) is not str
+                    or re.fullmatch(r"[a-f0-9]{64}", guest_client_pin) is None
+                    or type(guest_identity) is not str
+                    or re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", guest_identity) is None):
+                raise ValueError("complete pinned guest mTLS identity required")
+            ctx.load_verify_locations(cafile=guest_ca)
+            ctx.verify_mode = ssl.CERT_REQUIRED
+        self.guest_client_pin = guest_client_pin
+        self.guest_identity = guest_identity
+        self.authenticated_guest_sessions = 0
         self.context = ctx
         self.gateway_port = gateway_port
         self.max_sessions = max_sessions
