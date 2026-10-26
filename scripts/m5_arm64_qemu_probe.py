@@ -84,7 +84,10 @@ def probe(overlay):
             raise RuntimeError("M5 guest/host SHA256 mismatch for ARM64 uImage")
         report["independent_kernel_sha256_verified"]=True
         report["source_built_kernel_sha256"]=digest
-        cmd=["qemu-system-aarch64","-machine","virt,highmem=off,gic-version=2",
+        # The ARM64 kernel uses GICv3 redistributors and ICC_* system
+        # registers. A GICv2 machine can print the early banner then trap
+        # before cpu0 initialization; keep the stronger boot gate intact.
+        cmd=["qemu-system-aarch64","-machine","virt,highmem=off,gic-version=3",
              "-cpu","cortex-a57","-smp","2","-m","2048",
              "-display","none","-nographic","-monitor","none",
              "-kernel",str(kernel),"-no-reboot"]
