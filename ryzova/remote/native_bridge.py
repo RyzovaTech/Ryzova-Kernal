@@ -11,12 +11,12 @@ import socket
 import socketserver
 import ssl
 import struct
-import threading
 
 from ryzova.remote.phase8_9p_service import authorize_peer_request
 from ryzova.remote.phase8_trust import ResearchTrustPolicy, TrustDenied
 
 from ryzova.remote.native9p import Native9PConnection
+from ryzova.remote.listener_limits import BoundedTCPServer, bounded_limit
 from ryzova.remote.p9 import MAX_FRAME, RERROR, frame, unframe
 
 ALLOWED_9P = frozenset((100, 104, 108, 110, 112, 116, 120, 124))
@@ -69,7 +69,7 @@ def _pin(expected):
 class _PeerHandler(socketserver.BaseRequestHandler):
     def handle(self):
         server = self.server
-        connection = Native9PConnection(server.files)
+        connection = Native9PConnection(server.files, max_fids=server.max_fids)
         self.request.settimeout(TIMEOUT)
         try:
             with server.context.wrap_socket(self.request, server_side=True) as tls:
@@ -83,7 +83,7 @@ class _PeerHandler(socketserver.BaseRequestHandler):
                         server.research_policy, tls, server.policy_peer_id)
                 with server.metrics_lock:
                     server.secure_sessions += 1
-                while True:
+                for _ in range(server.max_frames_per_session):
                     request = read_frame(tls)
                     message, _, _ = unframe(request)
                     if message not in ALLOWED_9P:
@@ -98,6 +98,7 @@ class _PeerHandler(socketserver.BaseRequestHandler):
                     tls.sendall(response)
                     with server.metrics_lock:
                         server.frames += 1
+                server.record_frame_quota_close()
         except TrustDenied:
             with server.metrics_lock:
                 server.policy_denials += 1
@@ -108,12 +109,14 @@ class _PeerHandler(socketserver.BaseRequestHandler):
             pass
 
 
-class SecureReadOnly9PPeer(socketserver.ThreadingTCPServer):
+class SecureReadOnly9PPeer(BoundedTCPServer):
     daemon_threads = True
     allow_reuse_address = True
 
     def __init__(self, files, context, client_pin, port=0,
-                 research_policy=None, policy_peer_id="gateway"):
+                 research_policy=None, policy_peer_id="gateway", *,
+                 max_sessions=8, max_frames_per_session=256, max_fids=256):
+        self.max_fids = bounded_limit(max_fids, 4096, "FID limit")
         if research_policy is not None and type(research_policy) is not ResearchTrustPolicy:
             raise ValueError("research trust policy required")
         if not isinstance(policy_peer_id, str) or not policy_peer_id:
@@ -131,10 +134,11 @@ class SecureReadOnly9PPeer(socketserver.ThreadingTCPServer):
         # Trusted server-side deployment configuration, never request text.
         self.policy_peer_id = policy_peer_id
         self.policy_denials = 0
-        self.metrics_lock = threading.Lock()
         self.frames = 0
         self.secure_sessions = 0
-        super().__init__(("127.0.0.1", port), _PeerHandler)
+        super().__init__(("127.0.0.1", port), _PeerHandler,
+                         max_sessions=max_sessions,
+                         max_frames_per_session=max_frames_per_session)
 
 
 class _GatewayHandler(socketserver.BaseRequestHandler):
@@ -151,7 +155,7 @@ class _GatewayHandler(socketserver.BaseRequestHandler):
                         raise BridgeDenied("server pin mismatch")
                     with server.metrics_lock:
                         server.verified_tls_sessions += 1
-                    while True:
+                    for _ in range(server.max_frames_per_session):
                         request = read_frame(self.request)
                         kind, tag, cursor = unframe(request)
                         if kind not in ALLOWED_9P:
@@ -171,24 +175,28 @@ class _GatewayHandler(socketserver.BaseRequestHandler):
                         self.request.sendall(response)
                         with server.metrics_lock:
                             server.forwarded_frames += 1
+                    server.record_frame_quota_close()
         except (BridgeDenied, TimeoutError, OSError, ssl.SSLError, ValueError,
                 EOFError, struct.error):
             # Fail closed: never fall back to an unauthenticated upstream.
             pass
 
 
-class Local9PTLSGateway(socketserver.ThreadingTCPServer):
+class Local9PTLSGateway(BoundedTCPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, context, server_pin, upstream_port, port=15640):
+    def __init__(self, context, server_pin, upstream_port, port=15640, *,
+                 max_sessions=8, max_frames_per_session=256):
         if not isinstance(context, ssl.SSLContext) or not 0 < upstream_port < 65536:
             raise ValueError("invalid gateway configuration")
         self.context = context
         self.server_pin = _pin(server_pin)
         self.upstream_port = upstream_port
-        self.metrics_lock = threading.Lock()
         self.forwarded_frames = 0
         self.verified_tls_sessions = 0
         self.denied_writes = 0
-        super().__init__(("127.0.0.1", port), _GatewayHandler)
+        super().__init__(("127.0.0.1", port), _GatewayHandler,
+                         max_sessions=max_sessions,
+                         max_frames_per_session=max_frames_per_session)
+
