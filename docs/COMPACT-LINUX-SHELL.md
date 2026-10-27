@@ -81,6 +81,11 @@ kernel/resource/identity checks. Evidence: `phase9-linux-shell.json`.
 
 ## Completion boundary
 
+The subsequent opt-in `-j` profile implements bounded fork/vfork, registered-image
+exec, wait4 and pipes; see [COMPACT-LINUX-JOBS.md](COMPACT-LINUX-JOBS.md). The
+limitations below describe this earlier single-process `-p` profile.
+
+
 This is a usable **bounded shell subset**, not a complete Linux CLI environment.
 Pipelines, command substitution, fork/exec/wait, subprocess scheduling and pipes
 are not implemented. Scripts requiring them fail explicitly. Dynamic ELF,

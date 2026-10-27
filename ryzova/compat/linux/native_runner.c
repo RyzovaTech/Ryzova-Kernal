@@ -1,7 +1,18 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Native Plan 9 user-space application; interprets a bounded Linux ELF subset. */
-#include "process.h"
+#include "jobs.h"
 #define IMAGE_LIMIT (1024U * 1024U)
+
+static unsigned char *
+readimage(char *path,size_t limit,size_t *size)
+{
+    unsigned char *bytes;int fd;long n;
+    fd=open(path,OREAD);if(fd<0)sysfatal("open executable grant: %r");
+    bytes=malloc(limit+1);if(bytes==nil)sysfatal("allocate image: %r");
+    *size=0;
+    while(*size<limit+1){n=read(fd,bytes+*size,limit+1-*size);if(n<0)sysfatal("read executable grant: %r");if(!n)break;*size+=n;}
+    close(fd);if(*size==0 || *size>limit)sysfatal("executable grant exceeds image limit");return bytes;
+}
 
 static int64_t
 output(void *context, int fd, const unsigned char *bytes, size_t size)
@@ -13,8 +24,12 @@ output(void *context, int fd, const unsigned char *bytes, size_t size)
 void
 main(int argc, char **argv)
 {
-    int fd, status, filemode, processmode, argi;
+    int fd, status, filemode, processmode, jobsmode, argi;
     const char *env[RYZ_PROCESS_ARGS];
+    char *grant_text[RYZ_PROCESS_ARGS],*eq;
+    RyzLinuxExec grants[RYZ_PROCESS_ARGS];
+    size_t gi;
+    RyzJobConfig config;
     RyzProcessArgs args;
     long n;
     size_t used, image_limit, arena_limit;
@@ -23,10 +38,13 @@ main(int argc, char **argv)
     RyzLinuxFiles files;
     RyzVmResult result;
 
-    filemode=processmode=0; inputpath=nil; argi=1;
+    filemode=processmode=jobsmode=0;
+    memset(&config,0,sizeof(config));config.execs=grants;memset(grants,0,sizeof(grants)); inputpath=nil; argi=1;
     memset(&args,0,sizeof args);
     while(argi<argc){
-        if(strcmp(argv[argi],"-p")==0){ processmode=1; argi++; }
+        if(strcmp(argv[argi],"-j")==0){jobsmode=processmode=1;argi++;}
+        else if(strcmp(argv[argi],"-x")==0 && argi+1<argc && config.exec_count<RYZ_PROCESS_ARGS){grant_text[config.exec_count++]=argv[argi+1];argi+=2;}
+        else if(strcmp(argv[argi],"-p")==0){ processmode=1; argi++; }
         else if(strcmp(argv[argi],"-i")==0 && argi+1<argc && !filemode){
             filemode=1; inputpath=argv[argi+1]; argi+=2;
         }else if(strcmp(argv[argi],"-e")==0 && argi+1<argc && args.envc<RYZ_PROCESS_ARGS){
@@ -34,8 +52,8 @@ main(int argc, char **argv)
         }else if(strcmp(argv[argi],"--")==0){ argi++; break; }
         else break;
     }
-    if(argi>=argc || (!processmode && (argc-argi!=1 || args.envc!=0))){
-        fprint(2, "usage: compact-linux [-p [-e KEY=VALUE]] [-i input-file] ELF [args...]\n");
+    if(argi>=argc || (config.exec_count && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
+        fprint(2, "usage: compact-linux [-p | -j [-x guest-path[=host-ELF]]] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
         exits("usage");
     }
     if(rfork(RFNAMEG|RFENVG) < 0)
@@ -45,27 +63,17 @@ main(int argc, char **argv)
     args.envp=env;
     input = fileout = nil;
     memset(&files, 0, sizeof files);
-    fd = open(imagepath, OREAD);
-    if(fd < 0)
-        sysfatal("open input: %r");
     image_limit=processmode?RYZ_PROCESS_IMAGE_MAX:IMAGE_LIMIT;
     arena_limit=processmode?RYZ_PROCESS_MAX_SPAN:RYZ_VM_MAX_SPAN;
-    image = malloc(image_limit + 1);
-    arena = malloc(arena_limit);
-    if(image == nil || arena == nil)
-        sysfatal("allocate bounded runtime: %r");
-    used = 0;
-    while(used < image_limit + 1){
-        n = read(fd, image + used, image_limit + 1 - used);
-        if(n < 0)
-            sysfatal("read input: %r");
-        if(n == 0)
-            break;
-        used += n;
+    image=readimage(imagepath,image_limit,&used);arena=malloc(arena_limit);
+    if(arena==nil)sysfatal("allocate bounded runtime: %r");
+    for(gi=0;gi<config.exec_count;gi++){
+        grants[gi].path=grant_text[gi];eq=strchr(grant_text[gi],'=');
+        if(eq){
+            *eq=0;if(eq[1]==0)sysfatal("empty executable grant path");
+            grants[gi].image=readimage(eq+1,RYZ_PROCESS_IMAGE_MAX,&grants[gi].size);
+        }else{grants[gi].image=image;grants[gi].size=used;}
     }
-    close(fd);
-    if(used == 0 || used > image_limit)
-        sysfatal("input outside 1..%lud byte limit", (ulong)image_limit);
     if(filemode){
         input = malloc(RYZ_LINUX_FILE_MAX + 1);
         fileout = malloc(RYZ_LINUX_FILE_MAX);
@@ -89,7 +97,9 @@ main(int argc, char **argv)
         files.input = input;
         files.output = fileout;
         files.output_capacity = RYZ_LINUX_FILE_MAX;
-        if(processmode)
+        if(jobsmode)
+            status=ryz_vm_run_jobs_elf(image,used,arena,arena_limit,&files,&args,&config,output,nil,&result);
+        else if(processmode)
             status=ryz_vm_run_process_elf(image,used,arena,arena_limit,&files,&args,output,nil,&result);
         else
             status = ryz_vm_run_file_elf(image, used, arena, RYZ_VM_MAX_SPAN,
@@ -104,7 +114,9 @@ main(int argc, char **argv)
             }
         }
         fprint(2, "COMPACT_FILES_RESULT bytes=%ud profile=files-v1\n", (uint)files.output_size);
-    }else if(processmode)
+    }else if(jobsmode)
+        status=ryz_vm_run_jobs_elf(image,used,arena,arena_limit,nil,&args,&config,output,nil,&result);
+    else if(processmode)
         status=ryz_vm_run_process_elf(image,used,arena,arena_limit,nil,&args,output,nil,&result);
     else
         status = ryz_vm_run_static_elf(image, used, arena, RYZ_VM_MAX_SPAN,
@@ -112,8 +124,10 @@ main(int argc, char **argv)
     fprint(2, "COMPACT_LINUX_RESULT status=%d exited=%d exit=%ud steps=%ud syscalls=%ud\n",
         status, result.exited, (uint)result.exit_status,
         (uint)result.executed_steps, (uint)result.syscall_count);
+    if(jobsmode)fprint(2,"COMPACT_JOBS_STATS forks=%ud execs=%ud peak=%ud blocked=%ud pipebytes=%llud\n",(uint)result.forks,(uint)result.execs,(uint)result.peak_tasks,(uint)result.blocked_syscalls,(uvlong)result.pipe_bytes);
     if(processmode && status != RYZ_VM_OK)
         fprint(2,"COMPACT_PROCESS_FAULT rip=%llux\n",result.last_rip);
+    for(gi=0;gi<config.exec_count;gi++)if(grants[gi].image!=image)free((void *)grants[gi].image);
     free(input);
     free(fileout);
     free(arena);

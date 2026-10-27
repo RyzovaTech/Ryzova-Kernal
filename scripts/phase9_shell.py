@@ -52,7 +52,7 @@ def commands(commit):
            '''/amd64/bin/compact-linux -p -i /tmp/shell-data /tmp/busybox ash -c 'read x </input; echo "$x"' && echo FLEX_SHELL_READ_OK''',
            "/amd64/bin/compact-linux -p -i /tmp/shell-data /tmp/busybox ash -c 'echo first >/output; echo second >>/output' && echo FLEX_SHELL_REDIRECT_OK",
            'echo FLEX_SHELL_END']
-    return [op + f'; echo RYZOVA_RUNTIME_STAGE_{80+i}' for i, op in enumerate(ops)] + ['echo FLEX_SHELL_DONE']
+    return [op + f'; echo RYZOVA_RUNTIME_STAGE_{80+i}' for i, op in enumerate(ops)] + ['echo FLEX_SHELL_DONE; echo RYZOVA_RUNTIME_STAGE_93']
 
 
 def inspect(serial, commit):

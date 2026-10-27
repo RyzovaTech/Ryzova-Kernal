@@ -106,6 +106,17 @@ class BusyboxTests(unittest.TestCase):
             self.assertEqual(r.returncode,2)
             self.assertRegex(r.stderr,rb'status=(2|3) ')
 
+    def test_full_multiply_pair_matches_cpu(self):
+        body=[]
+        for size,register in ((1,'bl'),(2,'bx'),(4,'ebx'),(8,'rbx')):
+            bits=(1<<(size*8))-1;sign=1<<(size*8-1)
+            for instruction in ('mul','imul'):
+                for a,b in ((0,bits),(1,bits),(bits,bits),(sign,2),(sign,sign),(sign-1,sign+1),(123,97)):
+                    body += [f'movabs ${a},%rax',f'movabs ${b},%rbx','mov $0x13579bdf,%edx',
+                             f'{instruction} %{register}','mov %rax,(%r12)','mov %rdx,8(%r12)',
+                             'setc 16(%r12)','seto 17(%r12)','add $24,%r12']
+        self.same('\n'.join(body))
+
     @unittest.skipUnless(os.environ.get('COMPACT_BUSYBOX_DIR'), 'set COMPACT_BUSYBOX_DIR to verified fixture directory')
     def test_unmodified_official_applets_match_linux(self):
         directory = Path(os.environ['COMPACT_BUSYBOX_DIR'])

@@ -14,7 +14,8 @@ enum RyzVmResultCode {
 typedef struct RyzVmResult {
     uint32_t executed_steps;
     uint32_t syscall_count;
-    uint64_t last_rip;
+    uint32_t forks,execs,peak_tasks,blocked_syscalls;
+    uint64_t last_rip,pipe_bytes;
     int exited;
     uint8_t exit_status;
 } RyzVmResult;

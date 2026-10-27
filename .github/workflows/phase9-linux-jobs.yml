@@ -1,0 +1,24 @@
+name: Phase 9.7 bounded Linux process groups and pipes
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-jobs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch SHA256 pinned unmodified multicall ELF fixture
+        run: python scripts/phase9_shell.py --fetch artifacts/jobs-fixtures
+      - name: Differential execution, shared resources, scheduler and allocation failures
+        env:
+          COMPACT_SHELL_DIR: artifacts/jobs-fixtures
+        run: python -m unittest discover -s tests -p 'test_phase9_jobs.py' -v

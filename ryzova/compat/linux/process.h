@@ -22,6 +22,24 @@ typedef struct RyzProcessArgs {
     const char *const *argv, *const *envp;
     size_t argc, envc;
 } RyzProcessArgs;
+typedef struct RyzCpu {
+    uint64_t r[16],ip,cur,flags,fsbase,gsbase,segment,tid_address;
+    unsigned char xmm[16][16];
+    uint32_t extra_steps;
+    int repeat;
+    unsigned int rex,rex_present,size;
+    int fault;
+    RyzLinuxMemory *m;
+    RyzLinuxProcess *p;
+    RyzVmResult *result;
+} RyzCpu;
+#define RYZ_CPU_BLOCKED 7
+#define RYZ_JOB_DEADLOCK 8
+#define RYZ_CPU_EXECUTED 9
+void ryz_cpu_init(RyzCpu *,RyzLinuxProcess *,RyzLinuxMemory *,uint64_t,uint64_t,RyzVmResult *);
+int ryz_cpu_tick(RyzCpu *);
+int ryz_prepare_process(const unsigned char *,size_t,unsigned char *,size_t,
+    const RyzProcessArgs *,RyzLinuxMemory *,uint64_t *,uint64_t *);
 int ryz_memory_access(RyzLinuxMemory *, uint64_t, uint64_t, unsigned int);
 int64_t ryz_memory_call(void *, const RyzLinuxRegs *);
 int ryz_memory_read(void *, uint64_t, uint64_t);

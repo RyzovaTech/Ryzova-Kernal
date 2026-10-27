@@ -20,6 +20,11 @@ static char process[] = "linux-amd64-compiler-static-v1\nstartup=argc,argv,expli
     "integer-instruction-subset=true libc=selected-static-musl TLS-segment-base=true vector=copy,xor threads=false signals=state-only\n";
 static char limits[] = "image=1048576 arena=2097152 input=65536 output=65536 stdio=65536 fds=16 steps=65536\n"
     "process-image=4194304 process-arena=16777216 process-steps=262144\n";
+static char jobs[] = "linux-amd64-static-jobs-v1\n"
+    "launch=compact-linux -j -x guest-path[=host-ELF] ELF args\n"
+    "processes=8 forks=32 execs=64 descriptors=16 shared-descriptions=64 pipes=4 pipe-bytes=4194304\n"
+    "fork=private-memory vfork=shared-memory-parent-suspended exec=explicit-image-grants wait=normal-child-exit\n"
+    "threads=false asynchronous-signals=false dynamic-linker=false general-linux=false\n";
 static char shell[] = "experimental-bounded-ash-v1\n"
     "workloads=script,variables,loops,functions,conditionals,input,output,append,cat,wc\n"
     "paths=/input:read,/output:write cwd=/,/tmp descriptors=16\n"
@@ -66,6 +71,7 @@ main(int argc, char **argv)
     leaf(linux, "limits", limits);
     leaf(linux, "process", process);
     leaf(linux, "shell", shell);
+    leaf(linux, "jobs", jobs);
     closefile(linux);
     closefile(compact);
     fs.read = fsread;

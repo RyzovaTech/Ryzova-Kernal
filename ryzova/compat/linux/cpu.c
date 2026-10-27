@@ -7,17 +7,7 @@
 #define ZF 64U
 #define SF 128U
 #define OF 2048U
-typedef struct Cpu {
-    uint64_t r[16], ip, cur, flags, fsbase, gsbase, segment, tid_address;
-    unsigned char xmm[16][16];
-    uint32_t extra_steps;
-    int repeat;
-    unsigned int rex, rex_present, size;
-    int fault;
-    RyzLinuxMemory *m;
-    RyzLinuxProcess *p;
-    RyzVmResult *result;
-} Cpu;
+typedef RyzCpu Cpu;
 typedef struct Operand {
     int reg, high, rip;
     uint64_t address;
@@ -173,6 +163,23 @@ static uint64_t multiply(Cpu *c,uint64_t a,uint64_t b,unsigned int size)
     if(bm!=0 && am>limit/bm)c->flags|=CF|OF;
     return value;
 }
+static void multiply_pair(Cpu *c,uint64_t b,unsigned int size,int is_signed)
+{
+    uint64_t bits=mask(size),a=c->r[0]&bits,low,high,t,w0,w1,w2,sign=UINT64_C(1)<<(size*8-1);
+    b&=bits;
+    if(size<8){t=a*b;low=t&bits;high=(t>>(size*8))&bits;}
+    else{
+        w0=(a&mask(4))*(b&mask(4));
+        t=(a>>32)*(b&mask(4))+(w0>>32);w1=t&mask(4);w2=t>>32;
+        w1+=(a&mask(4))*(b>>32);
+        high=(a>>32)*(b>>32)+w2+(w1>>32);low=(w1<<32)|(w0&mask(4));
+    }
+    if(is_signed){if(a&sign)high=(high-b)&bits;if(b&sign)high=(high-a)&bits;}
+    c->flags&=~(uint64_t)(CF|OF);
+    if(is_signed?(high!=((low&sign)?bits:0)):(high!=0))c->flags|=CF|OF;
+    if(size==1)put(c,regop(c,0,2),2,low|(high<<8));
+    else{put(c,regop(c,0,size),size,low);put(c,regop(c,2,size),size,high);}
+}
 static int divide(Cpu *c, uint64_t divisor, unsigned int size, int is_signed)
 {
     unsigned int n=size*8, i;
@@ -241,13 +248,28 @@ static int guest_syscall(Cpu *c)
         c->result->syscall_count++;
         return RYZ_VM_OK;
     }
+    r.rax=nr;r.rdi=c->r[7];r.rsi=c->r[6];r.rdx=c->r[2];r.r10=c->r[10];r.r8=c->r[8];r.r9=c->r[9];
+    if((nr==57 || nr==58 || nr==59 || nr==61) && c->p->job_call){
+        int state=c->p->job_call(c->p->job_context,c,&r,&answer);
+        if(state==RYZ_CPU_BLOCKED)return state;
+        if(state==RYZ_CPU_EXECUTED){c->result->syscall_count++;return RYZ_VM_OK;}
+        if(state!=RYZ_VM_OK)return state;
+        c->r[1]=c->cur;c->r[11]=c->flags;c->r[0]=(uint64_t)answer;c->result->syscall_count++;return RYZ_VM_OK;
+    }
+    if((nr==22 || nr==293) && c->p->world){
+        answer=ryz_linux_syscall(c->p,&r);
+        if(answer==RYZ_LINUX_BLOCKED)return RYZ_CPU_BLOCKED;
+        c->r[1]=c->cur;c->r[11]=c->flags;c->r[0]=(uint64_t)answer;c->result->syscall_count++;return RYZ_VM_OK;
+    }
     if(nr!=7 && nr!=32 && nr!=33 && nr!=292 && nr!=40 && nr!=2 && nr!=8 && nr!=80 && nr!=63 && nr!=79 && nr!=105 && nr!=106 && nr!=117 && nr!=119 && nr!=13 && nr!=14 && nr!=110 && nr!=111 && nr!=4 && nr!=5 && nr!=6 && nr!=262 && nr!=107 && nr!=108 && nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
        nr!=16 && nr!=20 && nr!=72 && nr!=39 && nr!=60 && nr!=102 && nr!=104 && nr!=186 && nr!=231 && nr!=257)
         return RYZ_VM_SYSCALL_UNSUPPORTED;
     r.rax=nr; r.rdi=c->r[7]; r.rsi=c->r[6]; r.rdx=c->r[2];
     r.r10=c->r[10]; r.r8=c->r[8]; r.r9=c->r[9];
+    answer=ryz_linux_syscall(c->p,&r);
+    if(answer==RYZ_LINUX_BLOCKED)return RYZ_CPU_BLOCKED;
     c->r[1]=c->cur; c->r[11]=c->flags;
-    c->r[0]=(uint64_t)ryz_linux_syscall(c->p,&r);
+    c->r[0]=(uint64_t)answer;
     c->result->syscall_count++;
     return RYZ_VM_OK;
 }
@@ -381,6 +403,9 @@ static int step(Cpu *c)
         rm=decode(c,&reg,&group,size);
         if(group==0){ b=fetch(c,size==8?4:size); if(size==8)b=(uint64_t)(int64_t)(int32_t)b; a=get(c,rm,size); if(!c->fault)arithmetic(c,8,a,b,size); }
         else if(group==2 || group==3){ a=get(c,rm,size); if(!c->fault){ v=group==2?~a:arithmetic(c,5,0,a,size); put(c,rm,size,v); } }
+        else if(group==4 || group==5){
+            a=get(c,rm,size);if(!c->fault)multiply_pair(c,a,size,group==5);
+        }
         else if(group==6 || group==7){
             a=get(c,rm,size);
             if(!c->fault && !divide(c,a,size,group==7))return RYZ_VM_ARITHMETIC_ERROR;
@@ -462,18 +487,24 @@ static int step(Cpu *c)
     c->ip=jump?target:c->cur;
     return RYZ_VM_OK;
 }
+void ryz_cpu_init(RyzCpu *c,RyzLinuxProcess *p,RyzLinuxMemory *m,uint64_t entry,uint64_t stack,RyzVmResult *result)
+{
+    memset(c,0,sizeof(*c));c->p=p;c->m=m;c->ip=entry;c->r[4]=stack;c->flags=0x202;c->result=result;
+}
+int ryz_cpu_tick(RyzCpu *c)
+{
+    int rv;
+    if(c->result->executed_steps>=RYZ_PROCESS_STEPS)return RYZ_VM_STEP_LIMIT;
+    c->result->last_rip=c->ip;c->result->executed_steps++;c->extra_steps=0;
+    rv=step(c);c->result->executed_steps+=c->extra_steps;return rv;
+}
 int ryz_cpu_run(RyzLinuxProcess *p,RyzLinuxMemory *m,uint64_t entry,uint64_t stack,RyzVmResult *result)
 {
-    Cpu c;
-    uint32_t i;
-    int rv;
-    memset(&c,0,sizeof(c)); c.p=p; c.m=m; c.ip=entry; c.r[4]=stack; c.flags=0x202; c.result=result;
-    for(i=0;i<RYZ_PROCESS_STEPS;){
-        result->last_rip=c.ip; result->executed_steps=i+1; c.extra_steps=0;
-        rv=step(&c);
-        i+=1+c.extra_steps; result->executed_steps=i;
-        if(rv!=RYZ_VM_OK)return rv;
-        if(p->exited){ if(c.tid_address && ryz_memory_access(m,c.tid_address,4,RYZ_WRITE))store(&c,c.tid_address,4,0); result->exited=1; result->exit_status=p->exit_status; return RYZ_VM_OK; }
+    RyzCpu c;int rv;
+    ryz_cpu_init(&c,p,m,entry,stack,result);
+    for(;;){
+        rv=ryz_cpu_tick(&c);if(rv!=RYZ_VM_OK)return rv;
+        if(p->exited){if(c.tid_address && ryz_memory_access(m,c.tid_address,4,RYZ_WRITE))store(&c,c.tid_address,4,0);
+            result->exited=1;result->exit_status=p->exit_status;return RYZ_VM_OK;}
     }
-    return RYZ_VM_STEP_LIMIT;
 }

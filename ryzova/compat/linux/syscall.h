@@ -24,10 +24,34 @@ typedef int (*RyzLinuxMemoryWrite)(void *context, uint64_t address, uint64_t siz
 typedef int64_t (*RyzLinuxMemoryCall)(void *context, const RyzLinuxRegs *regs);
 typedef struct RyzLinuxFD {
     enum RyzLinuxNode node;
-    int mode, open, cloexec, append;
+    int mode, open, cloexec, append, nonblock;
     unsigned int description;
+    unsigned int pipe;
     size_t offset;
 } RyzLinuxFD;
+#define RYZ_WORLD_DESCRIPTIONS 64U
+#define RYZ_WORLD_PIPES 4U
+#define RYZ_LINUX_BLOCKED ((int64_t)-4096)
+typedef struct RyzLinuxPipe {
+    int used;size_t head,size;
+    unsigned char bytes[RYZ_LINUX_FILE_MAX];
+} RyzLinuxPipe;
+typedef struct RyzLinuxDescription {
+    RyzLinuxFD fd;unsigned int refs;int used;
+} RyzLinuxDescription;
+typedef struct RyzLinuxExec {
+    const char *path;
+    const unsigned char *image;
+    size_t size;
+} RyzLinuxExec;
+typedef struct RyzLinuxWorld {
+    RyzLinuxDescription descriptions[RYZ_WORLD_DESCRIPTIONS];
+    RyzLinuxPipe pipes[RYZ_WORLD_PIPES];
+    uint64_t output_bytes,pipe_bytes;
+    const RyzLinuxExec *execs;
+    size_t exec_count;
+} RyzLinuxWorld;
+typedef int (*RyzLinuxJobCall)(void *,void *,const RyzLinuxRegs *,int64_t *);
 typedef struct RyzLinuxProcess {
     RyzLinuxNamespace ns;
     uint64_t guest_base;
@@ -39,6 +63,10 @@ typedef struct RyzLinuxProcess {
     void *write_context;
     uint64_t output_bytes;
     int cwd;
+    uint32_t parent_pid,group_pid;
+    RyzLinuxWorld *world;
+    RyzLinuxJobCall job_call;
+    void *job_context;
     uint64_t signal_mask;
     unsigned char signal_actions[64][32];
     RyzLinuxFiles *files;
@@ -54,6 +82,10 @@ int ryz_linux_process_init(RyzLinuxProcess *p, uint32_t namespace_id,
     uint32_t pid, uint32_t uid, uint32_t gid, uint64_t guest_base,
     unsigned char *guest_bytes, size_t guest_size,
     RyzLinuxWrite write_output, void *write_context);
+
+void ryz_world_attach(RyzLinuxProcess *,RyzLinuxWorld *);
+void ryz_world_fork(RyzLinuxProcess *,RyzLinuxProcess *);
+void ryz_world_close(RyzLinuxProcess *,int);
 
 /* Linux negative errno (never host errno); exit records status. */
 int64_t ryz_linux_syscall(RyzLinuxProcess *p, const RyzLinuxRegs *regs);

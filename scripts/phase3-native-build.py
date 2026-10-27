@@ -37,6 +37,7 @@ from phase9_linux_environment import commands as environment_commands, fixtures 
 from phase9_process import build as build_process, commands as process_commands, inspect as inspect_process
 from phase9_busybox import fetch as fetch_busybox, commands as busybox_commands, inspect as inspect_busybox
 from phase9_shell import fetch as fetch_shell, commands as shell_commands, inspect as inspect_shell
+from phase9_jobs import fixtures as jobs_fixtures, commands as jobs_commands, inspect as inspect_jobs
 OUT = ROOT / "artifacts" / "phase3"
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "network-probe.txt").write_text("RYZOVA_NETWORK_DATA\n")
@@ -55,6 +56,7 @@ archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).s
 print("SOURCE_SHA", SOURCE_SHA, "ARCHIVE_SHA256", archive_hash, flush=True)
 fetch_busybox(OUT)
 fetch_shell(OUT)
+jobs_fixture_sha256=jobs_fixtures(OUT)
 process_elf_sha256 = build_process(OUT / "process-compiled.elf")
 (OUT / "flex-input.bin").write_bytes(environment_payload(SOURCE_SHA))
 for name, data in environment_fixtures().items():
@@ -338,7 +340,7 @@ runtime_commands=[
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
-] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)] + list(guest_identity_commands()) + compact_commands() + environment_commands() + process_commands(SOURCE_SHA) + busybox_commands(SOURCE_SHA) + shell_commands(SOURCE_SHA)
+] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)] + list(guest_identity_commands()) + compact_commands() + environment_commands() + process_commands(SOURCE_SHA) + busybox_commands(SOURCE_SHA) + shell_commands(SOURCE_SHA) + jobs_commands(SOURCE_SHA)
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(fresh_cmd,stdout=host,stderr=subprocess.STDOUT)
@@ -423,7 +425,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                     bootstate["runtime_stage"]=i+1
                     guest.sendall((runtime_commands[i+1]+"\r").encode())
                     print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
-            if re.search(rb"(?:\r?\n)FLEX_SHELL_DONE(?:\r?\n)",bytes(bootlog)):
+            if re.search(rb"(?:\r?\n)FLEX_JOBS_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
@@ -477,6 +479,9 @@ print("NATIVE COMPACT SUBSET", compact_evidence["passed"], flush=True)
 environment_evidence = inspect_environment(bytes(raw), bytes(bootlog), SOURCE_SHA)
 (OUT / "phase9-linux-environment.json").write_text(json.dumps(environment_evidence, indent=2) + "\n")
 print("NATIVE LINUX FILE ENVIRONMENT", environment_evidence["passed"], flush=True)
+jobs_evidence = inspect_jobs(bytes(bootlog), SOURCE_SHA, jobs_fixture_sha256)
+(OUT / "phase9-linux-jobs.json").write_text(json.dumps(jobs_evidence, indent=2) + "\n")
+print("NATIVE LINUX JOBS", jobs_evidence["passed"], flush=True)
 shell_evidence = inspect_shell(bytes(bootlog), SOURCE_SHA)
 (OUT / "phase9-linux-shell.json").write_text(json.dumps(shell_evidence, indent=2) + "\n")
 print("NATIVE LINUX SHELL", shell_evidence["passed"], flush=True)
@@ -540,7 +545,7 @@ for label,ok in native_9p_evidence["checks"].items():
     f"V7 native 9front tlsclient pinned TLS1.2 9P: {guest_tls_evidence['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"] and guest_identity_evidence["passed"] and compact_evidence["passed"] and environment_evidence["passed"] and process_evidence["passed"] and busybox_evidence["passed"] and shell_evidence["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"] and guest_identity_evidence["passed"] and compact_evidence["passed"] and environment_evidence["passed"] and process_evidence["passed"] and busybox_evidence["passed"] and shell_evidence["passed"] and jobs_evidence["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
 print("PASS native 9front tlsclient pinned TLS1.2 guest ingress and host mutual TLS1.3 peer; native 9P guest SHA, M2/M4 preserved.",flush=True)

@@ -20,7 +20,7 @@ class ShellTests(unittest.TestCase):
         cls.runner=cls.directory/'runner'
         cls.flags=['cc','-std=c11','-Wall','-Wextra','-Werror','-O1','-fsanitize=undefined','-fno-sanitize-recover=all']
         subprocess.run([*cls.flags,*[str(c/(n+'.c')) for n in ('elf64','namespace','syscall','subset_vm','memory','process','cpu','process_probe')],'-o',str(cls.runner)],check=True,capture_output=True)
-        cls.binary=Path(os.environ.get('COMPACT_SHELL_DIR','/nonexistent'))/'busybox'
+        cls.binary=(Path(os.environ.get('COMPACT_SHELL_DIR','/nonexistent'))/'busybox').resolve()
 
     @classmethod
     def tearDownClass(cls):cls.tmp.cleanup()
