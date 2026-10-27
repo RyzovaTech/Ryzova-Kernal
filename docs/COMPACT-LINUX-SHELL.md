@@ -88,3 +88,23 @@ application toolchains, general file/directory creation, sockets, timers, termin
 job control, asynchronous signals, threads/futexes and broad application/physical
 hardware qualification remain unfinished. General Linux completion must not be
 inferred from successful shell builtins or these five native workloads.
+
+## Recorded validation
+
+[Local native evidence](validation/phase9-6-local-native.json) records the tested
+remote commit, the separate local validation snapshot, matching Git hashes for
+all six kernel/header/runtime/script/test source subtrees, the independently
+extracted kernel hash and each mandatory native report. The local snapshot
+omits unrelated repository subtrees and is not a GitHub PR merge commit.
+
+All five native shell/file workloads passed on the source-built kernel. All 29
+Phase 9 tests, 63 Phase 5 tests, 4 M2 evidence tests and 5 M4 legacy gate tests
+passed locally. GitHub Actions jobs stopped before runner allocation, including
+a retry; the connector did not expose the underlying reason. Local QEMU success
+must not be presented as successful GitHub Actions checks.
+
+For environments that prohibit Unix control sockets, set
+`RYZOVA_QEMU_LOOPBACK=1` when running `scripts/phase3-native-build.py`. QEMU serial
+and monitor control channels then bind only to 127.0.0.1 on ephemeral ports.
+Guest networking, TLS, identity and resource validation remain mandatory. The
+normal CI Unix-socket transport remains the default.
