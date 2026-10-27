@@ -1,0 +1,22 @@
+name: Phase 9.3 Linux file environment regressions
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-file-environment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Differential Linux execution, quotas, memory and namespace denials
+        run: python -m unittest discover -s tests -p 'test_phase9_linux_environment.py' -v
+      - name: Preserve existing compatibility foundation
+        run: python -m unittest discover -s tests -p 'test_phase5*.py' -v

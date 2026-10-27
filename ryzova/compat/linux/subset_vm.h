@@ -5,6 +5,7 @@
 #include "syscall.h"
 #define RYZ_VM_MAX_SPAN (2U * 1024U * 1024U)
 #define RYZ_VM_MAX_STEPS 2048U
+#define RYZ_VM_FILE_STEPS 65536U
 enum RyzVmResultCode {
     RYZ_VM_OK = 0, RYZ_VM_BAD_INPUT = 1, RYZ_VM_MAP_ERROR = 2,
     RYZ_VM_OPCODE_UNSUPPORTED = 3, RYZ_VM_STEP_LIMIT = 4,
@@ -24,5 +25,10 @@ typedef struct RyzVmResult {
  */
 int ryz_vm_run_static_elf(const unsigned char *elf, size_t elf_size,
     unsigned char *arena, size_t arena_size,
+    RyzLinuxWrite output, void *opaque, RyzVmResult *result);
+/* Opt-in bounded file profile. Only /input (read) and /output (write) buffers.
+ * Output is cleared before each invocation, including invalid ELF failures. */
+int ryz_vm_run_file_elf(const unsigned char *elf, size_t elf_size,
+    unsigned char *arena, size_t arena_size, RyzLinuxFiles *files,
     RyzLinuxWrite output, void *opaque, RyzVmResult *result);
 #endif

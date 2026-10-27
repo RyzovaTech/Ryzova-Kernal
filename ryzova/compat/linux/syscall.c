@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-/* All operations are emulated, with no host syscalls or native kernel hooks. */
+/* Virtual syscalls; only caller-supplied buffers and output callback are used. */
 #include "syscall.h"
 
 /* Linux AMD64 syscall and errno numbers (ABI constants). */
@@ -17,6 +17,10 @@
 #define L_O_WRONLY 1U
 #define L_O_RDWR 2U
 #define L_O_ACCMODE 3U
+#define L_O_TRUNC 01000U
+#define L_ENOSPC 28
+#define L_EACCES 13
+#define L_ENOENT 2
 #define L_O_CLOEXEC 02000000U
 #define L_EPERM 1
 #define L_EIO 5
@@ -79,13 +83,27 @@ static int64_t do_write(RyzLinuxProcess *p, uint64_t fd,
     if (fd == 1 || fd == 2) {
         if (p->write_output == NULL)
             return -L_EIO;
+        if (count > RYZ_LINUX_FILE_MAX - p->output_bytes)
+            return -L_ENOSPC;
         result = p->write_output(p->write_context, (int)fd, buf, (size_t)count);
         if (result < 0 || (uint64_t)result > count)
             return -L_EIO;
+        p->output_bytes += (uint64_t)result;
         return result;
     }
     if (p->fds[fd].mode == 0)
         return -L_EBADF;
+    if (p->fds[fd].node == RYZ_NS_OUTPUT && p->files != NULL) {
+        RyzLinuxFiles *f = p->files;
+        size_t offset = p->fds[fd].offset;
+        if (offset > f->output_capacity || count > f->output_capacity - offset)
+            return -L_ENOSPC;
+        memcpy(f->output + offset, buf, (size_t)count);
+        p->fds[fd].offset += (size_t)count;
+        if (p->fds[fd].offset > f->output_size)
+            f->output_size = p->fds[fd].offset;
+        return (int64_t)count;
+    }
     if (p->fds[fd].node == RYZ_NS_DEV_NULL ||
         p->fds[fd].node == RYZ_NS_DEV_ZERO)
         return (int64_t)count;
@@ -101,10 +119,24 @@ static int64_t do_read(RyzLinuxProcess *p, uint64_t fd,
         return -L_EINVAL;
     if (!guest_range(p, address, count, &buf))
         return -L_EFAULT;
+    if (count != 0 && p->memory_write != NULL &&
+        !p->memory_write(p->memory_context, address, count))
+        return -L_EFAULT;
     if (fd == 0)
         return 0; /* Host-independent EOF for unconnected stdin. */
     if (fd <= 2 || p->fds[fd].mode == 1)
         return -L_EBADF;
+    if (p->fds[fd].node == RYZ_NS_INPUT && p->files != NULL) {
+        RyzLinuxFiles *f = p->files;
+        size_t offset = p->fds[fd].offset;
+        if (offset >= f->input_size)
+            return 0;
+        if (count > f->input_size - offset)
+            count = f->input_size - offset;
+        memcpy(buf, f->input + offset, (size_t)count);
+        p->fds[fd].offset += (size_t)count;
+        return (int64_t)count;
+    }
     if (p->fds[fd].node == RYZ_NS_DEV_ZERO) {
         memset(buf, 0, (size_t)count);
         return (int64_t)count;
@@ -122,7 +154,7 @@ static int64_t do_openat(RyzLinuxProcess *p, uint64_t dirfd,
     int fd, code;
     size_t i;
     if (dirfd != L_AT_FDCWD ||
-        (flags & ~(uint64_t)(L_O_ACCMODE | L_O_CLOEXEC)) != 0)
+        (flags & ~(uint64_t)(L_O_ACCMODE | L_O_CLOEXEC | L_O_TRUNC)) != 0)
         return -L_EINVAL;
     for (i = 0; i < RYZ_NS_PATH_MAX; ++i) {
         if (!guest_range(p, pathaddr, (uint64_t)i + 1U, &buf))
@@ -132,16 +164,39 @@ static int64_t do_openat(RyzLinuxProcess *p, uint64_t dirfd,
     }
     if (i == RYZ_NS_PATH_MAX)
         return -L_EINVAL;
-    code = ryz_linux_ns_resolve(&p->ns, (const char *)buf, i+1, &kind);
+    if (p->files != NULL && strcmp((const char *)buf, "input") == 0) {
+        kind = RYZ_NS_INPUT;
+        code = 0;
+    } else if (p->files != NULL && strcmp((const char *)buf, "output") == 0) {
+        kind = RYZ_NS_OUTPUT;
+        code = 0;
+    } else
+        code = ryz_linux_ns_resolve(&p->ns, (const char *)buf, i+1, &kind);
     if (code)
         return code;
-    if (kind != RYZ_NS_DEV_NULL && kind != RYZ_NS_DEV_ZERO)
-        return -L_EPERM;
+    if (kind == RYZ_NS_INPUT || kind == RYZ_NS_OUTPUT) {
+        if (p->files == NULL)
+            return -L_ENOENT;
+        if ((kind == RYZ_NS_INPUT && ((flags & L_O_ACCMODE) != 0 ||
+                                      (flags & L_O_TRUNC) != 0)) ||
+            (kind == RYZ_NS_OUTPUT && (flags & L_O_ACCMODE) != L_O_WRONLY))
+            return -L_EACCES;
+    } else {
+        if (kind != RYZ_NS_DEV_NULL && kind != RYZ_NS_DEV_ZERO)
+            return -L_EPERM;
+        if ((flags & L_O_TRUNC) != 0)
+            return -L_EINVAL;
+    }
     access = (unsigned int)(flags & L_O_ACCMODE);
     if (access == L_O_RDWR || access > L_O_RDWR)
         return -L_EINVAL;
     for (fd = 3; fd < (int)RYZ_LINUX_FD_MAX; ++fd)
         if (!p->fds[fd].open) {
+            if (kind == RYZ_NS_OUTPUT && (flags & L_O_TRUNC) != 0) {
+                memset(p->files->output, 0, p->files->output_capacity);
+                p->files->output_size = 0;
+            }
+            p->fds[fd].offset = 0;
             p->fds[fd].open = 1;
             p->fds[fd].node = kind;
             p->fds[fd].mode = access == L_O_WRONLY ? 1 : 0;

@@ -6,7 +6,7 @@
 #define RYZ_NS_PATH_MAX 256U
 enum RyzLinuxNode {
     RYZ_NS_NONE = 0, RYZ_NS_DEV_NULL, RYZ_NS_DEV_ZERO,
-    RYZ_NS_PROC_SELF, RYZ_NS_TMP
+    RYZ_NS_PROC_SELF, RYZ_NS_TMP, RYZ_NS_INPUT, RYZ_NS_OUTPUT
 };
 typedef struct RyzLinuxNamespace {
     uint32_t pid, uid, gid, namespace_id;

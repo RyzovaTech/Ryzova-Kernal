@@ -13,9 +13,18 @@ typedef struct RyzLinuxRegs {
 
 typedef int64_t (*RyzLinuxWrite)(void *opaque, int fd,
                                  const unsigned char *bytes, size_t size);
+#define RYZ_LINUX_FILE_MAX 65536U
+typedef struct RyzLinuxFiles {
+    const unsigned char *input;
+    size_t input_size;
+    unsigned char *output;
+    size_t output_capacity, output_size;
+} RyzLinuxFiles;
+typedef int (*RyzLinuxMemoryWrite)(void *context, uint64_t address, uint64_t size);
 typedef struct RyzLinuxFD {
     enum RyzLinuxNode node;
     int mode, open;
+    size_t offset;
 } RyzLinuxFD;
 typedef struct RyzLinuxProcess {
     RyzLinuxNamespace ns;
@@ -25,6 +34,10 @@ typedef struct RyzLinuxProcess {
     RyzLinuxFD fds[RYZ_LINUX_FD_MAX];
     RyzLinuxWrite write_output;
     void *write_context;
+    uint64_t output_bytes;
+    RyzLinuxFiles *files;
+    RyzLinuxMemoryWrite memory_write;
+    void *memory_context;
     int exited;
     uint8_t exit_status;
 } RyzLinuxProcess;

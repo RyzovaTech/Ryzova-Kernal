@@ -66,6 +66,10 @@ int ryz_linux_ns_resolve(const RyzLinuxNamespace *ns, const char *path,
         *kind = RYZ_NS_PROC_SELF;
     else if (strcmp(normalized, "/tmp") == 0)
         *kind = RYZ_NS_TMP;
+    else if (strcmp(normalized, "/input") == 0)
+        *kind = RYZ_NS_INPUT;
+    else if (strcmp(normalized, "/output") == 0)
+        *kind = RYZ_NS_OUTPUT;
     else
         return -L_ENOENT;
     return 0;

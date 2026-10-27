@@ -32,6 +32,7 @@ from phase7_secure_closeout import gateway_metrics_report
 from phase7_native_guest_tls import commands as native_tls_commands, inspect as inspect_native_tls
 from phase8_guest_identity import commands as guest_identity_commands, inspect as inspect_guest_identity
 from phase9_compact_native import commands as compact_commands, fixtures as compact_fixtures, inspect as inspect_compact
+from phase9_linux_environment import commands as environment_commands, fixtures as environment_fixtures, payload as environment_payload, inspect as inspect_environment
 OUT = ROOT / "artifacts" / "phase3"
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "network-probe.txt").write_text("RYZOVA_NETWORK_DATA\n")
@@ -48,6 +49,9 @@ archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).s
     "Archive includes kernel, nusb user-space source, sys/include and amd64/include from exact commit.\n"
 )
 print("SOURCE_SHA", SOURCE_SHA, "ARCHIVE_SHA256", archive_hash, flush=True)
+(OUT / "flex-input.bin").write_bytes(environment_payload(SOURCE_SHA))
+for name, data in environment_fixtures().items():
+    (OUT / f"flex-{name}.elf").write_bytes(data)
 for name, data in compact_fixtures(SOURCE_SHA).items():
     (OUT / f"compact-{name}.elf").write_bytes(data)
 
@@ -136,6 +140,11 @@ if m5_arm64_native:
         "mk 9qemu > /tmp/m5-arm64-native.log >[2=1]; "
         "echo M5_ARM64_MK_STATUS_$status; tail -n 20 /tmp/m5-arm64-native.log; "
         "ls -l 9qemu; echo PHASE3_END_" + str(index)))
+
+index = len(stages)
+stages.append(("compact-linux-service",
+    "cd /sys/src/cmd/compact-linux/service && mk install > /tmp/compact-fs.log >[2=1] "
+    "&& echo COMPACT_SERVICE_BUILD_OK; tail -n 30 /tmp/compact-fs.log; echo PHASE3_END_" + str(index)))
 
 # The source-built kernel is copied through FAT, but user-space binaries are
 # installed on hjfs. Flush that filesystem before terminating this QEMU process.
@@ -318,7 +327,7 @@ runtime_commands=[
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
-] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)] + list(guest_identity_commands()) + compact_commands()
+] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)] + list(guest_identity_commands()) + compact_commands() + environment_commands()
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(fresh_cmd,stdout=host,stderr=subprocess.STDOUT)
@@ -403,7 +412,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                     bootstate["runtime_stage"]=i+1
                     guest.sendall((runtime_commands[i+1]+"\r").encode())
                     print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
-            if re.search(rb"(?:\r?\n)RYZOVA_COMPACT_DONE(?:\r?\n)",bytes(bootlog)):
+            if re.search(rb"(?:\r?\n)RYZOVA_LINUX_ENV_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
@@ -454,6 +463,9 @@ m2_pci_ok=(not m2_enabled or run_probe(
 compact_evidence = inspect_compact(bytes(raw), bytes(bootlog), SOURCE_SHA)
 (OUT / "phase9-compact-native.json").write_text(json.dumps(compact_evidence, indent=2) + "\n")
 print("NATIVE COMPACT SUBSET", compact_evidence["passed"], flush=True)
+environment_evidence = inspect_environment(bytes(raw), bytes(bootlog), SOURCE_SHA)
+(OUT / "phase9-linux-environment.json").write_text(json.dumps(environment_evidence, indent=2) + "\n")
+print("NATIVE LINUX FILE ENVIRONMENT", environment_evidence["passed"], flush=True)
 runtime_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)", bytes(bootlog)) for v in (b"RYZOVA_PROC_OK", b"RYZOVA_NET_OK")) and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 2
 # A failed output redirection causes Plan 9 rc to abort the current
 # command line. Probe it independently, then ensure a fresh subsequent
@@ -506,7 +518,7 @@ for label,ok in native_9p_evidence["checks"].items():
     f"V7 native 9front tlsclient pinned TLS1.2 9P: {guest_tls_evidence['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"] and guest_identity_evidence["passed"] and compact_evidence["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"] and guest_identity_evidence["passed"] and compact_evidence["passed"] and environment_evidence["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
 print("PASS native 9front tlsclient pinned TLS1.2 guest ingress and host mutual TLS1.3 peer; native 9P guest SHA, M2/M4 preserved.",flush=True)

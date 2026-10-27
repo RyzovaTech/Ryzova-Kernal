@@ -19,6 +19,7 @@ on:
       - 'scripts/phase7_native_guest_tls.py'
       - 'scripts/phase8_guest_identity.py'
       - 'scripts/phase9_compact_native.py'
+      - 'scripts/phase9_linux_environment.py'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -41,6 +42,7 @@ on:
       - 'scripts/phase7_native_guest_tls.py'
       - 'scripts/phase8_guest_identity.py'
       - 'scripts/phase9_compact_native.py'
+      - 'scripts/phase9_linux_environment.py'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -115,6 +117,7 @@ jobs:
             artifacts/phase3/phase7-native-guest-tls.json
             artifacts/phase3/phase8-guest-identity.json
             artifacts/phase3/phase9-compact-native.json
+            artifacts/phase3/phase9-linux-environment.json
             artifacts/phase3/phase7-secure-closeout.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn
