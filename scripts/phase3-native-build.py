@@ -141,7 +141,8 @@ if m5_arm64_native:
 # installed on hjfs. Flush that filesystem before terminating this QEMU process.
 index = len(stages)
 stages.append(("flush-native-filesystem",
-    "echo sync > /srv/hjfs.cmd; sleep 3; echo PHASE3_END_" + str(index)))
+    "echo sync >> /srv/hjfs.cmd && sleep 3 && echo COMPACT_FS_SYNC_OK; "
+    "echo PHASE3_END_" + str(index)))
 
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
@@ -239,6 +240,10 @@ if not re.search(r"(?:^|\r?\n)PHASE3_MK_STATUS_\s*(?:\r?\n)",text):
 if re.search(r"(?:^|\r?\n)ls:.*9pc64",text):
     print("FAIL: expected AMD64 kernel not found",file=sys.stderr)
     sys.exit(1)
+if not marks.get("flush-native-filesystem"):
+    print("FAIL: native filesystem sync stage did not complete", file=sys.stderr)
+    sys.exit(1)
+
 if not re.search(rb"(?:^|\r?\n)COMPACT_NATIVE_BUILD_OK(?:\r?\n|$)", bytes(raw)):
     print("FAIL: native Compact application did not compile/install", file=sys.stderr)
     print(bytes(raw[-16000:]).decode("utf-8", errors="replace"), flush=True)

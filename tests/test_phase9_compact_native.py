@@ -31,15 +31,16 @@ class CompactNativeTests(unittest.TestCase):
 
     def test_evidence_requires_all_positive_and_negative_cases(self):
         serial = self.serial()
-        self.assertTrue(inspect(b"COMPACT_NATIVE_BUILD_OK\n", serial, COMMIT)["passed"])
+        self.assertTrue(inspect(b"COMPACT_NATIVE_BUILD_OK\nCOMPACT_FS_SYNC_OK\n", serial, COMMIT)["passed"])
         for old, new in ((b"steps=2048", b"steps=1"), (b"status=5", b"status=0"),
                          (b"exit=7", b"exit=0"), (b"COMPACT_RC_OK", b"wrong_status"), (b"FLEX_COMPACT_", b"WRONG_"),
                          (b"RYZOVA_RUNTIME_STAGE_29", b"missing")):
-            self.assertFalse(inspect(b"COMPACT_NATIVE_BUILD_OK\n", serial.replace(old, new), COMMIT)["passed"])
+            self.assertFalse(inspect(b"COMPACT_NATIVE_BUILD_OK\nCOMPACT_FS_SYNC_OK\n", serial.replace(old, new), COMMIT)["passed"])
+        self.assertFalse(inspect(b"COMPACT_NATIVE_BUILD_OK\n", serial, COMMIT)["passed"])
         self.assertFalse(inspect(b"echo COMPACT_NATIVE_BUILD_OK\n", serial, COMMIT)["passed"])
         echoed = b"term% echo COMPACT_hello_BEGIN; compact-linux /tmp/c-hello; echo COMPACT_hello_END\n"
-        self.assertFalse(inspect(b"COMPACT_NATIVE_BUILD_OK\n", echoed, COMMIT)["passed"])
-        self.assertFalse(inspect(b"COMPACT_NATIVE_BUILD_OK\n", serial + b"panic: fault\n", COMMIT)["passed"])
+        self.assertFalse(inspect(b"COMPACT_NATIVE_BUILD_OK\nCOMPACT_FS_SYNC_OK\n", echoed, COMMIT)["passed"])
+        self.assertFalse(inspect(b"COMPACT_NATIVE_BUILD_OK\nCOMPACT_FS_SYNC_OK\n", serial + b"panic: fault\n", COMMIT)["passed"])
 
     def test_commands_fit_serial_and_do_not_echo_proof(self):
         for command in commands():

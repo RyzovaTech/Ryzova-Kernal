@@ -56,6 +56,7 @@ def inspect(build_serial, serial, commit):
     def line(raw, value):
         return re.search(rb"(?:^|\r?\n)" + re.escape(value) + rb"(?:\r?\n|$)", raw) is not None
     checks = {"native_build": line(build_serial, b"COMPACT_NATIVE_BUILD_OK"),
+              "filesystem_sync": line(build_serial, b"COMPACT_FS_SYNC_OK"),
               "stages": all(line(serial, f"RYZOVA_RUNTIME_STAGE_{i}".encode())
                             for i in range(26, 37)),
               "completed": line(serial, b"RYZOVA_COMPACT_DONE"),
