@@ -2,8 +2,7 @@
 /* Phase 5.3: per-process virtual Linux namespace. No host filesystem mounts. */
 #ifndef RYZOVA_LINUX_NAMESPACE_H
 #define RYZOVA_LINUX_NAMESPACE_H
-#include <stddef.h>
-#include <stdint.h>
+#include "portable.h"
 #define RYZ_NS_PATH_MAX 256U
 enum RyzLinuxNode {
     RYZ_NS_NONE = 0, RYZ_NS_DEV_NULL, RYZ_NS_DEV_ZERO,

@@ -2,7 +2,6 @@
 /* Linux x86_64 static-ELF proof, not a native Ryzova kernel executable loader. */
 #include "subset_vm.h"
 #include "elf64.h"
-#include <string.h>
 #define PF_X 1U
 
 static uint32_t little32(const unsigned char *p)

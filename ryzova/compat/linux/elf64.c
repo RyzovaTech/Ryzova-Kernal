@@ -1,8 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* No host syscalls or Linux kernel code. Parsing must not execute images. */
 #include "elf64.h"
-#include <limits.h>
-#include <string.h>
 
 #define PT_LOAD 1U
 #define PT_DYNAMIC 2U

@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* All operations are emulated, with no host syscalls or native kernel hooks. */
 #include "syscall.h"
-#include <string.h>
 
 /* Linux AMD64 syscall and errno numbers (ABI constants). */
 #define L_READ 0U

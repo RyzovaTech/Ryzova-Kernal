@@ -2,8 +2,7 @@
 /* Phase 5.2: emulated AMD64 Linux syscall ABI; no native trap integration. */
 #ifndef RYZOVA_LINUX_SYSCALL_H
 #define RYZOVA_LINUX_SYSCALL_H
-#include <stddef.h>
-#include <stdint.h>
+#include "portable.h"
 #include "namespace.h"
 
 #define RYZ_LINUX_FD_MAX 16U

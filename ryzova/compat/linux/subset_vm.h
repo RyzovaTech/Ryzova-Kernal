@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #ifndef RYZOVA_COMPAT_SUBSET_VM_H
 #define RYZOVA_COMPAT_SUBSET_VM_H
-#include <stddef.h>
-#include <stdint.h>
+#include "portable.h"
 #include "syscall.h"
 #define RYZ_VM_MAX_SPAN (2U * 1024U * 1024U)
 #define RYZ_VM_MAX_STEPS 2048U

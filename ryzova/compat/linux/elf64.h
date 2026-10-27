@@ -6,8 +6,7 @@
 #ifndef RYZOVA_LINUX_ELF64_H
 #define RYZOVA_LINUX_ELF64_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include "portable.h"
 
 #define RYZ_ELF64_MAX_PHDR 32U
 #define RYZ_ELF64_MAX_LOAD 16U

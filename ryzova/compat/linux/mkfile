@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+</$objtype/mkfile
+
+TARG=compact-linux
+OFILES=elf64.$O namespace.$O syscall.$O subset_vm.$O native_runner.$O
+HFILES=portable.h elf64.h namespace.h syscall.h subset_vm.h
+BIN=/$objtype/bin
+CFLAGS=$CFLAGS -DRYZ_PLAN9
+
+</sys/src/cmd/mkone
