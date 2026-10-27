@@ -21,6 +21,7 @@ import threading
 import time
 
 from m2_qemu_probe import run_probe
+from qemu_control import control_socket, control_address, serial_option, monitor_option
 from phase4_1_stability import STAGES as PHASE41_STAGES, check_stability_serial
 from phase4_5_stress import STAGES as PHASE45_STAGES, check_extended_serial
 from phase6_native_9p import guest_commands, inspect_native_9p_serial, payload_for_commit
@@ -78,9 +79,9 @@ cmd = [
     "-device", "scsi-hd,drive=vd0",
     "-device", "virtio-net-pci,netdev=n0", "-netdev", "user,id=n0",
     "-vga", "std", "-display", "none",
-    "-chardev", f"socket,id=uart,path={SER},server=on,wait=off",
+    "-chardev", serial_option(SER),
     "-serial", "chardev:uart",
-    "-monitor", f"unix:{MON},server=on,wait=off",
+    "-monitor", monitor_option(MON),
     "-no-reboot", "-no-shutdown",
 ]
 # M1 QEMU regression exposes generic emulated xHCI keyboard/mouse devices.
@@ -164,11 +165,11 @@ session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, fin
 marks = {}
 with (OUT/"host.log").open("wb") as host:
     proc=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
-    client=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    client=control_socket(SER)
     try:
         for _ in range(300):
             try:
-                client.connect(str(SER))
+                client.connect(control_address(SER))
                 break
             except (FileNotFoundError,ConnectionRefusedError):
                 time.sleep(.1)
@@ -223,9 +224,9 @@ with (OUT/"host.log").open("wb") as host:
     finally:
         (OUT/"serial.log").write_bytes(raw)
         try:
-            ctl=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+            ctl=control_socket(MON)
             ctl.settimeout(3)
-            ctl.connect(str(MON))
+            ctl.connect(control_address(MON))
             ctl.recv(4096)
             ctl.sendall(f"screendump {OUT/'screen.ppm'}\n".encode())
             ctl.close()
@@ -341,11 +342,11 @@ runtime_commands=[
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(fresh_cmd,stdout=host,stderr=subprocess.STDOUT)
-    guest=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    guest=control_socket(SER)
     try:
         for _ in range(300):
             try:
-                guest.connect(str(SER))
+                guest.connect(control_address(SER))
                 break
             except (FileNotFoundError,ConnectionRefusedError):
                 time.sleep(.1)
