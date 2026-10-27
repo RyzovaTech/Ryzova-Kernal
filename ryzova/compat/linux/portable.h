@@ -13,8 +13,8 @@ typedef s32int int32_t;
 typedef u64int uint64_t;
 typedef s64int int64_t;
 #define NULL nil
-#define UINT64_C(x) x##ULL
-#define UINT32_C(x) x##U
+#define UINT64_C(x) ((uint64_t)(x))
+#define UINT32_C(x) ((uint32_t)(x))
 #define UINT64_MAX (~(uint64_t)0)
 #define SIZE_MAX (~(size_t)0)
 #else
