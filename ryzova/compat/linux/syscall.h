@@ -24,7 +24,8 @@ typedef int (*RyzLinuxMemoryWrite)(void *context, uint64_t address, uint64_t siz
 typedef int64_t (*RyzLinuxMemoryCall)(void *context, const RyzLinuxRegs *regs);
 typedef struct RyzLinuxFD {
     enum RyzLinuxNode node;
-    int mode, open, cloexec;
+    int mode, open, cloexec, append;
+    unsigned int description;
     size_t offset;
 } RyzLinuxFD;
 typedef struct RyzLinuxProcess {
@@ -33,9 +34,13 @@ typedef struct RyzLinuxProcess {
     unsigned char *guest_bytes;
     size_t guest_size;
     RyzLinuxFD fds[RYZ_LINUX_FD_MAX];
+    unsigned int next_description;
     RyzLinuxWrite write_output;
     void *write_context;
     uint64_t output_bytes;
+    int cwd;
+    uint64_t signal_mask;
+    unsigned char signal_actions[64][32];
     RyzLinuxFiles *files;
     RyzLinuxMemoryWrite memory_write, memory_read;
     RyzLinuxMemoryCall memory_call;

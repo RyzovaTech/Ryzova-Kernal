@@ -46,7 +46,7 @@ def commands(commit):
                    f'/amd64/bin/compact-linux -p /tmp/bb-echo BB_{commit} && echo FLEX_BUSYBOX_ECHO_OK',
                    "/amd64/bin/compact-linux -p /tmp/bb-printf '%d %x\\n' 123 255 && echo FLEX_BUSYBOX_PRINTF_OK",
                    'echo FLEX_BUSYBOX_END']
-    return [op + f'; echo RYZOVA_RUNTIME_STAGE_{68+i}' for i, op in enumerate(operations)] + ['echo FLEX_BUSYBOX_DONE']
+    return [op + f'; echo RYZOVA_RUNTIME_STAGE_{68+i}' for i, op in enumerate(operations)] + ['echo FLEX_BUSYBOX_DONE; echo RYZOVA_RUNTIME_STAGE_79']
 
 
 def inspect(serial, commit):

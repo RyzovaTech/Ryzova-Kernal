@@ -113,6 +113,20 @@ static void vector_move(Cpu *c,Operand operand,unsigned int reg,int to_operand)
         for(i=0;i<16;i++)c->xmm[reg][i]=temporary[i];
     }
 }
+static void vector_xor(Cpu *c, Operand o, unsigned int reg)
+{
+    unsigned char data[16];
+    uint64_t at;
+    unsigned int i;
+    if(c->fault)return;
+    if(o.reg>=0)memcpy(data,c->xmm[o.reg],16);
+    else{
+        at=address(c,o)+c->segment;
+        if(!ryz_memory_access(c->m,at,16,RYZ_READ)){c->fault=1;return;}
+        memcpy(data,c->m->bytes+(size_t)(at-c->m->base),16);
+    }
+    for(i=0;i<16;i++)c->xmm[reg][i]^=data[i];
+}
 static uint64_t resultflags(Cpu *c,uint64_t v,unsigned int size)
 {
     unsigned int parity=0, i;
@@ -227,7 +241,7 @@ static int guest_syscall(Cpu *c)
         c->result->syscall_count++;
         return RYZ_VM_OK;
     }
-    if(nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
+    if(nr!=7 && nr!=32 && nr!=33 && nr!=292 && nr!=40 && nr!=2 && nr!=8 && nr!=80 && nr!=63 && nr!=79 && nr!=105 && nr!=106 && nr!=117 && nr!=119 && nr!=13 && nr!=14 && nr!=110 && nr!=111 && nr!=4 && nr!=5 && nr!=6 && nr!=262 && nr!=107 && nr!=108 && nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
        nr!=16 && nr!=20 && nr!=72 && nr!=39 && nr!=60 && nr!=102 && nr!=104 && nr!=186 && nr!=231 && nr!=257)
         return RYZ_VM_SYSCALL_UNSUPPORTED;
     r.rax=nr; r.rdi=c->r[7]; r.rsi=c->r[6]; r.rdx=c->r[2];
@@ -241,7 +255,7 @@ static int step(Cpu *c)
 {
     unsigned int op, op2=0, n, reg=0, group=0, size, type, count;
     uint64_t a,b,v=0,target=0,saved;
-    int jump=0, rv;
+    int jump=0, rv, locked=0;
     Operand rm, rr;
     c->cur=c->ip; c->rex=c->rex_present=0; c->size=4;
     c->repeat=0; c->segment=0;
@@ -249,9 +263,10 @@ static int step(Cpu *c)
         op=(unsigned int)fetch(c,1);
         if(c->fault)return RYZ_VM_MAP_ERROR;
         if(op>=0x40 && op<=0x4f){c->rex=op&15;c->rex_present=1;continue;}
-        if(op==0x66 || op==0xf3 || op==0xf2 || op==0x2e || op==0x3e ||
+        if(op==0xf0 || op==0x66 || op==0xf3 || op==0xf2 || op==0x2e || op==0x3e ||
            op==0x26 || op==0x36 || op==0x64 || op==0x65){
             c->rex=c->rex_present=0;
+            if(op==0xf0)locked=1;
             if(op==0x66)c->size=2;
             if(op==0xf3 || op==0xf2)c->repeat=1;
             if(op==0x2e || op==0x3e || op==0x26 || op==0x36)c->segment=0;
@@ -264,6 +279,7 @@ static int step(Cpu *c)
     if(c->rex&8)c->size=8;
     if(c->fault) return RYZ_VM_MAP_ERROR;
     size=c->size;
+    if(locked && op!=0x09 && op!=0x80 && op!=0x81 && op!=0x83 && op!=0x0f)return RYZ_VM_OPCODE_UNSUPPORTED;
     if(size==2 && ((op>=0x50 && op<=0x5f) || op==0x68 || op==0x6a ||
                    op==0xe8 || op==0xc3 || op==0xc9 || op==0x63))
         return RYZ_VM_OPCODE_UNSUPPORTED;
@@ -294,6 +310,7 @@ static int step(Cpu *c)
     else if(op==0x88 || op==0x89 || op==0x8a || op==0x8b || op==0x8d){
         if(op==0x88 || op==0x8a) size=1;
         rm=decode(c,&reg,&group,size); rr=regop(c,reg,size);
+        if(locked && rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED;
         if(op==0x8d){ if(rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED; v=address(c,rm); put(c,rr,size,v); }
         else if(op==0x88 || op==0x89){ v=get(c,rr,size); if(!c->fault)put(c,rm,size,v); }
         else { v=get(c,rm,size); if(!c->fault)put(c,rr,size,v); }
@@ -316,12 +333,14 @@ static int step(Cpu *c)
         type=op==0x84 || op==0x85?8:op>>3;
         if((op&1)==0)size=1;
         rm=decode(c,&reg,&group,size); rr=regop(c,reg,size);
+        if(locked && rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED;
         if((op&2) && type!=8){ Operand tmp=rm; rm=rr; rr=tmp; }
         a=get(c,rm,size); b=get(c,rr,size);
         if(!c->fault){ v=arithmetic(c,type,a,b,size); if(type!=7 && type!=8)put(c,rm,size,v); }
     }else if(op==0x80 || op==0x81 || op==0x83){
         if(op==0x80)size=1;
         rm=decode(c,&reg,&group,size);
+        if(locked && (rm.reg>=0 || group!=1))return RYZ_VM_OPCODE_UNSUPPORTED;
         b=fetch(c,op==0x83?1:(size==8?4:size));
         if(op==0x83)b=(uint64_t)(int64_t)(int8_t)b;
         else if(size==8)b=(uint64_t)(int64_t)(int32_t)b;
@@ -349,8 +368,10 @@ static int step(Cpu *c)
             if(count==1 && ((group==4 && (((v>>(n-1))&1)!=type)) || (group==5 && b)))c->flags|=OF;
             (void)saved; put(c,rm,size,v);
         }
-    }else if(op==0xff){
-        rm=decode(c,&reg,&group,8);
+    }else if(op==0xfe || op==0xff){
+        if(op==0xfe)size=1;
+        rm=decode(c,&reg,&group,op==0xfe?1:8);
+        if(op==0xfe && group>1)return RYZ_VM_OPCODE_UNSUPPORTED;
         if(group<=1){ a=get(c,rm,size); saved=c->flags&CF; v=arithmetic(c,group==0?0:5,a,1,size); c->flags=(c->flags&~(uint64_t)CF)|saved; if(!c->fault)put(c,rm,size,v); }
         else if(group==2 || group==4){ if(size==2)return RYZ_VM_OPCODE_UNSUPPORTED; target=get(c,rm,8); if(group==2 && !c->fault)push(c,c->cur); jump=1; }
         else if(group==6){ if(size==2)return RYZ_VM_OPCODE_UNSUPPORTED; a=get(c,rm,8); if(!c->fault)push(c,a); }
@@ -376,11 +397,30 @@ static int step(Cpu *c)
     else if(op==0x90){ }
     else if(op==0x0f){
         op2=(unsigned int)fetch(c,1);
+        if(locked && op2!=0xb0 && op2!=0xb1)return RYZ_VM_OPCODE_UNSUPPORTED;
         if(op2==5){ if(c->fault)return RYZ_VM_MAP_ERROR; rv=guest_syscall(c); if(rv!=RYZ_VM_OK)return rv; }
         else if(op2>=0x80 && op2<=0x8f){ v=(uint64_t)(int64_t)(int32_t)fetch(c,4); target=c->cur+v; jump=condition(c,op2); }
-        else if(op2==0x10 || op2==0x11){
+        else if(op2==0xb0 || op2==0xb1){
+            if(op2==0xb0)size=1;
+            rm=decode(c,&reg,&group,size);
+            if(locked && rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED;
+            if(rm.reg<0 && !ryz_memory_access(c->m,address(c,rm)+c->segment,size,RYZ_WRITE))return RYZ_VM_MAP_ERROR;
+            a=get(c,regop(c,0,size),size);b=get(c,rm,size);
+            if(!c->fault){
+                arithmetic(c,7,a,b,size);
+                if(a==b)put(c,rm,size,get(c,regop(c,reg,size),size));
+                else put(c,regop(c,0,size),size,b);
+            }
+        }
+        else if(op2==0xef){
+            if(size!=2 || c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
+            rm=decode(c,&reg,&group,16);vector_xor(c,rm,reg);
+        }
+        else if(op2==0x10 || op2==0x11 || op2==0x28 || op2==0x29){
             if(c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
-            rm=decode(c,&reg,&group,16);vector_move(c,rm,reg,op2==0x11);
+            rm=decode(c,&reg,&group,16);
+            if((op2==0x28 || op2==0x29) && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
+            vector_move(c,rm,reg,(op2&1)!=0);
         }
         else if(op2==0xa3 || op2==0xab || op2==0xb3 || op2==0xbb || op2==0xba){
             int64_t index, word, remainder;

@@ -1,0 +1,24 @@
+name: Phase 9.6 unmodified BusyBox ash and file resources
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-shell:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch SHA256 pinned unmodified multicall BusyBox fixture
+        run: python scripts/phase9_shell.py --fetch artifacts/shell-fixtures
+      - name: Compare shell and file workloads with Linux, check virtual resource boundaries
+        env:
+          COMPACT_SHELL_DIR: artifacts/shell-fixtures
+        run: python -m unittest discover -s tests -p 'test_phase9_shell.py' -v

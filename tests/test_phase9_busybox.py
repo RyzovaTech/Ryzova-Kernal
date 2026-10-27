@@ -94,6 +94,18 @@ class BusyboxTests(unittest.TestCase):
         self.same('movq $0x6261,(%r12)\nlea 64(%r12),%rsi\nmov %r12,(%rsi)\nmovq $2,8(%rsi)\n'
                   'mov $20,%eax\nmov $1,%edi\nmov $1,%edx\nsyscall\n')
 
+    def test_compare_exchange_byte_increment_and_vector_xor_match_cpu(self):
+        self.same('movq $7,(%r12)\nmov $7,%eax\nmov $9,%ebx\nlock cmpxchg %rbx,(%r12)\n'
+                  'mov %rax,8(%r12)\nsete 16(%r12)\nsetc 17(%r12)\n'
+                  'mov $5,%eax\nlock cmpxchg %rbx,(%r12)\nmov %rax,24(%r12)\nsete 32(%r12)\nsetc 33(%r12)\n'
+                  'movb $255,40(%r12)\nincb 40(%r12)\nsetc 41(%r12)\nsete 42(%r12)\n'
+                  'pxor %xmm0,%xmm0\nmovaps %xmm0,48(%r12)\nadd $64,%r12')
+        for body in ('.byte 0xf0,0x48,0x09,0xc0', '.byte 0xf0,0x90',
+                     'movaps 1(%r12),%xmm0'):
+            r=self.vm(self.assemble(body))
+            self.assertEqual(r.returncode,2)
+            self.assertRegex(r.stderr,rb'status=(2|3) ')
+
     @unittest.skipUnless(os.environ.get('COMPACT_BUSYBOX_DIR'), 'set COMPACT_BUSYBOX_DIR to verified fixture directory')
     def test_unmodified_official_applets_match_linux(self):
         directory = Path(os.environ['COMPACT_BUSYBOX_DIR'])

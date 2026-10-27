@@ -52,6 +52,12 @@ No Linux syscall is forwarded to the native host.
 
 ## Completion boundary
 
+The subsequent bounded shell profile removes the stat-startup blocker for the
+pinned multicall binary and qualifies selected ash scripts. See
+[COMPACT-LINUX-SHELL.md](COMPACT-LINUX-SHELL.md). The following describes this
+earlier standalone-applet milestone.
+
+
 This qualifies three selected standalone applets and the pre-existing custom
 compiled-C/file workloads. The full multi-call BusyBox executable currently stops
 at an unsupported stat-family syscall. BusyBox ash, arbitrary shell scripts,

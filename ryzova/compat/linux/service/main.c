@@ -17,9 +17,13 @@ static char status[] = "experimental bounded-file-profile\n"
     "metadata-is-not-authorization=true\n";
 static char process[] = "linux-amd64-compiler-static-v1\nstartup=argc,argv,explicit-envp,auxv stack=65536\n"
     "memory=brk,anonymous-mmap,mprotect,munmap executable-anonymous-memory=false\n"
-    "integer-instruction-subset=true libc=selected-static-musl TLS-segment-base=true vector=16-byte-copy-only threads=false signals=false\n";
+    "integer-instruction-subset=true libc=selected-static-musl TLS-segment-base=true vector=copy,xor threads=false signals=state-only\n";
 static char limits[] = "image=1048576 arena=2097152 input=65536 output=65536 stdio=65536 fds=16 steps=65536\n"
     "process-image=4194304 process-arena=16777216 process-steps=262144\n";
+static char shell[] = "experimental-bounded-ash-v1\n"
+    "workloads=script,variables,loops,functions,conditionals,input,output,append,cat,wc\n"
+    "paths=/input:read,/output:write cwd=/,/tmp descriptors=16\n"
+    "fork=false exec=false pipes=false asynchronous-signals=false general-linux=false\n";
 
 static void
 fsread(Req *r)
@@ -61,6 +65,7 @@ main(int argc, char **argv)
     leaf(linux, "status", status);
     leaf(linux, "limits", limits);
     leaf(linux, "process", process);
+    leaf(linux, "shell", shell);
     closefile(linux);
     closefile(compact);
     fs.read = fsread;
