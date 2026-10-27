@@ -11,10 +11,10 @@ to this executable or dispatch execution.
 ## Build and invocation
 
 On an AMD64 Ryzova/9front system, install this checkout's
-`ryzova/compat/linux` source at `/ryzova/compat/linux`, then run:
+`ryzova/compat/linux` source at `/sys/src/cmd/compact-linux`, then run:
 
 ```
-cd /ryzova/compat/linux
+cd /sys/src/cmd/compact-linux
 mk install
 compact-linux /path/to/static-linux-amd64-elf
 ```

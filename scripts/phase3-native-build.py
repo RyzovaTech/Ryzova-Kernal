@@ -41,7 +41,7 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux"], check=True)
+subprocess.run(["tar", "--format=ustar", "--transform=s,^ryzova/compat/linux,sys/src/cmd/compact-linux,", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
@@ -88,7 +88,7 @@ stages = [
      "hget http://10.0.2.2:8000/kernel-source.tar.gz > /tmp/kernel-source.tar.gz; "
      "ls -l /tmp/kernel-source.tar.gz; echo PHASE3_END_1"),
     ("install-exact-kernel-source",
-     "cd /; mkdir -p /ryzova/compat/linux; tar xzf /tmp/kernel-source.tar.gz; "
+     "cd /; mkdir -p /sys/src/cmd/compact-linux; tar xzf /tmp/kernel-source.tar.gz; "
      "cd /sys/src/9/pc64; ls -l main.c mkfile; echo PHASE3_END_2"),
     ("native-amd64-mk",
      "cd /sys/src/9/pc64; mk > /tmp/ryzova-native-build.log >[2=1]; "
@@ -119,7 +119,7 @@ for component in m1_native_components:
 
 index = len(stages)
 stages.append(("compact-linux-native",
-    "cd /ryzova/compat/linux && mk install > /tmp/compact-build.log >[2=1] "
+    "cd /sys/src/cmd/compact-linux && mk install > /tmp/compact-build.log >[2=1] "
     "&& test -s /amd64/bin/compact-linux && echo COMPACT_NATIVE_BUILD_OK; "
     "tail -n 30 /tmp/compact-build.log; "
     "echo PHASE3_END_" + str(index)))
@@ -233,6 +233,11 @@ if not re.search(r"(?:^|\r?\n)PHASE3_MK_STATUS_\s*(?:\r?\n)",text):
 if re.search(r"(?:^|\r?\n)ls:.*9pc64",text):
     print("FAIL: expected AMD64 kernel not found",file=sys.stderr)
     sys.exit(1)
+if not re.search(rb"(?:^|\r?\n)COMPACT_NATIVE_BUILD_OK(?:\r?\n|$)", bytes(raw)):
+    print("FAIL: native Compact application did not compile/install", file=sys.stderr)
+    print(bytes(raw[-16000:]).decode("utf-8", errors="replace"), flush=True)
+    sys.exit(1)
+
 if not marks.get("install-fresh-bootfile") or not re.search(
     r"(?:^|\r?\n)PHASE3_COPY_STATUS_\s*(?:\r?\n)", text
 ):
