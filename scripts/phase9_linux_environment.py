@@ -3,6 +3,7 @@
 import hashlib
 import re
 import struct
+from phase6_native_9p import payload_for_commit as remote_payload
 
 
 class Code:
@@ -142,6 +143,8 @@ def commands():
         'sha1sum -2 256 /tmp/o-copy',
         '/amd64/bin/compact-linux -i /tmp/o-copy /tmp/f-copy > /tmp/flex-second && echo FLEX_SECOND_OK',
         'cmp /tmp/flex-input /tmp/flex-second && echo FLEX_ISOLATED_COPY_OK',
+        '/amd64/bin/compact-linux -i /n/ryzova8/probe /tmp/f-copy > /tmp/flex-remote && echo FLEX_REMOTE_OK',
+        'sha1sum -2 256 /tmp/flex-remote',
         '/amd64/bin/compact-linux /tmp/f-copy > /tmp/flex-no-grant; if(! ~ $status \'\') echo FLEX_NO_GRANT_OK',
     ])
     for i, operation in enumerate(operations, 37):
@@ -170,6 +173,9 @@ def inspect(build, serial, commit):
         checks[name] = line(serial, f'FLEX_{name}_OK'.encode())
     digest = hashlib.sha256(payload(commit)).hexdigest()
     checks['output_digest'] = re.search(rb'(?:^|\r?\n)' + digest.encode() + rb'\s+/tmp/o-copy(?:\r?\n|$)', serial) is not None
+    remote_digest = hashlib.sha256(remote_payload(commit)).hexdigest()
+    checks['native_mtls_resource_snapshot'] = line(serial, b'FLEX_REMOTE_OK') and re.search(
+        rb'(?:^|\r?\n)' + remote_digest.encode() + rb'\s+/tmp/flex-remote(?:\r?\n|$)', serial) is not None
     return {'schema': 'flex-linux-files-environment/v1', 'source_commit': commit,
             'checks': checks, 'passed': all(checks.values()), 'output_sha256': digest,
             'profile': 'linux-amd64-static-files-v1', 'general_linux_compatibility': False,

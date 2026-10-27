@@ -3,6 +3,11 @@
 #include <stdio.h>
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"failed line %d\n",__LINE__); return 1; } } while (0)
 static unsigned char memory[8192], output[65536], other[65536];
+static int64_t sink(void *context, int fd, const unsigned char *bytes, size_t size)
+{
+    (void)context; (void)fd; (void)bytes;
+    return (int64_t)size;
+}
 static int64_t call(RyzLinuxProcess *p, uint64_t nr, uint64_t a, uint64_t b, uint64_t c)
 {
     RyzLinuxRegs r = {0};
@@ -52,6 +57,10 @@ int main(void)
     CHECK(call(&p,0,3,0x401000,1)==-9);
     CHECK(call(&p,1,3,UINT64_MAX,1)==-14);
     CHECK(call(&p,1,3,0x401000,65537)==-22);
+    p.write_output=sink;
+    for(i=0;i<16;i++) CHECK(call(&p,1,1,0x401000,4096)==4096);
+    CHECK(p.output_bytes==65536 && q.output_bytes==0);
+    CHECK(call(&p,1,2,0x401000,1)==-28 && p.output_bytes==65536);
     f.output_size=10; memset(output,99,sizeof(output));
     CHECK(ryz_vm_run_file_elf((const unsigned char *)"bad",3,memory,sizeof(memory),&f,NULL,NULL,&result)==RYZ_VM_BAD_INPUT);
     CHECK(f.output_size==0 && output[0]==0 && output[65535]==0);

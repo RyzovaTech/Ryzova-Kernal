@@ -70,7 +70,10 @@ the freshly source-built kernel, mounts the service, checks read-only metadata,
 and runs copy/permission/traversal/RX-write-denial workloads. It compares output
 SHA256 to binary input tied to the exact source commit, repeats execution with
 the previous output as a fresh input, and tests failure without file-profile
-opt-in. Report: `artifacts/phase3/phase9-linux-environment.json`.
+opt-in. It also supplies the existing authenticated native 9P mount
+`/n/ryzova8/probe` as an explicit input grant, runs the same ELF, and verifies the
+remote file snapshot digest. This is a file read through the existing mTLS
+resource path; it does not forward guest identity or add remote CPU cores. Report: `artifacts/phase3/phase9-linux-environment.json`.
 
 Host tests additionally cover FD exhaustion/recovery, per-process offsets and
 output separation, output capacity, oversized inputs, malformed ELF output reset,
@@ -84,5 +87,5 @@ syscall trap path, Linux process startup stack/argv/env/auxv, mmap/brk/mprotect,
 fork/exec/wait, threads/futexes, signals, general files/stat/directories, sockets,
 poll/epoll, clocks, GUI/audio and broad application qualification remain. This
 profile does not claim POSIX certification, a production security sandbox,
-remote resource grants, general Linux support or physical hardware qualification.
+automatic remote resource discovery/grants, general Linux support or physical hardware qualification.
 Windows and macOS environments remain separate work.

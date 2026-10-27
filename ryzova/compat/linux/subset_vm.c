@@ -189,6 +189,7 @@ static int run_elf(const unsigned char *elf, size_t elf_size,
             ++syscall_count;
             result->syscall_count=syscall_count;
             regs[0]=(uint64_t)returned;
+            regs[1]=ip+2; /* x86 SYSCALL clobbers RCX with return RIP. */
             ip+=2;
             if (returned<0 && files == NULL)
                 return RYZ_VM_SYSCALL_UNSUPPORTED;

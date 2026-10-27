@@ -14,7 +14,7 @@ static char abi[] = "linux-amd64-static-subset-v1\n"
 static char status[] = "experimental bounded-file-profile\n"
     "general-linux-compatibility=false windows=false mac=false\n"
     "metadata-is-not-authorization=true\n";
-static char limits[] = "image=1048576 arena=2097152 input=65536 output=65536 fds=16 steps=65536\n";
+static char limits[] = "image=1048576 arena=2097152 input=65536 output=65536 stdio=65536 fds=16 steps=65536\n";
 
 static void
 fsread(Req *r)

@@ -9,6 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from phase9_linux_environment import commands, fixtures, inspect, payload
+from phase6_native_9p import payload_for_commit
 from phase9_compact_native import fixtures as legacy_fixtures
 
 
@@ -86,15 +87,16 @@ class LinuxEnvironmentTests(unittest.TestCase):
         commit = 'b' * 40
         lines = ['compact/linux api=1.0 profile=files-v1', 'linux-amd64-static-subset-v1',
                  'FLEX_API_READONLY_OK', 'FLEX_SECOND_OK', 'FLEX_ISOLATED_COPY_OK',
-                 'FLEX_NO_GRANT_OK', 'RYZOVA_LINUX_ENV_DONE']
+                 'FLEX_NO_GRANT_OK', 'FLEX_REMOTE_OK', 'RYZOVA_LINUX_ENV_DONE']
         lines += [f'FLEX_{name}_OK' for name in fixtures()]
         lines += [f'RYZOVA_RUNTIME_STAGE_{i}' for i in range(37, 37 + len(commands()) - 1)]
-        lines += [hashlib.sha256(payload(commit)).hexdigest() + ' /tmp/o-copy']
+        lines += [hashlib.sha256(payload(commit)).hexdigest() + ' /tmp/o-copy',
+                  hashlib.sha256(payload_for_commit(commit)).hexdigest() + ' /tmp/flex-remote']
         serial = ('\n'.join(lines) + '\n').encode()
         build = b'COMPACT_SERVICE_BUILD_OK\n'
         self.assertTrue(inspect(build, serial, commit)['passed'])
         for value in (b'FLEX_deny_OK', b'FLEX_rxwrite_OK', b'FLEX_API_READONLY_OK',
-                      b'FLEX_ISOLATED_COPY_OK', b'RYZOVA_RUNTIME_STAGE_39'):
+                      b'FLEX_ISOLATED_COPY_OK', b'FLEX_REMOTE_OK', b'RYZOVA_RUNTIME_STAGE_39'):
             self.assertFalse(inspect(build, serial.replace(value, b'missing'), commit)['passed'])
         self.assertFalse(inspect(b'echo COMPACT_SERVICE_BUILD_OK\n', serial, commit)['passed'])
         self.assertFalse(inspect(build, serial, 'c' * 40)['passed'])
