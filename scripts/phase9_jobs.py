@@ -7,9 +7,10 @@ import subprocess
 from phase9_process import FLAGS
 
 ROOT=Path(__file__).resolve().parents[1]
-CASES=('private','vfork','pipe','exec','vfork-exec','offset','capacity','descriptions','quota','exec-quota','nonblock','wait-errors','io-quota')
+CASES=('private','vfork','pipe','exec','vfork-exec','offset','identity','capacity','descriptions','quota','exec-quota','nonblock','wait-errors','io-quota')
 DATA=b'abcdefgh\n'
 SCRIPT=b'''echo FLEX_JOBS_OUTPUT
+if test /probe -ef /busybox; then exit 77; fi
 printf 'abc\\nxyz\\n' | /busybox grep xyz | /busybox wc -l
 x=$(echo nested | /busybox cat)
 printf 'value=%s\\n' "$x"
@@ -37,7 +38,7 @@ def commands(commit):
          'hget http://10.0.2.2:8000/jobs-data > /tmp/j-data','sha1sum -2 256 /tmp/j-data','cat /compact/linux/jobs','echo FLEX_JOBS_BEGIN',
          f"/amd64/bin/compact-linux -j -x /busybox -x '/probe=/tmp/j-elf' -i /tmp/j-script /tmp/busybox ash /input PJ_{commit} && echo FLEX_JOBS_RUN_OK"]
     for mode in CASES:
-        grant='-i /tmp/j-data ' if mode in ('offset','descriptions') else ''
+        grant='-i /tmp/j-data ' if mode in ('offset','identity','descriptions') else ''
         ops.append(f'/amd64/bin/compact-linux -j -x /tmp/j-elf {grant}/tmp/j-elf {mode} J_{mode}_{commit} && echo FLEX_JOB_{mode}_OK')
     ops+=['echo FLEX_JOBS_END']
     return [op+f'; echo RYZOVA_RUNTIME_STAGE_{94+i}' for i,op in enumerate(ops)]+['echo FLEX_JOBS_DONE']

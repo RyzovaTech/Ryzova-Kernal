@@ -278,7 +278,7 @@ static int guest_path(RyzLinuxProcess *p, uint64_t address, const char **path, s
     }
     return -36;
 }
-static int resolve(RyzLinuxProcess *p, const char *path, size_t length, enum RyzLinuxNode *kind,uint64_t *size)
+static int resolve(RyzLinuxProcess *p, const char *path, size_t length, enum RyzLinuxNode *kind,uint64_t *size,uint64_t *inode)
 {
     int code;
     char absolute[RYZ_NS_PATH_MAX];
@@ -292,7 +292,7 @@ static int resolve(RyzLinuxProcess *p, const char *path, size_t length, enum Ryz
     }
     if(p->world){
         size_t i;
-        for(i=0;i<p->world->exec_count;i++)if(strcmp(path,p->world->execs[i].path)==0){*kind=RYZ_NS_EXEC;if(size)*size=p->world->execs[i].size;return 0;}
+        for(i=0;i<p->world->exec_count;i++)if(strcmp(path,p->world->execs[i].path)==0){*kind=RYZ_NS_EXEC;if(size)*size=p->world->execs[i].size;if(inode)*inode=1000+i;return 0;}
     }
     if(strcmp(path,"/")==0){*kind=RYZ_NS_ROOT;return 0;}
     code=ryz_linux_ns_resolve(&p->ns,path,length,kind);
@@ -320,10 +320,10 @@ static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, i
         else inode=(uint64_t)kind+1;
     }else{
         code=guest_path(p,key,&path,&length);if(code)return code;
-        code=resolve(p,path,length,&kind,&bytes);if(code)return code;
-        inode=(uint64_t)kind+1;
+        code=resolve(p,path,length,&kind,&bytes,&inode);if(code)return code;
+        if(kind!=RYZ_NS_EXEC)inode=(uint64_t)kind+1;
     }
-    if(kind==RYZ_NS_PIPE)mode=0010000|0600;
+    if(kind==RYZ_NS_PIPE){mode=0010000|0600;inode=500+p->fds[key].pipe;}
     if(kind==RYZ_NS_EXEC){mode=0100000|0111;}
     if(kind==RYZ_NS_INPUT){mode=0100000|0444;bytes=p->files->input_size;}
     if(kind==RYZ_NS_OUTPUT){mode=0100000|0222;bytes=p->files->output_size;}
@@ -350,7 +350,7 @@ static int64_t do_openat(RyzLinuxProcess *p, uint64_t dirfd,
         (flags & ~(uint64_t)(L_O_ACCMODE | L_O_CLOEXEC | L_O_TRUNC | (p->world?04000U:0) | (p->memory_call?0100U|0200U|02000U:0))) != 0)
         return -L_EINVAL;
     code=guest_path(p,pathaddr,&path,&length);if(code)return code;
-    code=resolve(p,path,length,&kind,NULL);if(code)return code;
+    code=resolve(p,path,length,&kind,NULL,NULL);if(code)return code;
     if((flags & 0300U)==0300U)return -17;
     if((flags & (0100U|02000U)) && kind!=RYZ_NS_OUTPUT)return -L_EACCES;
     if (kind == RYZ_NS_INPUT || kind == RYZ_NS_OUTPUT) {
@@ -369,7 +369,7 @@ static int64_t do_openat(RyzLinuxProcess *p, uint64_t dirfd,
     access = (unsigned int)(flags & L_O_ACCMODE);
     if (access == L_O_RDWR || access > L_O_RDWR)
         return -L_EINVAL;
-    for (fd = 3; fd < (int)RYZ_LINUX_FD_MAX; ++fd)
+    for (fd = p->world?0:3; fd < (int)RYZ_LINUX_FD_MAX; ++fd)
         if (!p->fds[fd].open) {
             p->fds[fd].description=new_description(p);
             if(!p->fds[fd].description)return -L_EMFILE;
@@ -525,7 +525,7 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
         code=guest_path(p,regs->rdi,&path,&n);if(code)return code;
         if(strcmp(path,".")==0)return 0;
         if(strcmp(path,"..")==0){p->cwd=RYZ_NS_ROOT;return 0;}
-        code=resolve(p,path,n,&kind,NULL);if(code)return code;
+        code=resolve(p,path,n,&kind,NULL,NULL);if(code)return code;
         if(kind!=RYZ_NS_ROOT && kind!=RYZ_NS_TMP)return -20;
         p->cwd=kind;return 0;
     }

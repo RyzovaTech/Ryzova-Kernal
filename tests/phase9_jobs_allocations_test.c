@@ -31,7 +31,7 @@ int main(int argc,char **argv)
     FILE *in;long length;unsigned char *image,*arena;size_t i,k,baseline,start,total;
     RyzProcessArgs args;RyzJobConfig config;RyzLinuxExec grant;RyzLinuxFiles files;RyzVmResult result;
     const char *av[]={"/job",NULL,"allocation-check"},*ev[]={"FLEX_MODE=test"};
-    const char *modes[]={"private","vfork","pipe","exec","vfork-exec","descriptions","quota","exec-quota","deadlock","nonblock","denied","capacity","io-quota","console","offset","wait-errors","fault-child"};
+    const char *modes[]={"private","vfork","pipe","exec","vfork-exec","descriptions","identity","quota","exec-quota","deadlock","nonblock","denied","capacity","io-quota","console","offset","wait-errors","fault-child"};
     if(argc!=2)return 64;
     in=fopen(argv[1],"rb");if(!in || fseek(in,0,SEEK_END))return 65;
     length=ftell(in);if(length<=0 || fseek(in,0,SEEK_SET))return 65;

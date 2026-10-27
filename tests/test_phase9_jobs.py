@@ -58,9 +58,9 @@ class JobsTests(unittest.TestCase):
                 if mode in ('exec','vfork-exec'):self.assertIn(b'execs=1 ',vm.stderr)
 
     def test_group_quotas_no_partial_truncate_and_nonblocking_endpoints(self):
-        for mode in ('capacity','descriptions','quota','exec-quota','nonblock','io-quota','console'):
+        for mode in ('capacity','descriptions','identity','quota','exec-quota','nonblock','io-quota','console'):
             with self.subTest(mode=mode):
-                vm=self.fixture_vm(mode,input=DATA if mode=='descriptions' else None)
+                vm=self.fixture_vm(mode,input=DATA if mode in ('descriptions','identity') else None)
                 self.assertEqual(vm.returncode,0,vm.stderr)
                 expected=b'FLEX_JOBS_FIXTURE_OK\nsource-challenge\n'+(b'keep\n' if mode=='descriptions' else b'')
                 self.assertEqual(vm.stdout,b'z'*65536 if mode=='console' else expected)
@@ -91,7 +91,7 @@ class JobsTests(unittest.TestCase):
             env['ASAN_OPTIONS']='detect_leaks=0:quarantine_size_mb=32'
         for mode in ('private','vfork','exec','vfork-exec','pipe','descriptions','capacity','exec-quota','deadlock','fault-child'):
             with self.subTest(mode=mode):
-                vm=self.fixture_vm(mode,runner=runner,input=DATA if mode=='descriptions' else None,env=env)
+                vm=self.fixture_vm(mode,runner=runner,input=DATA if mode in ('descriptions','identity') else None,env=env)
                 self.assertEqual(vm.returncode,2 if mode in ('deadlock','fault-child') else 0,vm.stderr)
                 self.assertNotIn(b'AddressSanitizer',vm.stderr);self.assertNotIn(b'runtime error:',vm.stderr)
 

@@ -87,6 +87,15 @@ long app_main(long argc,char **argv,char **env)
         }
         if(count!=7)return 111;
         for(i=0;i<count;i++)if(call(61,-1,(long)&status,0,0,0,0)<=0 || status)return 112;
+    }else if(equal(argv[1],"identity")){
+        int other[2];U first,second;unsigned char stat[144];
+        if(call(22,(long)pipefd,0,0,0,0,0) || call(22,(long)other,0,0,0,0,0))return 153;
+        if(call(5,pipefd[0],(long)stat,0,0,0,0))return 154;first=*(U *)(stat+8);
+        if(call(5,pipefd[1],(long)stat,0,0,0,0) || first!=*(U *)(stat+8))return 155;
+        if(call(5,other[0],(long)stat,0,0,0,0))return 156;second=*(U *)(stat+8);
+        if(first==second)return 157;
+        call(3,0,0,0,0,0,0);fd=call(2,(long)"/input",0,0,0,0,0);
+        if(fd!=0 || call(0,0,(long)&ch,1,0,0,0)!=1 || ch!='a')return 158;
     }else if(equal(argv[1],"descriptions")){
         int ready[2],control[2];unsigned char stat[144];
         if(call(22,(long)ready,0,0,0,0,0) || call(22,(long)control,0,0,0,0,0))return 119;

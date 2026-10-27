@@ -34,7 +34,9 @@ native kernel PIDs or remote network identities.
 
 - fork copies the guest address space and register context. Descriptor tables
   and signal/cwd state are copied; open-file descriptions retain shared offsets
-  and status flags. Closing/reusing a descriptor does not retarget its aliases.
+  and status flags. Open uses the lowest available guest descriptor, including
+  a previously closed standard descriptor. Distinct pipes and executable bindings
+  expose distinct synthetic inodes. Closing/reusing a descriptor does not retarget its aliases.
 - vfork suspends its parent and shares guest memory until successful exec or
   child exit, then resumes the parent. It is not simulated by running a copied
   child to completion. Forking again from the suspended vfork child is rejected.
@@ -91,7 +93,7 @@ COMPACT_SHELL_DIR=artifacts/jobs-fixtures python -m unittest discover -s tests -
 
 The mandatory native source-build runner now compiles the process-group runtime
 with Plan 9 tools, reboots the source-built kernel and requires a mixed shell
-script plus 13 process/resource cases. Checks include executable/script/input
+script plus 14 process/resource cases. Checks include executable/script/input
 SHA256, source-specific arguments, fork/exec/peak/blocked/pipe-byte counters,
 clean exits and every prior kernel, identity and authenticated-resource gate.
 Evidence report: `phase9-linux-jobs.json`.
