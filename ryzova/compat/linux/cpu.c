@@ -8,7 +8,10 @@
 #define SF 128U
 #define OF 2048U
 typedef struct Cpu {
-    uint64_t r[16], ip, cur, flags;
+    uint64_t r[16], ip, cur, flags, fsbase, gsbase, segment, tid_address;
+    unsigned char xmm[16][16];
+    uint32_t extra_steps;
+    int repeat;
     unsigned int rex, rex_present, size;
     int fault;
     RyzLinuxMemory *m;
@@ -75,16 +78,40 @@ static uint64_t address(Cpu *c,Operand o){ return o.address+(o.rip?c->cur:0); }
 static uint64_t get(Cpu *c,Operand o,unsigned int size)
 {
     if(o.reg>=0) return (c->r[o.reg]>>(o.high?8:0))&mask(size);
-    return load(c,address(c,o),size,RYZ_READ);
+    return load(c,address(c,o)+c->segment,size,RYZ_READ);
 }
 static void put(Cpu *c,Operand o,unsigned int size,uint64_t v)
 {
     uint64_t bits=mask(size);
     unsigned int shift=o.high?8:0;
     if(c->fault)return;
-    if(o.reg<0) store(c,address(c,o),size,v);
+    if(o.reg<0) store(c,address(c,o)+c->segment,size,v);
     else if(size==4 || size==8) c->r[o.reg]=v&bits;
     else c->r[o.reg]=(c->r[o.reg]&~(bits<<shift))|((v&bits)<<shift);
+}
+static void vector_move(Cpu *c,Operand operand,unsigned int reg,int to_operand)
+{
+    unsigned char temporary[16];
+    uint64_t at;
+    unsigned int i;
+    if(c->fault)return;
+    if(to_operand){
+        for(i=0;i<16;i++)temporary[i]=c->xmm[reg][i];
+        if(operand.reg>=0){for(i=0;i<16;i++)c->xmm[operand.reg][i]=temporary[i];}
+        else{
+            at=address(c,operand)+c->segment;
+            if(!ryz_memory_access(c->m,at,16,RYZ_WRITE)){c->fault=1;return;}
+            memcpy(c->m->bytes+(size_t)(at-c->m->base),temporary,16);
+        }
+    }else{
+        if(operand.reg>=0){for(i=0;i<16;i++)temporary[i]=c->xmm[operand.reg][i];}
+        else{
+            at=address(c,operand)+c->segment;
+            if(!ryz_memory_access(c->m,at,16,RYZ_READ)){c->fault=1;return;}
+            memcpy(temporary,c->m->bytes+(size_t)(at-c->m->base),16);
+        }
+        for(i=0;i<16;i++)c->xmm[reg][i]=temporary[i];
+    }
 }
 static uint64_t resultflags(Cpu *c,uint64_t v,unsigned int size)
 {
@@ -101,14 +128,15 @@ static uint64_t arithmetic(Cpu *c,unsigned int group,uint64_t a,uint64_t b,unsig
 {
     uint64_t v, full, bits=mask(size), sign=UINT64_C(1)<<(size*8-1);
     int carry=0, overflow=0, adjust=0;
+    uint64_t carryin=(group==2 || group==3)?((c->flags&CF)!=0):0;
     a&=bits; b&=bits;
-    if(group==0){
-        full=a+b; v=full&bits;
-        carry=size==8?v<a:full>bits;
+    if(group==0 || group==2){
+        full=a+b; v=(full+carryin)&bits;
+        carry=size==8?(full<a || v<(full&bits)):(full+carryin)>bits;
         overflow=(~(a^b)&(a^v)&sign)!=0;
         adjust=((a^b^v)&16)!=0;
-    }else if(group==5 || group==7){
-        v=(a-b)&bits; carry=a<b;
+    }else if(group==5 || group==7 || group==3){
+        v=(a-b-carryin)&bits; carry=a<b || (carryin && a==b);
         overflow=((a^b)&(a^v)&sign)!=0; adjust=((a^b^v)&16)!=0;
     }else if(group==1) v=a|b;
     else if(group==6) v=a^b;
@@ -118,6 +146,47 @@ static uint64_t arithmetic(Cpu *c,unsigned int group,uint64_t a,uint64_t b,unsig
     if(overflow) c->flags|=OF;
     if(adjust) c->flags|=AF;
     return v;
+}
+static uint64_t multiply(Cpu *c,uint64_t a,uint64_t b,unsigned int size)
+{
+    uint64_t bits=mask(size), sign=UINT64_C(1)<<(size*8-1), am,bm,limit,value;
+    int negative;
+    a&=bits;b&=bits;negative=((a^b)&sign)!=0;
+    am=(a&sign)?(-a)&bits:a;bm=(b&sign)?(-b)&bits:b;
+    limit=negative?sign:sign-1;
+    value=(a*b)&bits;
+    c->flags&=~(uint64_t)(CF|OF);
+    if(bm!=0 && am>limit/bm)c->flags|=CF|OF;
+    return value;
+}
+static int divide(Cpu *c, uint64_t divisor, unsigned int size, int is_signed)
+{
+    unsigned int n=size*8, i;
+    uint64_t bits=mask(size), sign=UINT64_C(1)<<(n-1), low,high,q=0,r,bit;
+    int negative=0, dnegative=0;
+    low=c->r[0]&bits; high=size==1?(c->r[0]>>8)&255:c->r[2]&bits;
+    divisor&=bits;
+    if(divisor==0)return 0;
+    if(is_signed){
+        negative=(high&sign)!=0; dnegative=(divisor&sign)!=0;
+        if(negative){ low=(-low)&bits;high=(~high+(low==0))&bits; }
+        if(dnegative)divisor=(-divisor)&bits;
+    }
+    if(high>=divisor)return 0;
+    r=high;
+    for(i=n;i>0;i--){
+        bit=r>>(n-1);r=((r<<1)|((low>>(i-1))&1))&bits;
+        if(bit || r>=divisor){r=(r-divisor)&bits;q|=UINT64_C(1)<<(i-1);}
+    }
+    if(is_signed){
+        if(q>((negative!=dnegative)?sign:sign-1))return 0;
+        if(negative!=dnegative)q=(-q)&bits;
+        if(negative)r=(-r)&bits;
+    }
+    put(c,regop(c,0,size),size,q);
+    if(size==1)c->r[0]=(c->r[0]&~UINT64_C(0xff00))|(r<<8);
+    else put(c,regop(c,2,size),size,r);
+    return 1;
 }
 static int condition(Cpu *c,unsigned int n)
 {
@@ -135,9 +204,31 @@ static uint64_t pop(Cpu *c){ uint64_t v=load(c,c->r[4],8,RYZ_READ); if(!c->fault
 static int guest_syscall(Cpu *c)
 {
     RyzLinuxRegs r;
-    uint64_t nr=c->r[0];
+    uint64_t nr=c->r[0], value;
+    int64_t answer;
+    if(nr==158 || nr==218){
+        answer=-22;
+        if(nr==218){
+            if(c->r[7]==0 || ryz_memory_access(c->m,c->r[7],4,RYZ_WRITE)){
+                c->tid_address=c->r[7]; answer=(int64_t)c->p->ns.pid;
+            }else answer=-14;
+        }else if(c->r[7]==0x1002 || c->r[7]==0x1001){
+            value=c->r[6];
+            if(value==0 || ryz_memory_access(c->m,value,1,RYZ_READ)){
+                if(c->r[7]==0x1002)c->fsbase=value;else c->gsbase=value;
+                answer=0;
+            }else answer=-1;
+        }else if(c->r[7]==0x1003 || c->r[7]==0x1004){
+            if(ryz_memory_access(c->m,c->r[6],8,RYZ_WRITE)){
+                store(c,c->r[6],8,c->r[7]==0x1003?c->fsbase:c->gsbase); answer=0;
+            }else answer=-14;
+        }
+        c->r[1]=c->cur;c->r[11]=c->flags;c->r[0]=(uint64_t)answer;
+        c->result->syscall_count++;
+        return RYZ_VM_OK;
+    }
     if(nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
-       nr!=39 && nr!=60 && nr!=102 && nr!=104 && nr!=186 && nr!=231 && nr!=257)
+       nr!=16 && nr!=20 && nr!=72 && nr!=39 && nr!=60 && nr!=102 && nr!=104 && nr!=186 && nr!=231 && nr!=257)
         return RYZ_VM_SYSCALL_UNSUPPORTED;
     r.rax=nr; r.rdi=c->r[7]; r.rsi=c->r[6]; r.rdx=c->r[2];
     r.r10=c->r[10]; r.r8=c->r[8]; r.r9=c->r[9];
@@ -153,15 +244,48 @@ static int step(Cpu *c)
     int jump=0, rv;
     Operand rm, rr;
     c->cur=c->ip; c->rex=c->rex_present=0; c->size=4;
-    op=(unsigned int)fetch(c,1);
-    if(op==0x66){ c->size=2; op=(unsigned int)fetch(c,1); }
-    if(op>=0x40 && op<=0x4f){ c->rex=op&15; c->rex_present=1; if(c->rex&8)c->size=8; op=(unsigned int)fetch(c,1); }
+    c->repeat=0; c->segment=0;
+    for(;;){
+        op=(unsigned int)fetch(c,1);
+        if(c->fault)return RYZ_VM_MAP_ERROR;
+        if(op>=0x40 && op<=0x4f){c->rex=op&15;c->rex_present=1;continue;}
+        if(op==0x66 || op==0xf3 || op==0xf2 || op==0x2e || op==0x3e ||
+           op==0x26 || op==0x36 || op==0x64 || op==0x65){
+            c->rex=c->rex_present=0;
+            if(op==0x66)c->size=2;
+            if(op==0xf3 || op==0xf2)c->repeat=1;
+            if(op==0x64)c->segment=c->fsbase;
+            if(op==0x65)c->segment=c->gsbase;
+            continue;
+        }
+        break;
+    }
+    if(c->rex&8)c->size=8;
     if(c->fault) return RYZ_VM_MAP_ERROR;
     size=c->size;
     if(size==2 && ((op>=0x50 && op<=0x5f) || op==0x68 || op==0x6a ||
                    op==0xe8 || op==0xc3 || op==0xc9 || op==0x63))
         return RYZ_VM_OPCODE_UNSUPPORTED;
-    if(op>=0x50 && op<=0x57) push(c,c->r[op-0x50+((c->rex&1)?8:0)]);
+    if(op==0xfc)c->flags&=~UINT64_C(1024);
+    else if(op==0xfd)c->flags|=1024;
+    else if(op==0xaa || op==0xab || op==0xa4 || op==0xa5){
+        uint64_t iterations=c->repeat?c->r[1]:1, j, delta;
+        if(op==0xaa || op==0xa4)size=1;
+        if(iterations>RYZ_PROCESS_STEPS-c->result->executed_steps)
+            return RYZ_VM_STEP_LIMIT;
+        delta=(c->flags&1024)?(uint64_t)-(int64_t)size:size;
+        for(j=0;j<iterations;j++){
+            a=op==0xaa || op==0xab?c->r[0]:load(c,c->r[6]+c->segment,size,RYZ_READ);
+            if(c->fault)break;
+            store(c,c->r[7],size,a);
+            if(c->fault)break;
+            c->r[7]+=delta;
+            if(op==0xa4 || op==0xa5)c->r[6]+=delta;
+            if(c->repeat)c->r[1]--;
+            c->extra_steps++;
+        }
+    }
+    else if(op>=0x50 && op<=0x57) push(c,c->r[op-0x50+((c->rex&1)?8:0)]);
     else if(op>=0x58 && op<=0x5f){ v=pop(c); c->r[op-0x58+((c->rex&1)?8:0)]=v; }
     else if(op==0x68 || op==0x6a){ v=fetch(c,op==0x68?4:1); v=op==0x68?(uint64_t)(int64_t)(int32_t)v:(uint64_t)(int64_t)(int8_t)v; push(c,v); }
     else if(op>=0xb8 && op<=0xbf){ v=fetch(c,size); put(c,regop(c,op-0xb8+((c->rex&1)?8:0),size),size,v); }
@@ -180,7 +304,14 @@ static int step(Cpu *c)
     }else if(op==0x63){
         rm=decode(c,&reg,&group,4); v=get(c,rm,4);
         if(!c->fault)put(c,regop(c,reg,size),size,(uint64_t)(int64_t)(int32_t)v);
-    }else if((op<=0x3b && ((op&7)<=3) && ((op>>3)==0 || (op>>3)==1 || (op>>3)>=4)) || op==0x84 || op==0x85){
+    }else if(op==0x69 || op==0x6b){
+        rm=decode(c,&reg,&group,size);
+        b=fetch(c,op==0x6b?1:(size==8?4:size));
+        if(op==0x6b)b=(uint64_t)(int64_t)(int8_t)b;
+        else if(size==8)b=(uint64_t)(int64_t)(int32_t)b;
+        a=get(c,rm,size);
+        if(!c->fault)put(c,regop(c,reg,size),size,multiply(c,a,b,size));
+    }else if((op<=0x3b && ((op&7)<=3)) || op==0x84 || op==0x85){
         type=op==0x84 || op==0x85?8:op>>3;
         if((op&1)==0)size=1;
         rm=decode(c,&reg,&group,size); rr=regop(c,reg,size);
@@ -190,23 +321,23 @@ static int step(Cpu *c)
     }else if(op==0x80 || op==0x81 || op==0x83){
         if(op==0x80)size=1;
         rm=decode(c,&reg,&group,size);
-        if(group==2 || group==3)return RYZ_VM_OPCODE_UNSUPPORTED;
         b=fetch(c,op==0x83?1:(size==8?4:size));
         if(op==0x83)b=(uint64_t)(int64_t)(int8_t)b;
         else if(size==8)b=(uint64_t)(int64_t)(int32_t)b;
         a=get(c,rm,size);
         if(!c->fault){ v=arithmetic(c,group,a,b,size); if(group!=7)put(c,rm,size,v); }
     }else if(op==0x04 || op==0x05 || op==0x0c || op==0x0d || op==0x24 || op==0x25 ||
-             op==0x2c || op==0x2d || op==0x34 || op==0x35 || op==0x3c || op==0x3d || op==0xa8 || op==0xa9){
+             op==0x14 || op==0x15 || op==0x1c || op==0x1d || op==0x2c || op==0x2d || op==0x34 || op==0x35 || op==0x3c || op==0x3d || op==0xa8 || op==0xa9){
         if((op&1)==0)size=1;
         type=(op==0xa8 || op==0xa9)?8:op>>3;
         b=fetch(c,size==8?4:size); if(size==8)b=(uint64_t)(int64_t)(int32_t)b;
         rr=regop(c,0,size); a=get(c,rr,size);
         if(!c->fault){ v=arithmetic(c,type,a,b,size); if(type!=7 && type!=8)put(c,rr,size,v); }
-    }else if(op==0xc1 || op==0xd1 || op==0xd3){
+    }else if(op==0xc0 || op==0xc1 || op==0xd0 || op==0xd1 || op==0xd2 || op==0xd3){
+        if(op==0xc0 || op==0xd0 || op==0xd2)size=1;
         rm=decode(c,&reg,&group,size);
         if(group!=4 && group!=5 && group!=7)return RYZ_VM_OPCODE_UNSUPPORTED;
-        count=op==0xc1?(unsigned int)fetch(c,1):(op==0xd1?1:(unsigned int)c->r[1]);
+        count=op==0xc0 || op==0xc1?(unsigned int)fetch(c,1):(op==0xd0 || op==0xd1?1:(unsigned int)c->r[1]);
         count&=size==8?63:31; a=get(c,rm,size); n=size*8;
         if(count!=0 && !c->fault){
             saved=c->flags; b=(a>>(n-1))&1;
@@ -228,6 +359,10 @@ static int step(Cpu *c)
         rm=decode(c,&reg,&group,size);
         if(group==0){ b=fetch(c,size==8?4:size); if(size==8)b=(uint64_t)(int64_t)(int32_t)b; a=get(c,rm,size); if(!c->fault)arithmetic(c,8,a,b,size); }
         else if(group==2 || group==3){ a=get(c,rm,size); if(!c->fault){ v=group==2?~a:arithmetic(c,5,0,a,size); put(c,rm,size,v); } }
+        else if(group==6 || group==7){
+            a=get(c,rm,size);
+            if(!c->fault && !divide(c,a,size,group==7))return RYZ_VM_ARITHMETIC_ERROR;
+        }
         else return RYZ_VM_OPCODE_UNSUPPORTED;
     }else if(op==0xe8 || op==0xe9 || op==0xeb){
         v=fetch(c,op==0xeb?1:4); v=op==0xeb?(uint64_t)(int64_t)(int8_t)v:(uint64_t)(int64_t)(int32_t)v;
@@ -242,6 +377,36 @@ static int step(Cpu *c)
         op2=(unsigned int)fetch(c,1);
         if(op2==5){ if(c->fault)return RYZ_VM_MAP_ERROR; rv=guest_syscall(c); if(rv!=RYZ_VM_OK)return rv; }
         else if(op2>=0x80 && op2<=0x8f){ v=(uint64_t)(int64_t)(int32_t)fetch(c,4); target=c->cur+v; jump=condition(c,op2); }
+        else if(op2==0x10 || op2==0x11){
+            if(c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
+            rm=decode(c,&reg,&group,16);vector_move(c,rm,reg,op2==0x11);
+        }
+        else if(op2==0xa3 || op2==0xab || op2==0xb3 || op2==0xbb || op2==0xba){
+            int64_t index, word, remainder;
+            rm=decode(c,&reg,&group,size);
+            if(op2==0xba){
+                if(group<4)return RYZ_VM_OPCODE_UNSUPPORTED;
+                b=fetch(c,1);type=group-4;
+            }else{
+                b=c->r[reg]&mask(size);type=op2==0xa3?0:(op2==0xab?1:(op2==0xb3?2:3));
+                if(rm.reg<0){
+                    index=size==8?(int64_t)b:(size==4?(int64_t)(int32_t)b:(int64_t)(int16_t)b);
+                    word=index/(int64_t)(size*8);remainder=index%(int64_t)(size*8);
+                    if(remainder<0){word--;remainder+=size*8;}
+                    rm.address+=(uint64_t)(word*(int64_t)size);b=(uint64_t)remainder;
+                }
+            }
+            b%=size*8;a=get(c,rm,size);
+            if(!c->fault){
+                c->flags=(c->flags&~(uint64_t)CF)|((a>>b)&1);
+                if(type){v=type==1?a|(UINT64_C(1)<<b):(type==2?a&~(UINT64_C(1)<<b):a^(UINT64_C(1)<<b));put(c,rm,size,v);}
+            }
+        }
+        else if(op2==0xaf){
+            rm=decode(c,&reg,&group,size);rr=regop(c,reg,size);
+            a=get(c,rr,size);b=get(c,rm,size);
+            if(!c->fault)put(c,rr,size,multiply(c,a,b,size));
+        }
         else if(op2==0xb6 || op2==0xb7 || op2==0xbe || op2==0xbf){
             n=(op2&1)?2:1; rm=decode(c,&reg,&group,n); v=get(c,rm,n);
             if(op2==0xbe)v=(uint64_t)(int64_t)(int8_t)v;
@@ -262,11 +427,12 @@ int ryz_cpu_run(RyzLinuxProcess *p,RyzLinuxMemory *m,uint64_t entry,uint64_t sta
     uint32_t i;
     int rv;
     memset(&c,0,sizeof(c)); c.p=p; c.m=m; c.ip=entry; c.r[4]=stack; c.flags=0x202; c.result=result;
-    for(i=0;i<RYZ_PROCESS_STEPS;i++){
-        result->last_rip=c.ip; result->executed_steps=i+1;
+    for(i=0;i<RYZ_PROCESS_STEPS;){
+        result->last_rip=c.ip; result->executed_steps=i+1; c.extra_steps=0;
         rv=step(&c);
+        i+=1+c.extra_steps; result->executed_steps=i;
         if(rv!=RYZ_VM_OK)return rv;
-        if(p->exited){ result->exited=1; result->exit_status=p->exit_status; return RYZ_VM_OK; }
+        if(p->exited){ if(c.tid_address && ryz_memory_access(m,c.tid_address,4,RYZ_WRITE))store(&c,c.tid_address,4,0); result->exited=1; result->exit_status=p->exit_status; return RYZ_VM_OK; }
     }
     return RYZ_VM_STEP_LIMIT;
 }

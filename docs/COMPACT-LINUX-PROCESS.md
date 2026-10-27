@@ -14,7 +14,9 @@ implicitly copied from the native host. Up to 16 arguments and 16 environment
 strings, each at most 256 bytes, are accepted. The auxiliary vector contains
 PHDR/PHENT/PHNUM, PAGESZ, ENTRY and synthetic UID/EUID/GID/EGID plus its null
 terminator. Program headers must be mapped readable. There is no AT_RANDOM,
-vDSO, interpreter or TLS setup; this is not libc-ready.
+vDSO or ELF interpreter. The later BusyBox applet profile adds virtual FS/GS bases
+for selected static musl binaries; see COMPACT-LINUX-BUSYBOX.md. General libc
+compatibility is not established.
 
 ## Execution and memory
 
@@ -22,10 +24,11 @@ The new bounded integer AMD64 interpreter supports the tested scalar register,
 memory, stack, CALL/RET, arithmetic/flags, conditional branch and syscall
 instructions needed by the compiled fixture. It has 16 integer registers,
 ModRM/SIB addressing, guarded memory operands and a 262144-instruction budget.
-Unsupported encodings, SIMD/floating point, division, atomics and TLS accesses
+The later applet profile adds division, guarded byte copies and virtual segment
+bases. Unsupported encodings, floating point/vector arithmetic and atomics
 stop execution. This is not a complete x86-64 CPU implementation.
 
-`brk` and anonymous private `mmap` provide zeroed pages inside the same 2 MiB
+`brk` and anonymous private `mmap` provide zeroed pages inside the same bounded 16 MiB process
 arena. `mprotect` and `munmap` operate only on the anonymous mmap area; image,
 brk and stack protection changes are outside this profile. Anonymous executable
 memory, fixed mappings, shared/file mappings and unsupported mmap flags are

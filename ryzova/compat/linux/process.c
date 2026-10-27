@@ -47,7 +47,7 @@ int ryz_vm_run_process_elf(const unsigned char *image, size_t length,
        args->argv==NULL || (args->envc!=0 && args->envp==NULL) ||
        ryz_elf64_plan(image,length,&plan)!=RYZ_ELF_OK)
         return RYZ_VM_BAD_INPUT;
-    cap=capacity<RYZ_VM_MAX_SPAN?capacity:RYZ_VM_MAX_SPAN;
+    cap=capacity<RYZ_PROCESS_MAX_SPAN?capacity:RYZ_PROCESS_MAX_SPAN;
     cap &= ~(uint64_t)(RYZ_PAGE-1);
     for(i=0;i<plan.load_count;i++) {
         if(plan.loads[i].map_start<lowest) lowest=plan.loads[i].map_start;

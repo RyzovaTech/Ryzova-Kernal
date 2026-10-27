@@ -202,6 +202,7 @@ static int64_t do_openat(RyzLinuxProcess *p, uint64_t dirfd,
                 memset(p->files->output, 0, p->files->output_capacity);
                 p->files->output_size = 0;
             }
+            p->fds[fd].cloexec = (flags & L_O_CLOEXEC) != 0;
             p->fds[fd].offset = 0;
             p->fds[fd].open = 1;
             p->fds[fd].node = kind;
@@ -209,6 +210,36 @@ static int64_t do_openat(RyzLinuxProcess *p, uint64_t dirfd,
             return fd;
         }
     return -L_EMFILE;
+}
+static uint64_t word64(const unsigned char *b)
+{
+    uint64_t v=0;unsigned int i;
+    for(i=0;i<8;i++)v|=(uint64_t)b[i]<<(i*8);
+    return v;
+}
+static int64_t do_writev(RyzLinuxProcess *p, uint64_t fd, uint64_t address, uint64_t count)
+{
+    unsigned char *table, *bytes;
+    uint64_t bases[16], lengths[16], i,total=0,done=0;
+    int64_t n;
+    if(count>16)return -L_EINVAL;
+    if(fd>=RYZ_LINUX_FD_MAX || !p->fds[fd].open)return -L_EBADF;
+    if(!guest_range(p,address,count*16,&table) ||
+       (p->memory_read && !p->memory_read(p->memory_context,address,count*16)))return -L_EFAULT;
+    for(i=0;i<count;i++){
+        bases[i]=word64(table+i*16);lengths[i]=word64(table+i*16+8);
+        if(lengths[i]>RYZ_LINUX_IO_MAX-total)return -L_EINVAL;
+        total+=lengths[i];
+        if(!guest_range(p,bases[i],lengths[i],&bytes) ||
+           (lengths[i] && p->memory_read && !p->memory_read(p->memory_context,bases[i],lengths[i])))return -L_EFAULT;
+    }
+    for(i=0;i<count;i++){
+        n=do_write(p,fd,bases[i],lengths[i]);
+        if(n<0)return done?(int64_t)done:n;
+        done+=(uint64_t)n;
+        if((uint64_t)n<lengths[i])break;
+    }
+    return (int64_t)done;
 }
 int64_t ryz_linux_syscall(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
 {
@@ -222,6 +253,18 @@ int64_t ryz_linux_syscall(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
     case 9: case 10: case 11: case 12:
         return p->memory_call == NULL ? -L_ENOSYS :
                p->memory_call(p->memory_context, regs);
+    case 20:return do_writev(p,regs->rdi,regs->rsi,regs->rdx);
+    case 16:
+        return regs->rdi>=RYZ_LINUX_FD_MAX || !p->fds[regs->rdi].open?-L_EBADF:-25;
+    case 72:
+        if(regs->rdi>=RYZ_LINUX_FD_MAX || !p->fds[regs->rdi].open)return -L_EBADF;
+        if(regs->rsi==1)return p->fds[regs->rdi].cloexec;
+        if(regs->rsi==2){
+            if((regs->rdx&~UINT64_C(1))!=0)return -L_EINVAL;
+            p->fds[regs->rdi].cloexec=(int)regs->rdx;return 0;
+        }
+        if(regs->rsi==3)return regs->rdi==1 || regs->rdi==2?1:p->fds[regs->rdi].mode;
+        return -L_EINVAL;
     case L_READ: return do_read(p, regs->rdi, regs->rsi, regs->rdx);
     case L_WRITE: return do_write(p, regs->rdi, regs->rsi, regs->rdx);
     case L_OPENAT: return do_openat(p, regs->rdi, regs->rsi, regs->rdx);

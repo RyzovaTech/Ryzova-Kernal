@@ -21,14 +21,14 @@ int main(int argc,char **argv)
     in=fopen(argv[1],"rb");
     if(in==NULL || fseek(in,0,SEEK_END)!=0)return 65;
     size=ftell(in);
-    if(size<=0 || size>1048576 || fseek(in,0,SEEK_SET)!=0){fclose(in);return 65;}
-    image=malloc((size_t)size); memory=malloc(RYZ_VM_MAX_SPAN);
+    if(size<=0 || size>RYZ_PROCESS_IMAGE_MAX || fseek(in,0,SEEK_SET)!=0){fclose(in);return 65;}
+    image=malloc((size_t)size); memory=malloc(RYZ_PROCESS_MAX_SPAN);
     if(image==NULL || memory==NULL)return 65;
     if(fread(image,1,(size_t)size,in)!=(size_t)size){fclose(in);return 65;}
     fclose(in);
     args.argv=(const char *const *)(argv+1);args.argc=(size_t)argc-1;
     args.envp=env;args.envc=1;
-    status=ryz_vm_run_process_elf(image,(size_t)size,memory,RYZ_VM_MAX_SPAN,NULL,&args,sink,NULL,&result);
+    status=ryz_vm_run_process_elf(image,(size_t)size,memory,RYZ_PROCESS_MAX_SPAN,NULL,&args,sink,NULL,&result);
     fprintf(stderr,"COMPACT_PROCESS_RESULT status=%d exited=%d exit=%u steps=%u syscalls=%u rip=%llx\n",
         status,result.exited,(unsigned)result.exit_status,(unsigned)result.executed_steps,
         (unsigned)result.syscall_count,(unsigned long long)result.last_rip);

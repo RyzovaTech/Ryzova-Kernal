@@ -3,6 +3,8 @@
 #define RYZ_COMPACT_PROCESS_H
 #include "subset_vm.h"
 #include "elf64.h"
+#define RYZ_PROCESS_MAX_SPAN (16U * 1024U * 1024U)
+#define RYZ_PROCESS_IMAGE_MAX (4U * 1024U * 1024U)
 #define RYZ_PROCESS_STACK 65536U
 #define RYZ_PROCESS_STEPS 262144U
 #define RYZ_PROCESS_ARGS 16U
@@ -14,7 +16,7 @@
 typedef struct RyzLinuxMemory {
     unsigned char *bytes;
     uint64_t base, size, heap, brk, stack;
-    unsigned char pages[RYZ_VM_MAX_SPAN / RYZ_PAGE];
+    unsigned char pages[RYZ_PROCESS_MAX_SPAN / RYZ_PAGE];
 } RyzLinuxMemory;
 typedef struct RyzProcessArgs {
     const char *const *argv, *const *envp;

@@ -17,7 +17,7 @@ main(int argc, char **argv)
     const char *env[RYZ_PROCESS_ARGS];
     RyzProcessArgs args;
     long n;
-    size_t used;
+    size_t used, image_limit, arena_limit;
     unsigned char *image, *arena, *input, *fileout;
     char *imagepath, *inputpath;
     RyzLinuxFiles files;
@@ -48,13 +48,15 @@ main(int argc, char **argv)
     fd = open(imagepath, OREAD);
     if(fd < 0)
         sysfatal("open input: %r");
-    image = malloc(IMAGE_LIMIT + 1);
-    arena = malloc(RYZ_VM_MAX_SPAN);
+    image_limit=processmode?RYZ_PROCESS_IMAGE_MAX:IMAGE_LIMIT;
+    arena_limit=processmode?RYZ_PROCESS_MAX_SPAN:RYZ_VM_MAX_SPAN;
+    image = malloc(image_limit + 1);
+    arena = malloc(arena_limit);
     if(image == nil || arena == nil)
         sysfatal("allocate bounded runtime: %r");
     used = 0;
-    while(used < IMAGE_LIMIT + 1){
-        n = read(fd, image + used, IMAGE_LIMIT + 1 - used);
+    while(used < image_limit + 1){
+        n = read(fd, image + used, image_limit + 1 - used);
         if(n < 0)
             sysfatal("read input: %r");
         if(n == 0)
@@ -62,8 +64,8 @@ main(int argc, char **argv)
         used += n;
     }
     close(fd);
-    if(used == 0 || used > IMAGE_LIMIT)
-        sysfatal("input outside 1..1048576 byte limit");
+    if(used == 0 || used > image_limit)
+        sysfatal("input outside 1..%lud byte limit", (ulong)image_limit);
     if(filemode){
         input = malloc(RYZ_LINUX_FILE_MAX + 1);
         fileout = malloc(RYZ_LINUX_FILE_MAX);
@@ -88,7 +90,7 @@ main(int argc, char **argv)
         files.output = fileout;
         files.output_capacity = RYZ_LINUX_FILE_MAX;
         if(processmode)
-            status=ryz_vm_run_process_elf(image,used,arena,RYZ_VM_MAX_SPAN,&files,&args,output,nil,&result);
+            status=ryz_vm_run_process_elf(image,used,arena,arena_limit,&files,&args,output,nil,&result);
         else
             status = ryz_vm_run_file_elf(image, used, arena, RYZ_VM_MAX_SPAN,
                                          &files, output, nil, &result);
@@ -103,7 +105,7 @@ main(int argc, char **argv)
         }
         fprint(2, "COMPACT_FILES_RESULT bytes=%ud profile=files-v1\n", (uint)files.output_size);
     }else if(processmode)
-        status=ryz_vm_run_process_elf(image,used,arena,RYZ_VM_MAX_SPAN,nil,&args,output,nil,&result);
+        status=ryz_vm_run_process_elf(image,used,arena,arena_limit,nil,&args,output,nil,&result);
     else
         status = ryz_vm_run_static_elf(image, used, arena, RYZ_VM_MAX_SPAN,
                                       output, nil, &result);

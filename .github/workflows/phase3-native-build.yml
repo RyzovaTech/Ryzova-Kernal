@@ -123,6 +123,7 @@ jobs:
             artifacts/phase3/phase9-compact-native.json
             artifacts/phase3/phase9-linux-environment.json
             artifacts/phase3/phase9-linux-process.json
+            artifacts/phase3/phase9-linux-busybox.json
             artifacts/phase3/phase7-secure-closeout.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn

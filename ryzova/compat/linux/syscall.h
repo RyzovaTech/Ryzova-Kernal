@@ -24,7 +24,7 @@ typedef int (*RyzLinuxMemoryWrite)(void *context, uint64_t address, uint64_t siz
 typedef int64_t (*RyzLinuxMemoryCall)(void *context, const RyzLinuxRegs *regs);
 typedef struct RyzLinuxFD {
     enum RyzLinuxNode node;
-    int mode, open;
+    int mode, open, cloexec;
     size_t offset;
 } RyzLinuxFD;
 typedef struct RyzLinuxProcess {

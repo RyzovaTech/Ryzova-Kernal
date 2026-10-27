@@ -32,7 +32,7 @@ def commands(commit):
         '/amd64/bin/compact-linux -p -i /tmp/flex-input /tmp/f-copy > /tmp/p-copy && echo FLEX_PROCESS_FILE_OK',
         'cmp /tmp/p-copy /tmp/flex-input && echo FLEX_PROCESS_FILE_DIGEST_OK',
     ]
-    return [op + f'; echo RYZOVA_RUNTIME_STAGE_{60+i}' for i, op in enumerate(operations)] + ['echo FLEX_PROCESS_DONE']
+    return [op + f'; echo RYZOVA_RUNTIME_STAGE_{60+i}' for i, op in enumerate(operations)] + ['echo FLEX_PROCESS_DONE; echo RYZOVA_RUNTIME_STAGE_67']
 
 
 def inspect(build_serial, serial, commit, digest):

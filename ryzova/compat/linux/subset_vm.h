@@ -9,7 +9,7 @@
 enum RyzVmResultCode {
     RYZ_VM_OK = 0, RYZ_VM_BAD_INPUT = 1, RYZ_VM_MAP_ERROR = 2,
     RYZ_VM_OPCODE_UNSUPPORTED = 3, RYZ_VM_STEP_LIMIT = 4,
-    RYZ_VM_SYSCALL_UNSUPPORTED = 5
+    RYZ_VM_SYSCALL_UNSUPPORTED = 5, RYZ_VM_ARITHMETIC_ERROR = 6
 };
 typedef struct RyzVmResult {
     uint32_t executed_steps;
