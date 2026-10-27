@@ -11,7 +11,7 @@ their earlier completion boundaries.
 ```
 compact-linux -j -x /busybox /tmp/busybox ash -c 'echo hi | /busybox cat'
 compact-linux -j -x /busybox /tmp/busybox ash -c 'x=$(echo nested | /busybox cat); echo "$x"'
-compact-linux -j -x /busybox -x /probe=/tmp/static-program /tmp/busybox ash -c '/probe argument | /busybox cat'
+compact-linux -j -x /busybox -x '/probe=/tmp/static-program' /tmp/busybox ash -c '/probe argument | /busybox cat'
 ```
 
 Each `-x /guest/path` registers the initial ELF under an exact guest execution

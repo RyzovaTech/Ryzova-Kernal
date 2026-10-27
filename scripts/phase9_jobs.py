@@ -35,7 +35,7 @@ def commands(commit):
     ops=['hget http://10.0.2.2:8000/jobs-fixture.elf > /tmp/j-elf','sha1sum -2 256 /tmp/j-elf',
          'hget http://10.0.2.2:8000/jobs-script > /tmp/j-script','sha1sum -2 256 /tmp/j-script',
          'hget http://10.0.2.2:8000/jobs-data > /tmp/j-data','sha1sum -2 256 /tmp/j-data','cat /compact/linux/jobs','echo FLEX_JOBS_BEGIN',
-         f'/amd64/bin/compact-linux -j -x /busybox -x /probe=/tmp/j-elf -i /tmp/j-script /tmp/busybox ash /input PJ_{commit} && echo FLEX_JOBS_RUN_OK']
+         f"/amd64/bin/compact-linux -j -x /busybox -x '/probe=/tmp/j-elf' -i /tmp/j-script /tmp/busybox ash /input PJ_{commit} && echo FLEX_JOBS_RUN_OK"]
     for mode in CASES:
         grant='-i /tmp/j-data ' if mode in ('offset','descriptions') else ''
         ops.append(f'/amd64/bin/compact-linux -j -x /tmp/j-elf {grant}/tmp/j-elf {mode} J_{mode}_{commit} && echo FLEX_JOB_{mode}_OK')
