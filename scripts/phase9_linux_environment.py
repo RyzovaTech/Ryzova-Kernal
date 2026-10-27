@@ -154,7 +154,7 @@ def commands():
         if len(command) > 220:
             raise ValueError('serial line too long')
         result.append(command)
-    result.append('echo RYZOVA_LINUX_ENV_DONE')
+    result.append('echo RYZOVA_LINUX_ENV_DONE; echo RYZOVA_RUNTIME_STAGE_59')
     return result
 
 

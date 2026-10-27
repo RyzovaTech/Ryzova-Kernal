@@ -15,6 +15,9 @@ static char abi[] = "linux-amd64-static-subset-v1\n"
 static char status[] = "experimental bounded-file-profile\n"
     "general-linux-compatibility=false windows=false mac=false\n"
     "metadata-is-not-authorization=true\n";
+static char process[] = "linux-amd64-compiler-static-v1\nstartup=argc,argv,explicit-envp,auxv stack=65536\n"
+    "memory=brk,anonymous-mmap,mprotect,munmap executable-anonymous-memory=false\n"
+    "integer-instruction-subset=true libc=false tls=false simd=false threads=false signals=false\n";
 static char limits[] = "image=1048576 arena=2097152 input=65536 output=65536 stdio=65536 fds=16 steps=65536\n";
 
 static void
@@ -56,6 +59,7 @@ main(int argc, char **argv)
     leaf(linux, "abi", abi);
     leaf(linux, "status", status);
     leaf(linux, "limits", limits);
+    leaf(linux, "process", process);
     closefile(linux);
     closefile(compact);
     fs.read = fsread;

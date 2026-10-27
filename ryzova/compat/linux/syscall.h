@@ -21,6 +21,7 @@ typedef struct RyzLinuxFiles {
     size_t output_capacity, output_size;
 } RyzLinuxFiles;
 typedef int (*RyzLinuxMemoryWrite)(void *context, uint64_t address, uint64_t size);
+typedef int64_t (*RyzLinuxMemoryCall)(void *context, const RyzLinuxRegs *regs);
 typedef struct RyzLinuxFD {
     enum RyzLinuxNode node;
     int mode, open;
@@ -36,7 +37,8 @@ typedef struct RyzLinuxProcess {
     void *write_context;
     uint64_t output_bytes;
     RyzLinuxFiles *files;
-    RyzLinuxMemoryWrite memory_write;
+    RyzLinuxMemoryWrite memory_write, memory_read;
+    RyzLinuxMemoryCall memory_call;
     void *memory_context;
     int exited;
     uint8_t exit_status;

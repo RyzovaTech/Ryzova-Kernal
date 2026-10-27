@@ -78,6 +78,9 @@ static int64_t do_write(RyzLinuxProcess *p, uint64_t fd,
         return -L_EINVAL;
     if (!guest_range(p, address, count, &buf))
         return -L_EFAULT;
+    if (count != 0 && p->memory_read != NULL &&
+        !p->memory_read(p->memory_context, address, count))
+        return -L_EFAULT;
     if (fd == 0)
         return -L_EBADF;
     if (fd == 1 || fd == 2) {
@@ -159,6 +162,9 @@ static int64_t do_openat(RyzLinuxProcess *p, uint64_t dirfd,
     for (i = 0; i < RYZ_NS_PATH_MAX; ++i) {
         if (!guest_range(p, pathaddr, (uint64_t)i + 1U, &buf))
             return -L_EFAULT;
+        if (p->memory_read != NULL &&
+            !p->memory_read(p->memory_context, pathaddr, (uint64_t)i + 1U))
+            return -L_EFAULT;
         if (buf[i] == 0)
             break;
     }
@@ -213,6 +219,9 @@ int64_t ryz_linux_syscall(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
         return -L_EPERM;
     nr = regs->rax;
     switch (nr) {
+    case 9: case 10: case 11: case 12:
+        return p->memory_call == NULL ? -L_ENOSYS :
+               p->memory_call(p->memory_context, regs);
     case L_READ: return do_read(p, regs->rdi, regs->rsi, regs->rdx);
     case L_WRITE: return do_write(p, regs->rdi, regs->rsi, regs->rdx);
     case L_OPENAT: return do_openat(p, regs->rdi, regs->rsi, regs->rdx);

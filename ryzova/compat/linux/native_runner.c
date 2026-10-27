@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Native Plan 9 user-space application; interprets a bounded Linux ELF subset. */
-#include "subset_vm.h"
+#include "process.h"
 #define IMAGE_LIMIT (1024U * 1024U)
 
 static int64_t
@@ -13,7 +13,9 @@ output(void *context, int fd, const unsigned char *bytes, size_t size)
 void
 main(int argc, char **argv)
 {
-    int fd, status, filemode;
+    int fd, status, filemode, processmode, argi;
+    const char *env[RYZ_PROCESS_ARGS];
+    RyzProcessArgs args;
     long n;
     size_t used;
     unsigned char *image, *arena, *input, *fileout;
@@ -21,15 +23,26 @@ main(int argc, char **argv)
     RyzLinuxFiles files;
     RyzVmResult result;
 
-    filemode = argc == 4 && strcmp(argv[1], "-i") == 0;
-    if(argc != 2 && !filemode){
-        fprint(2, "usage: compact-linux [-i input-file] static-linux-amd64-elf\n");
+    filemode=processmode=0; inputpath=nil; argi=1;
+    memset(&args,0,sizeof args);
+    while(argi<argc){
+        if(strcmp(argv[argi],"-p")==0){ processmode=1; argi++; }
+        else if(strcmp(argv[argi],"-i")==0 && argi+1<argc && !filemode){
+            filemode=1; inputpath=argv[argi+1]; argi+=2;
+        }else if(strcmp(argv[argi],"-e")==0 && argi+1<argc && args.envc<RYZ_PROCESS_ARGS){
+            env[args.envc++]=argv[argi+1]; argi+=2;
+        }else if(strcmp(argv[argi],"--")==0){ argi++; break; }
+        else break;
+    }
+    if(argi>=argc || (!processmode && (argc-argi!=1 || args.envc!=0))){
+        fprint(2, "usage: compact-linux [-p [-e KEY=VALUE]] [-i input-file] ELF [args...]\n");
         exits("usage");
     }
     if(rfork(RFNAMEG|RFENVG) < 0)
         sysfatal("private process namespace: %r");
-    imagepath = filemode ? argv[3] : argv[1];
-    inputpath = filemode ? argv[2] : nil;
+    imagepath=argv[argi];
+    args.argv=(const char *const *)(argv+argi); args.argc=argc-argi;
+    args.envp=env;
     input = fileout = nil;
     memset(&files, 0, sizeof files);
     fd = open(imagepath, OREAD);
@@ -74,8 +87,11 @@ main(int argc, char **argv)
         files.input = input;
         files.output = fileout;
         files.output_capacity = RYZ_LINUX_FILE_MAX;
-        status = ryz_vm_run_file_elf(image, used, arena, RYZ_VM_MAX_SPAN,
-                                     &files, output, nil, &result);
+        if(processmode)
+            status=ryz_vm_run_process_elf(image,used,arena,RYZ_VM_MAX_SPAN,&files,&args,output,nil,&result);
+        else
+            status = ryz_vm_run_file_elf(image, used, arena, RYZ_VM_MAX_SPAN,
+                                         &files, output, nil, &result);
         if(status == RYZ_VM_OK && result.exited && result.exit_status == 0){
             used = 0;
             while(used < files.output_size){
@@ -86,7 +102,9 @@ main(int argc, char **argv)
             }
         }
         fprint(2, "COMPACT_FILES_RESULT bytes=%ud profile=files-v1\n", (uint)files.output_size);
-    }else
+    }else if(processmode)
+        status=ryz_vm_run_process_elf(image,used,arena,RYZ_VM_MAX_SPAN,nil,&args,output,nil,&result);
+    else
         status = ryz_vm_run_static_elf(image, used, arena, RYZ_VM_MAX_SPAN,
                                       output, nil, &result);
     fprint(2, "COMPACT_LINUX_RESULT status=%d exited=%d exit=%ud steps=%ud syscalls=%ud\n",
