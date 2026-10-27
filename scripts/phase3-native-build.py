@@ -88,7 +88,7 @@ stages = [
      "hget http://10.0.2.2:8000/kernel-source.tar.gz > /tmp/kernel-source.tar.gz; "
      "ls -l /tmp/kernel-source.tar.gz; echo PHASE3_END_1"),
     ("install-exact-kernel-source",
-     "cd /; tar xzf /tmp/kernel-source.tar.gz; "
+     "cd /; mkdir -p /ryzova/compat/linux; tar xzf /tmp/kernel-source.tar.gz; "
      "cd /sys/src/9/pc64; ls -l main.c mkfile; echo PHASE3_END_2"),
     ("native-amd64-mk",
      "cd /sys/src/9/pc64; mk > /tmp/ryzova-native-build.log >[2=1]; "
@@ -119,8 +119,9 @@ for component in m1_native_components:
 
 index = len(stages)
 stages.append(("compact-linux-native",
-    "cd /ryzova/compat/linux; mk install > /tmp/compact-build.log >[2=1] "
-    "&& echo COMPACT_NATIVE_BUILD_OK; tail -n 30 /tmp/compact-build.log; "
+    "cd /ryzova/compat/linux && mk install > /tmp/compact-build.log >[2=1] "
+    "&& test -s /amd64/bin/compact-linux && echo COMPACT_NATIVE_BUILD_OK; "
+    "tail -n 30 /tmp/compact-build.log; "
     "echo PHASE3_END_" + str(index)))
 
 # M5.1 native ARM64 cross-build in an *actual* 9front AMD64 guest.

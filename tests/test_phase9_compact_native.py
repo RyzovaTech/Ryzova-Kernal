@@ -24,7 +24,7 @@ class CompactNativeTests(unittest.TestCase):
             if name == "hello":
                 lines.append(f"FLEX_COMPACT_{COMMIT}")
             lines.extend([f"COMPACT_LINUX_RESULT status={status} exited={exited} "
-                          f"exit={code} steps={steps} syscalls={calls}", f"COMPACT_{name}_END"])
+                          f"exit={code} steps={steps} syscalls={calls}", "COMPACT_RC_OK", f"COMPACT_{name}_END"])
         lines.extend([hashlib.sha256(fixtures(COMMIT)["hello"]).hexdigest() + " /tmp/c-hello",
                       "RYZOVA_COMPACT_DONE"])
         return ("\n".join(lines) + "\n").encode()
@@ -33,7 +33,7 @@ class CompactNativeTests(unittest.TestCase):
         serial = self.serial()
         self.assertTrue(inspect(b"COMPACT_NATIVE_BUILD_OK\n", serial, COMMIT)["passed"])
         for old, new in ((b"steps=2048", b"steps=1"), (b"status=5", b"status=0"),
-                         (b"exit=7", b"exit=0"), (b"FLEX_COMPACT_", b"WRONG_"),
+                         (b"exit=7", b"exit=0"), (b"COMPACT_RC_OK", b"wrong_status"), (b"FLEX_COMPACT_", b"WRONG_"),
                          (b"RYZOVA_RUNTIME_STAGE_29", b"missing")):
             self.assertFalse(inspect(b"COMPACT_NATIVE_BUILD_OK\n", serial.replace(old, new), COMMIT)["passed"])
         self.assertFalse(inspect(b"echo COMPACT_NATIVE_BUILD_OK\n", serial, COMMIT)["passed"])

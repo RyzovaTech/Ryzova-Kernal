@@ -43,8 +43,9 @@ def commands():
         index += 1
         # Markers printed separately from the command echo; guest output is
         # captured only between standalone lines.
-        result.append(f"echo COMPACT_{name}_BEGIN; compact-linux /tmp/c-{name}; "
-                      f"echo COMPACT_{name}_END; echo RYZOVA_RUNTIME_STAGE_{index}")
+        rc_check = "&& echo COMPACT_RC_OK" if name == "hello" else "; if(! ~ $status '') echo COMPACT_RC_OK"
+        result.append(f"echo COMPACT_{name}_BEGIN; /amd64/bin/compact-linux /tmp/c-{name} "
+                      f"{rc_check}; echo COMPACT_{name}_END; echo RYZOVA_RUNTIME_STAGE_{index}")
         index += 1
     result.append("sha1sum -2 256 /tmp/c-hello; echo RYZOVA_RUNTIME_STAGE_36; "
                   "echo RYZOVA_COMPACT_DONE")
@@ -69,7 +70,8 @@ def inspect(build_serial, serial, commit):
         status, exited, exitcode, steps, calls = values
         marker = (f"COMPACT_LINUX_RESULT status={status} exited={exited} "
                   f"exit={exitcode} steps={steps} syscalls={calls}").encode()
-        checks[name] = section is not None and line(section.group(1), marker)
+        checks[name] = (section is not None and line(section.group(1), marker)
+                        and line(section.group(1), b"COMPACT_RC_OK"))
         if name == "hello":
             checks["source_challenge_output"] = section is not None and line(
                 section.group(1), f"FLEX_COMPACT_{commit}".encode())
