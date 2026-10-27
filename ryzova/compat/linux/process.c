@@ -42,7 +42,7 @@ int ryz_vm_run_process_elf(const unsigned char *image, size_t length,
         files->output_size=0;
         memset(files->output,0,files->output_capacity);
     }
-    if(image==NULL || arena==NULL || result==NULL || args==NULL ||
+    if(image==NULL || length>RYZ_PROCESS_IMAGE_MAX || arena==NULL || result==NULL || args==NULL ||
        args->argc==0 || args->argc>RYZ_PROCESS_ARGS || args->envc>RYZ_PROCESS_ARGS ||
        args->argv==NULL || (args->envc!=0 && args->envp==NULL) ||
        ryz_elf64_plan(image,length,&plan)!=RYZ_ELF_OK)

@@ -224,6 +224,7 @@ static int64_t do_writev(RyzLinuxProcess *p, uint64_t fd, uint64_t address, uint
     int64_t n;
     if(count>16)return -L_EINVAL;
     if(fd>=RYZ_LINUX_FD_MAX || !p->fds[fd].open)return -L_EBADF;
+    if(count==0)return 0;
     if(!guest_range(p,address,count*16,&table) ||
        (p->memory_read && !p->memory_read(p->memory_context,address,count*16)))return -L_EFAULT;
     for(i=0;i<count;i++){

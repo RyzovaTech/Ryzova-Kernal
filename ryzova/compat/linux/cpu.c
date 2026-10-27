@@ -254,6 +254,7 @@ static int step(Cpu *c)
             c->rex=c->rex_present=0;
             if(op==0x66)c->size=2;
             if(op==0xf3 || op==0xf2)c->repeat=1;
+            if(op==0x2e || op==0x3e || op==0x26 || op==0x36)c->segment=0;
             if(op==0x64)c->segment=c->fsbase;
             if(op==0x65)c->segment=c->gsbase;
             continue;

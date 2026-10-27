@@ -32,6 +32,21 @@ int main(void)
     CHECK(call(&p,257,(uint64_t)-100,0x400000,1)==-13);
     fd=call(&p,257,(uint64_t)-100,0x400000,0);
     CHECK(fd==3);
+    CHECK(call(&p,72,fd,1,0)==0);
+    CHECK(call(&p,72,fd,2,1)==0 && call(&p,72,fd,1,0)==1);
+    CHECK(call(&p,72,fd,2,2)==-22 && call(&p,72,fd,1,0)==1);
+    CHECK(call(&q,72,fd,1,0)==-9);
+    CHECK(call(&p,72,fd,3,0)==0);
+    CHECK(call(&p,16,fd,0,0)==-25 && call(&p,16,16,0,0)==-9);
+    CHECK(call(&p,20,1,UINT64_MAX,0)==0);
+    CHECK(call(&p,20,1,0x400100,17)==-22);
+    CHECK(call(&p,20,1,UINT64_MAX,1)==-14);
+    memset(memory+512,0,32);
+    memset(memory+512,255,8);
+    memory[520]=1;
+    CHECK(call(&p,20,1,0x400200,1)==-14);
+    CHECK(p.output_bytes==0);
+
     CHECK(call(&p,0,fd,0x400100,2)==2 && memcmp(memory+256,"ab",2)==0);
     CHECK(call(&p,0,fd,0x400100,2)==1 && memory[256]=='c');
     CHECK(call(&p,0,fd,0x400100,2)==0);
