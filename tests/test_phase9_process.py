@@ -99,11 +99,12 @@ class ProcessTests(unittest.TestCase):
         commit='c'*40;digest=hashlib.sha256(self.app.read_bytes()).hexdigest()
         lines=['FLEX_PROCESS_BEGIN','FLEX_COMPILED_C_OK','PC_'+commit,
                'COMPACT_LINUX_RESULT status=0 exited=1 exit=0 steps=2977 syscalls=13',
-               'FLEX_PROCESS_EXIT_OK','FLEX_PROCESS_END',digest+' /tmp/p-compiled','FLEX_PROCESS_DONE']
-        lines += [f'RYZOVA_RUNTIME_STAGE_{i}' for i in range(60,65)]
+               'FLEX_PROCESS_EXIT_OK','FLEX_PROCESS_END',digest+' /tmp/p-compiled','FLEX_PROCESS_DONE',
+               'FLEX_PROCESS_FILE_OK','FLEX_PROCESS_FILE_DIGEST_OK']
+        lines += [f'RYZOVA_RUNTIME_STAGE_{i}' for i in range(60,60+len(commands(commit))-1)]
         serial=('\n'.join(lines)+'\n').encode()
         self.assertTrue(inspect(b'COMPACT_NATIVE_BUILD_OK\n',serial,commit,digest)['passed'])
-        for value in (b'FLEX_COMPILED_C_OK',b'PC_'+commit.encode(),b'FLEX_PROCESS_EXIT_OK',b'syscalls=13'):
+        for value in (b'FLEX_COMPILED_C_OK',b'PC_'+commit.encode(),b'FLEX_PROCESS_EXIT_OK',b'syscalls=13',b'FLEX_PROCESS_FILE_DIGEST_OK'):
             self.assertFalse(inspect(b'COMPACT_NATIVE_BUILD_OK\n',serial.replace(value,b'missing'),commit,digest)['passed'])
         self.assertFalse(inspect(b'echo COMPACT_NATIVE_BUILD_OK\n',serial,commit,digest)['passed'])
         self.assertFalse(inspect(b'COMPACT_NATIVE_BUILD_OK\n',serial,commit,'a'*64)['passed'])

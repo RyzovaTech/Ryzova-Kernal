@@ -48,7 +48,8 @@ The mandatory native workflow compiles the runtime with the guest Plan 9
 toolchain, reboots the freshly source-built kernel, transfers the GCC ELF,
 executes it using `compact-linux -p`, and requires the C-program marker,
 source-commit argument challenge, 13 expected syscalls, successful exit and
-guest/host ELF SHA256 equality. Existing file-profile and authenticated remote
+guest/host ELF SHA256 equality. A further run verifies the existing file-copy ELF through the new process
+path with an explicit input grant. Existing file-profile and authenticated remote
 resource tests remain mandatory. Report: `phase9-linux-process.json`.
 
 Host tests compare Unicode and boundary-size arguments, reject oversized

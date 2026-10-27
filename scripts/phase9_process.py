@@ -29,6 +29,8 @@ def commands(commit):
         f'/amd64/bin/compact-linux -p -e FLEX_MODE=test /tmp/p-compiled PC_{commit} && echo FLEX_PROCESS_EXIT_OK',
         'echo FLEX_PROCESS_END',
         'sha1sum -2 256 /tmp/p-compiled',
+        '/amd64/bin/compact-linux -p -i /tmp/flex-input /tmp/f-copy > /tmp/p-copy && echo FLEX_PROCESS_FILE_OK',
+        'cmp /tmp/p-copy /tmp/flex-input && echo FLEX_PROCESS_FILE_DIGEST_OK',
     ]
     return [op + f'; echo RYZOVA_RUNTIME_STAGE_{60+i}' for i, op in enumerate(operations)] + ['echo FLEX_PROCESS_DONE']
 
@@ -43,7 +45,8 @@ def inspect(build_serial, serial, commit, digest):
               'clean_exit': section is not None and line(section.group(1), b'FLEX_PROCESS_EXIT_OK'),
               'startup_memory_syscalls': section is not None and re.search(
                   rb'(?:^|\r?\n)COMPACT_LINUX_RESULT status=0 exited=1 exit=0 steps=[1-9][0-9]* syscalls=13(?:\r?\n|$)', section.group(1)) is not None,
-              'stages': all(line(serial, f'RYZOVA_RUNTIME_STAGE_{i}'.encode()) for i in range(60,65)),
+              'stages': all(line(serial, f'RYZOVA_RUNTIME_STAGE_{i}'.encode()) for i in range(60,60+len(commands(commit))-1)),
+              'explicit_file_grant': line(serial,b'FLEX_PROCESS_FILE_OK') and line(serial,b'FLEX_PROCESS_FILE_DIGEST_OK'),
               'done': line(serial,b'FLEX_PROCESS_DONE'),
               'no_panic': re.search(rb'(?im)^panic:',serial) is None,
               'input_digest': isinstance(digest,str) and re.fullmatch('[a-f0-9]{64}',digest) is not None and re.search(
