@@ -249,6 +249,10 @@ if not re.search(r"(?:^|\r?\n)PHASE3_MK_STATUS_\s*(?:\r?\n)",text):
 if re.search(r"(?:^|\r?\n)ls:.*9pc64",text):
     print("FAIL: expected AMD64 kernel not found",file=sys.stderr)
     sys.exit(1)
+if not re.search(rb"(?:^|\r?\n)COMPACT_SERVICE_BUILD_OK(?:\r?\n|$)", bytes(raw)):
+    print("FAIL: native Compact discovery service did not compile/install", file=sys.stderr)
+    sys.exit(1)
+
 if not marks.get("flush-native-filesystem"):
     print("FAIL: native filesystem sync stage did not complete", file=sys.stderr)
     sys.exit(1)
