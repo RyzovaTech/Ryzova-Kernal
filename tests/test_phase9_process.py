@@ -2,6 +2,7 @@
 import hashlib
 import os
 import random
+import struct
 from pathlib import Path
 import subprocess
 import sys
@@ -84,6 +85,19 @@ class ProcessTests(unittest.TestCase):
             vm=self.run_vm(path,'x')
             self.assertEqual(vm.returncode,2)
             self.assertIn(b'status='+ (b'3' if code==b'\x0f\x0b' else b'2'),vm.stderr)
+
+    def test_address_space_cannot_extend_past_canonical_user_limit(self):
+        raw=bytearray(image(b'\xb8\x3c\0\0\0\x31\xff\x0f\x05',b''))
+        base=(1<<47)-8192
+        struct.pack_into('<Q',raw,24,base+256)
+        for offset,address in ((64,base),(120,base+4096)):
+            struct.pack_into('<Q',raw,offset+16,address)
+            struct.pack_into('<Q',raw,offset+24,address)
+        path=self.dir/'noncanonical-stack'
+        path.write_bytes(raw)
+        result=self.run_vm(path,'x')
+        self.assertEqual(result.returncode,2)
+        self.assertIn(b'status=2',result.stderr)
 
     def test_malformed_integer_instruction_streams_stay_bounded(self):
         rng=random.Random(0x9f04)

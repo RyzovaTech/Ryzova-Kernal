@@ -53,7 +53,7 @@ int ryz_vm_run_process_elf(const unsigned char *image, size_t length,
         if(plan.loads[i].map_start<lowest) lowest=plan.loads[i].map_start;
         if(plan.loads[i].map_end>highest) highest=plan.loads[i].map_end;
     }
-    if(cap<RYZ_PROCESS_STACK+2*RYZ_PAGE || highest-lowest>cap-RYZ_PROCESS_STACK-RYZ_PAGE || lowest>UINT64_MAX-cap)
+    if(cap<RYZ_PROCESS_STACK+2*RYZ_PAGE || highest-lowest>cap-RYZ_PROCESS_STACK-RYZ_PAGE || lowest>UINT64_MAX-cap || lowest>UINT64_C(0x0000800000000000)-cap)
         return RYZ_VM_MAP_ERROR;
     memset(&memory,0,sizeof(memory));
     memory.bytes=arena; memory.base=lowest; memory.size=cap;
