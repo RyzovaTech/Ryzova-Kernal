@@ -137,6 +137,12 @@ if m5_arm64_native:
         "echo M5_ARM64_MK_STATUS_$status; tail -n 20 /tmp/m5-arm64-native.log; "
         "ls -l 9qemu; echo PHASE3_END_" + str(index)))
 
+# The source-built kernel is copied through FAT, but user-space binaries are
+# installed on hjfs. Flush that filesystem before terminating this QEMU process.
+index = len(stages)
+stages.append(("flush-native-filesystem",
+    "echo sync > /srv/hjfs.cmd; sleep 3; echo PHASE3_END_" + str(index)))
+
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
 marks = {}
