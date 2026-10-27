@@ -26,7 +26,7 @@ def commands(commit):
     operations = [
         'hget http://10.0.2.2:8000/process-compiled.elf > /tmp/p-compiled',
         'echo FLEX_PROCESS_BEGIN',
-        f'/amd64/bin/compact-linux -p -e FLEX_MODE=test /tmp/p-compiled PC_{commit} && echo FLEX_PROCESS_EXIT_OK',
+        f"/amd64/bin/compact-linux -p -e 'FLEX_MODE=test' /tmp/p-compiled PC_{commit} && echo FLEX_PROCESS_EXIT_OK",
         'echo FLEX_PROCESS_END',
         'sha1sum -2 256 /tmp/p-compiled',
         '/amd64/bin/compact-linux -p -i /tmp/flex-input /tmp/f-copy > /tmp/p-copy && echo FLEX_PROCESS_FILE_OK',

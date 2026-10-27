@@ -110,6 +110,8 @@ main(int argc, char **argv)
     fprint(2, "COMPACT_LINUX_RESULT status=%d exited=%d exit=%ud steps=%ud syscalls=%ud\n",
         status, result.exited, (uint)result.exit_status,
         (uint)result.executed_steps, (uint)result.syscall_count);
+    if(processmode && status != RYZ_VM_OK)
+        fprint(2,"COMPACT_PROCESS_FAULT rip=%llux\n",result.last_rip);
     free(input);
     free(fileout);
     free(arena);

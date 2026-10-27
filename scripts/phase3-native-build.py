@@ -475,6 +475,8 @@ print("NATIVE LINUX FILE ENVIRONMENT", environment_evidence["passed"], flush=Tru
 process_evidence = inspect_process(bytes(raw), bytes(bootlog), SOURCE_SHA, process_elf_sha256)
 (OUT / "phase9-linux-process.json").write_text(json.dumps(process_evidence, indent=2) + "\n")
 print("NATIVE COMPILED LINUX PROCESS", process_evidence["passed"], flush=True)
+if not process_evidence["passed"] and shutil.which("objdump"):
+    subprocess.run(["objdump", "-d", str(OUT / "process-compiled.elf")], check=False)
 runtime_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)", bytes(bootlog)) for v in (b"RYZOVA_PROC_OK", b"RYZOVA_NET_OK")) and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 2
 # A failed output redirection causes Plan 9 rc to abort the current
 # command line. Probe it independently, then ensure a fresh subsequent

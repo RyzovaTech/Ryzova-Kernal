@@ -3,7 +3,7 @@
 This adds a separate opt-in process path to the native Compact application:
 
 ```
-compact-linux -p -e FLEX_MODE=test /path/to/static-elf argument
+compact-linux -p -e 'FLEX_MODE=test' /path/to/static-elf argument
 compact-linux -p -i /path/to/input /path/to/static-elf argument
 ```
 
