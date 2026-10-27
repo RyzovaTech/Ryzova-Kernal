@@ -107,3 +107,14 @@ flags and asynchronous signals remain unfinished. SIGPIPE returns EPIPE without
 delivering a signal. Background shell `wait` paths relying on sigsuspend/SIGCHLD
 handlers are explicitly unsupported; foreground wait4/pipelines are tested.
 No Windows/macOS, general x86 ISA or physical hardware qualification is implied.
+
+## Recorded native result
+
+[Independent native evidence](validation/phase9-7-local-native.json) records the
+tested remote commit, a separate local validation snapshot, matching hashes of
+all six source/helper/test subtrees and the independently extracted kernel hash.
+The mixed BusyBox/C script and all 14 process/resource cases passed on the
+source-built kernel. All 40 Phase 9 and 63 Phase 5 tests passed locally, including
+address/undefined checks and allocation-failure balance checks. Local LeakSanitizer
+was unavailable as described above; no successful local leak scan is claimed.
+GitHub jobs stopped before executing tests, so PR CI is not reported as passing.
