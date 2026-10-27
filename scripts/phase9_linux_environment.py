@@ -143,7 +143,9 @@ def commands():
         'sha1sum -2 256 /tmp/o-copy',
         '/amd64/bin/compact-linux -i /tmp/o-copy /tmp/f-copy > /tmp/flex-second && echo FLEX_SECOND_OK',
         'cmp /tmp/flex-input /tmp/flex-second && echo FLEX_ISOLATED_COPY_OK',
-        '/amd64/bin/compact-linux -i /n/ryzova8/probe /tmp/f-copy > /tmp/flex-remote && echo FLEX_REMOTE_OK',
+        "srv -enq 'tlsclient -n localhost -c /tmp/ryzova8-cert.pem -t /tmp/ryzova7-trusted tcp!10.0.2.2!15642' ryzova9",
+        'mkdir -p /n/ryzova9; mount -n /srv/ryzova9 /n/ryzova9',
+        '/amd64/bin/compact-linux -i /n/ryzova9/probe /tmp/f-copy > /tmp/flex-remote && echo FLEX_REMOTE_OK',
         'sha1sum -2 256 /tmp/flex-remote',
         '/amd64/bin/compact-linux /tmp/f-copy > /tmp/flex-no-grant; if(! ~ $status \'\') echo FLEX_NO_GRANT_OK',
     ])

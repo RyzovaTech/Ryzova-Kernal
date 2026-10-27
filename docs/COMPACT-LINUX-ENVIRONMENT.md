@@ -70,8 +70,8 @@ the freshly source-built kernel, mounts the service, checks read-only metadata,
 and runs copy/permission/traversal/RX-write-denial workloads. It compares output
 SHA256 to binary input tied to the exact source commit, repeats execution with
 the previous output as a fresh input, and tests failure without file-profile
-opt-in. It also supplies the existing authenticated native 9P mount
-`/n/ryzova8/probe` as an explicit input grant, runs the same ELF, and verifies the
+opt-in. It also supplies a freshly authenticated native 9P mount
+`/n/ryzova9/probe` as an explicit input grant, runs the same ELF, and verifies the
 remote file snapshot digest. This is a file read through the existing mTLS
 resource path; it does not forward guest identity or add remote CPU cores. Report: `artifacts/phase3/phase9-linux-environment.json`.
 

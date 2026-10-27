@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from phase9_linux_environment import commands, fixtures, inspect, payload
+from phase9_linux_environment import commands, fixtures, inspect, payload, Code, image, exit_paths
 from phase6_native_9p import payload_for_commit
 from phase9_compact_native import fixtures as legacy_fixtures
 
@@ -72,6 +72,39 @@ class LinuxEnvironmentTests(unittest.TestCase):
         denied = subprocess.run([str(self.runner), str(path)], capture_output=True, timeout=5)
         self.assertEqual(denied.returncode, 2)
         self.assertIn(b'status=3', denied.stderr)
+
+    def test_register_flags_and_syscall_return_address_match_linux(self):
+        cases = [(1 << 63, 1, 0x8e), ((1 << 63) - 1, -1, 0x8f),
+                 (9, 9, 0x84), (9, 8, 0x85), (-1, 0, 0x88), (1, 0, 0x89)]
+        programs = []
+        for a, b, branch in cases:
+            c = Code()
+            c.imm(0, a, True)
+            c.imm(3, b, True)
+            c.emit(b'\x48\x39\xd8')
+            c.branch(bytes([0x0f, branch]), 'success')
+            c.branch(b'\xe9', 'fail')
+            c.label('success')
+            exit_paths(c)
+            programs.append(image(c.finish(), b''))
+        c = Code()
+        c.syscall(39)
+        expected_return = 0x400100 + len(c.code)
+        c.emit(b'\x48\x89\xc8')
+        c.imm(3, expected_return, True)
+        c.emit(b'\x48\x39\xd8')
+        c.branch(b'\x0f\x85', 'fail')
+        exit_paths(c)
+        programs.append(image(c.finish(), b''))
+        for index, program in enumerate(programs):
+            with self.subTest(index=index):
+                binary = self.directory / 'register-reference'
+                binary.write_bytes(program)
+                binary.chmod(0o700)
+                native = subprocess.run([str(binary)], capture_output=True, timeout=5)
+                vm = self.run_profile(program, b'')
+                self.assertEqual(native.returncode, 0)
+                self.assertEqual(vm.returncode, 0, vm.stderr)
 
     def test_descriptor_quotas_isolation_and_output_reset(self):
         binary = self.directory / 'resource-tests'
