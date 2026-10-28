@@ -10,12 +10,11 @@ The old `-p`, file and tiny execution profiles retain their existing boundaries.
 Example, with an explicitly supplied static BusyBox ELF:
 
 ```sh
-compact-linux -j -x /busybox /tmp/busybox ash -c 'mkdir /tmp/demo; echo hello > /tmp/demo/file; /busybox cat /tmp/demo/file'
+compact-linux -j -x /busybox /tmp/busybox ash -c '/busybox mkdir /tmp/demo; echo hello > /tmp/demo/file; /busybox cat /tmp/demo/file'
 ```
 
-Use `/busybox mkdir` if the selected BusyBox ash does not have standalone applet
-lookup enabled. Alternatively grant each required `/bin` applet explicitly.
-The native qualification script uses `/busybox APPLET` throughout.
+Alternatively grant each required `/bin` applet explicitly. The native
+qualification script uses `/busybox APPLET` throughout.
 
 Implemented operations: open/openat including creation, exclusive creation,
 read/write and append; shared descriptor offsets; stat/lstat/fstat/fstatat;
@@ -41,8 +40,9 @@ Bounds and deliberate limitations:
 - Existing limits remain: 16 FDs per task, 64 shared descriptions, 8 task slots,
   32 forks, 64 execs, and a shared 262144-instruction/REP budget.
 - Paths are at most 255 bytes plus NUL. Dot components, repeated separators,
-  trailing separators and parent lookup are checked. A missing or non-directory
-  component cannot be bypassed with `..`.
+  trailing separators and parent lookup inside `/tmp` are checked. A missing
+  or non-directory `/tmp` component cannot be bypassed with `..`. Protected
+  paths outside this mount retain the earlier restricted namespace resolver.
 - File ownership is the immutable virtual UID/GID. Owner read/write/search
   permissions and process-local umask are enforced. ACLs, set-ID execution,
   symlinks, hardlinks, mmap of files and additional filesystem mounts are absent.
@@ -66,6 +66,13 @@ are compared against hardware for defined results and flags.
 
 Native integration is in `scripts/phase9_vfs.py` and the full native build gate.
 It requires a source-built kernel, pinned ELF/script digests, source challenges,
-eight C cases and a mixed BusyBox filesystem script. See the validation evidence
+nine C cases and a mixed BusyBox filesystem script. See the validation evidence
 for the actual outcome; source code or a Linux-host harness alone is not native
 kernel evidence.
+
+Validated runtime commit: `43be3590d4b7375a6ee7aa6964db0fa7dee63bae`.
+All 109 local tests and the native BusyBox script plus nine C cases passed.
+All previous native gates passed, and independent extraction matched the built
+and installed kernel digest. Full evidence: [local native validation](validation/phase9-8-local-native.json).
+GitHub Actions failures occurred before a sampled job received a runner or test
+steps; these local results do not claim successful GitHub CI.
