@@ -26,7 +26,7 @@ typedef struct RyzLinuxFD {
     enum RyzLinuxNode node;
     int mode, open, cloexec, append, nonblock;
     unsigned int description;
-    unsigned int pipe;
+    unsigned int pipe, vnode;
     size_t offset;
 } RyzLinuxFD;
 #define RYZ_WORLD_DESCRIPTIONS 64U
@@ -44,7 +44,19 @@ typedef struct RyzLinuxExec {
     const unsigned char *image;
     size_t size;
 } RyzLinuxExec;
+#define RYZ_VFS_NODES 32U
+typedef struct RyzVnode {
+    int used, linked, directory;
+    unsigned int parent, permissions;
+    uint64_t inode;
+    uint64_t atime, atime_ns, mtime, mtime_ns, ctime, ctime_ns;
+    size_t size;
+    char name[RYZ_NS_PATH_MAX];
+    unsigned char bytes[RYZ_LINUX_FILE_MAX];
+} RyzVnode;
 typedef struct RyzLinuxWorld {
+    RyzVnode nodes[RYZ_VFS_NODES];
+    uint64_t next_inode, clock;
     RyzLinuxDescription descriptions[RYZ_WORLD_DESCRIPTIONS];
     RyzLinuxPipe pipes[RYZ_WORLD_PIPES];
     uint64_t output_bytes,pipe_bytes;
@@ -63,6 +75,7 @@ typedef struct RyzLinuxProcess {
     void *write_context;
     uint64_t output_bytes;
     int cwd;
+    unsigned int vfs_cwd, file_umask;
     uint32_t parent_pid,group_pid;
     RyzLinuxWorld *world;
     RyzLinuxJobCall job_call;

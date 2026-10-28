@@ -62,7 +62,7 @@ int ryz_linux_process_init(RyzLinuxProcess *p, uint32_t namespace_id,
     p->guest_size = guest_size;
     p->write_output = write_output;
     p->write_context = write_context;
-    p->next_description=4;
+    p->next_description=4;p->file_umask=0022;
     p->fds[0].description=1;p->fds[1].description=2;p->fds[2].description=3;
     p->fds[0].node=RYZ_NS_STDIN;p->fds[1].node=RYZ_NS_STDOUT;p->fds[2].node=RYZ_NS_STDERR;
     p->fds[1].mode=p->fds[2].mode=1;
@@ -166,6 +166,7 @@ static int64_t duplicate_min(RyzLinuxProcess *p, uint64_t old, uint64_t minimum,
         if(!p->fds[i].open)return duplicate(p,old,i,cloexec);
     return -L_EMFILE;
 }
+static int64_t vfs_write(RyzLinuxProcess *,uint64_t,uint64_t,uint64_t);
 static int64_t do_write(RyzLinuxProcess *p, uint64_t fd,
                         uint64_t address, uint64_t count)
 {
@@ -181,6 +182,7 @@ static int64_t do_write(RyzLinuxProcess *p, uint64_t fd,
     if (count != 0 && p->memory_read != NULL &&
         !p->memory_read(p->memory_context, address, count))
         return -L_EFAULT;
+    if(p->fds[fd].node==RYZ_NS_VFS)return vfs_write(p,fd,address,count);
     if (p->fds[fd].node == RYZ_NS_STDIN)
         return -L_EBADF;
     if (p->fds[fd].node == RYZ_NS_STDOUT || p->fds[fd].node == RYZ_NS_STDERR) {
@@ -482,6 +484,8 @@ static int64_t signal_state(RyzLinuxProcess *p, const RyzLinuxRegs *r)
     }
     return 0;
 }
+#include "syscall_vfs.h"
+
 static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
 {
     uint64_t nr;
@@ -490,6 +494,10 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
     if (p->exited)
         return -L_EPERM;
     nr = regs->rax;
+    if(p->world){
+        int handled;int64_t answer=vfs_dispatch(p,regs,&handled);
+        if(handled)return answer;
+    }
     switch (nr) {
     case 9: case 10: case 11: case 12:
         return p->memory_call == NULL ? -L_ENOSYS :
@@ -577,7 +585,7 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
                         if(pipe->size<RYZ_LINUX_FILE_MAX)revents=events&4U;
                         if(!pipe_peers(p,p->fds[fd].pipe,0))revents|=8;
                     }
-                }else revents=events & (p->fds[fd].mode==0?1U:4U);
+                }else revents=events & (p->fds[fd].mode==0?1U:(p->fds[fd].mode==2?5U:4U));
             }
             if(revents)ready++;
             encode(data+i*8+6,revents,2);

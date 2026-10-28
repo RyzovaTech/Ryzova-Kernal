@@ -25,6 +25,9 @@ static char jobs[] = "linux-amd64-static-jobs-v1\n"
     "processes=8 forks=32 execs=64 descriptors=16 shared-descriptions=64 pipes=4 pipe-bytes=4194304\n"
     "fork=private-memory vfork=shared-memory-parent-suspended exec=explicit-image-grants wait=normal-child-exit\n"
     "threads=false asynchronous-signals=false dynamic-linker=false general-linux=false\n";
+static char filesystem[] = "linux-amd64-local-tmp-v1\n"
+    "profile=jobs path=/tmp lifetime=one-invocation shared=fork,exec host-forwarding=false\n"
+    "nodes=32 file-bytes=65536 permissions=owner timestamps=logical-clock symlinks=false hardlinks=false\n";
 static char shell[] = "experimental-bounded-ash-v1\n"
     "workloads=script,variables,loops,functions,conditionals,input,output,append,cat,wc\n"
     "paths=/input:read,/output:write cwd=/,/tmp descriptors=16\n"
@@ -72,6 +75,7 @@ main(int argc, char **argv)
     leaf(linux, "process", process);
     leaf(linux, "shell", shell);
     leaf(linux, "jobs", jobs);
+    leaf(linux, "filesystem", filesystem);
     closefile(linux);
     closefile(compact);
     fs.read = fsread;

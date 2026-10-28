@@ -261,7 +261,7 @@ static int guest_syscall(Cpu *c)
         if(answer==RYZ_LINUX_BLOCKED)return RYZ_CPU_BLOCKED;
         c->r[1]=c->cur;c->r[11]=c->flags;c->r[0]=(uint64_t)answer;c->result->syscall_count++;return RYZ_VM_OK;
     }
-    if(nr!=7 && nr!=32 && nr!=33 && nr!=292 && nr!=40 && nr!=2 && nr!=8 && nr!=80 && nr!=63 && nr!=79 && nr!=105 && nr!=106 && nr!=117 && nr!=119 && nr!=13 && nr!=14 && nr!=110 && nr!=111 && nr!=4 && nr!=5 && nr!=6 && nr!=262 && nr!=107 && nr!=108 && nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
+    if(!(c->p->world && (nr==21 || nr==74 || nr==75 || nr==76 || nr==77 || nr==81 || nr==82 || nr==83 || nr==84 || nr==87 || nr==90 || nr==91 || nr==95 || nr==217 || nr==258 || nr==263 || nr==280 || nr==228 || nr==229 || nr==201)) && nr!=7 && nr!=32 && nr!=33 && nr!=292 && nr!=40 && nr!=2 && nr!=8 && nr!=80 && nr!=63 && nr!=79 && nr!=105 && nr!=106 && nr!=117 && nr!=119 && nr!=13 && nr!=14 && nr!=110 && nr!=111 && nr!=4 && nr!=5 && nr!=6 && nr!=262 && nr!=107 && nr!=108 && nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
        nr!=16 && nr!=20 && nr!=72 && nr!=39 && nr!=60 && nr!=102 && nr!=104 && nr!=186 && nr!=231 && nr!=257)
         return RYZ_VM_SYSCALL_UNSUPPORTED;
     r.rax=nr; r.rdi=c->r[7]; r.rsi=c->r[6]; r.rdx=c->r[2];
@@ -437,8 +437,8 @@ static int step(Cpu *c)
                 else put(c,regop(c,0,size),size,b);
             }
         }
-        else if(op2==0xef){
-            if(size!=2 || c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
+        else if(op2==0xef || op2==0x57){
+            if((op2==0xef && size!=2) || c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
             rm=decode(c,&reg,&group,16);vector_xor(c,rm,reg);
         }
         else if(op2==0x10 || op2==0x11 || op2==0x28 || op2==0x29){
@@ -466,6 +466,19 @@ static int step(Cpu *c)
             if(!c->fault){
                 c->flags=(c->flags&~(uint64_t)CF)|((a>>b)&1);
                 if(type){v=type==1?a|(UINT64_C(1)<<b):(type==2?a&~(UINT64_C(1)<<b):a^(UINT64_C(1)<<b));put(c,rm,size,v);}
+            }
+        }
+        else if(op2==0xbc || op2==0xbd){
+            if(c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
+            rm=decode(c,&reg,&group,size);v=get(c,rm,size);
+            if(!c->fault){
+                c->flags=(c->flags & ~UINT64_C(64))|(v==0?64:0);
+                if(v){
+                    n=op2==0xbc?0:size*8-1;
+                    if(op2==0xbc){while(((v>>n)&1)==0)n++;}
+                    else{while(((v>>n)&1)==0)n--;}
+                    put(c,regop(c,reg,size),size,n);
+                }
             }
         }
         else if(op2==0xaf){

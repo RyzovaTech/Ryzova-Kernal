@@ -41,7 +41,7 @@ def commands(commit):
         grant='-i /tmp/j-data ' if mode in ('offset','identity','descriptions') else ''
         ops.append(f'/amd64/bin/compact-linux -j -x /tmp/j-elf {grant}/tmp/j-elf {mode} J_{mode}_{commit} && echo FLEX_JOB_{mode}_OK')
     ops+=['echo FLEX_JOBS_END']
-    return [op+f'; echo RYZOVA_RUNTIME_STAGE_{94+i}' for i,op in enumerate(ops)]+['echo FLEX_JOBS_DONE']
+    return [op+f'; echo RYZOVA_RUNTIME_STAGE_{94+i}' for i,op in enumerate(ops)]+['echo FLEX_JOBS_DONE; echo RYZOVA_RUNTIME_STAGE_118']
 
 
 def inspect(serial,commit,digest):

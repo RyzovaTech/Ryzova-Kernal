@@ -84,6 +84,16 @@ class BusyboxTests(unittest.TestCase):
         self.assertEqual(vm.returncode, 2)
         self.assertIn(b'status=4', vm.stderr)
 
+    def test_bit_scan_defined_results_and_zero_flag_match_cpu(self):
+        for op in ('bsf','bsr'):
+            body=[]
+            for suffix,src,dst,bits in (('w','%ax','%bx',16),('l','%eax','%ebx',32),('q','%rax','%rbx',64)):
+                for value in (1,2,1<<(bits-1),(1<<(bits-1))|1):
+                    body += [f'movabs ${value},%rax',f'{op}{suffix} {src},{dst}',
+                             'mov %rbx,(%r12)','setz 8(%r12)','add $16,%r12']
+                body += ['xor %eax,%eax',f'{op}{suffix} {src},{dst}','setz (%r12)','add $8,%r12']
+            self.same('xor %ebx,%ebx\n'+'\n'.join(body))
+
     def test_virtual_segment_base_and_writev(self):
         # Only interpreted invocation: setting host FS would disrupt native libc startup/cleanup.
         binary = self.assemble('mov %r12,%rsi\nmov $0x1002,%edi\nmov $158,%eax\nsyscall\n'
@@ -99,7 +109,7 @@ class BusyboxTests(unittest.TestCase):
                   'mov %rax,8(%r12)\nsete 16(%r12)\nsetc 17(%r12)\n'
                   'mov $5,%eax\nlock cmpxchg %rbx,(%r12)\nmov %rax,24(%r12)\nsete 32(%r12)\nsetc 33(%r12)\n'
                   'movb $255,40(%r12)\nincb 40(%r12)\nsetc 41(%r12)\nsete 42(%r12)\n'
-                  'pxor %xmm0,%xmm0\nmovaps %xmm0,48(%r12)\nadd $64,%r12')
+                  'pxor %xmm0,%xmm0\nmovaps %xmm0,48(%r12)\nxorps %xmm1,%xmm0\nxorpd %xmm0,%xmm1\nmovups %xmm0,64(%r12)\nmovups %xmm1,80(%r12)\nadd $96,%r12')
         for body in ('.byte 0xf0,0x48,0x09,0xc0', '.byte 0xf0,0x90',
                      'movaps 1(%r12),%xmm0'):
             r=self.vm(self.assemble(body))

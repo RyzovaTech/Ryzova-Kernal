@@ -22,3 +22,7 @@ jobs:
         env:
           COMPACT_SHELL_DIR: artifacts/jobs-fixtures
         run: python -m unittest discover -s tests -p 'test_phase9_jobs.py' -v
+      - name: Writable filesystem and directory qualification
+        env:
+          COMPACT_SHELL_DIR: artifacts/jobs-fixtures
+        run: python -m unittest discover -s tests -p 'test_phase9_vfs.py' -v
