@@ -98,6 +98,12 @@ long app_main(long argc,char **argv,char **env)
             CHECK(n==15 && C(3,n,0,0)==0);
         }
         CHECK(i==28 && C(2,"item",1|01000,0)==15);
+    }else if(eq(argv[2],"grants")){
+        fd=C(2,"item",0100|2,0600);CHECK(fd==3 && C(1,fd,"safe",4)==4);
+        CHECK(C(82,"item","/tmp/bound",0)==-13);
+        CHECK(C(2,"/tmp/bound",0100|1|01000,0600)==-13);
+        CHECK(C(4,"item",scratch,0)==0 && word(scratch+48,8)==4);
+        CHECK(C(4,"/tmp/bound",scratch,0)==0 && (word(scratch+24,4)&0170000)==0100000);
     }else if(eq(argv[2],"times")){
         U times[4]={11,123,22,456};
         fd=C(2,"item",0100|2,0600);CHECK(fd==3);

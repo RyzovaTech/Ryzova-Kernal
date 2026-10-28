@@ -42,9 +42,10 @@ class VfsTests(unittest.TestCase):
         self.assertTrue(all(len(c)<220 for c in phase9_vfs.commands(commit)))
 
     def test_compiled_file_directory_lifetimes_and_exec(self):
-        for mode in ('basic','directory','unlink','errors','shared','quota','atomic','times'):
+        for mode in ('basic','directory','unlink','errors','shared','quota','atomic','times','grants'):
             with self.subTest(mode=mode):
-                vm=subprocess.run([str(self.runner),'-x',str(self.fixture),str(self.fixture),'/tmp/case',mode,'challenge'],capture_output=True,timeout=20)
+                grants=['-x','/tmp/bound'] if mode=='grants' else []
+                vm=subprocess.run([str(self.runner),'-x',str(self.fixture),*grants,str(self.fixture),'/tmp/case',mode,'challenge'],capture_output=True,timeout=20)
                 self.assertEqual(vm.returncode,0,vm.stderr)
                 self.assertEqual(vm.stdout,b'FLEX_VFS_OK\nchallenge\n')
                 # Resource bounds and fixed 24-byte getdents chunks are virtual
@@ -60,9 +61,10 @@ class VfsTests(unittest.TestCase):
         subprocess.run([*self.flags,'-fsanitize=address,undefined','-no-pie',*self.sources,'-o',str(runner)],check=True,capture_output=True)
         env=dict(os.environ)
         if os.environ.get('COMPACT_DISABLE_LSAN')=='1':env['ASAN_OPTIONS']='detect_leaks=0:quarantine_size_mb=32'
-        for mode in ('basic','directory','unlink','errors','shared','quota','atomic','times'):
+        for mode in ('basic','directory','unlink','errors','shared','quota','atomic','times','grants'):
             with self.subTest(mode=mode):
-                result=subprocess.run([str(runner),'-x',str(self.fixture),str(self.fixture),'/tmp/case',mode,'challenge'],env=env,capture_output=True,timeout=20)
+                grants=['-x','/tmp/bound'] if mode=='grants' else []
+                result=subprocess.run([str(runner),'-x',str(self.fixture),*grants,str(self.fixture),'/tmp/case',mode,'challenge'],env=env,capture_output=True,timeout=20)
                 self.assertEqual(result.returncode,0,result.stderr)
                 self.assertNotIn(b'AddressSanitizer',result.stderr)
 

@@ -6,7 +6,7 @@ import re
 import subprocess
 from phase9_process import FLAGS
 ROOT=Path(__file__).resolve().parents[1]
-CASES=('basic','directory','unlink','errors','shared','quota','atomic','times')
+CASES=('basic','directory','unlink','errors','shared','quota','atomic','times','grants')
 SCRIPT=b'''set -e
 /busybox mkdir -p /tmp/a/b
 echo hello > /tmp/a/b/f
@@ -34,7 +34,8 @@ def commands(commit):
          'cat /compact/linux/filesystem','echo FLEX_VFS_BEGIN',
          '/amd64/bin/compact-linux -j -x /busybox -i /tmp/v-script /tmp/busybox ash /input && echo FLEX_VFS_SHELL_RUN_OK']
     for mode in CASES:
-        ops.append(f'/amd64/bin/compact-linux -j -x /tmp/v-elf /tmp/v-elf /tmp/case {mode} V_{mode}_{commit} && echo FLEX_VFS_{mode}_OK')
+        grants="-x '/tmp/bound=/tmp/v-elf' " if mode=='grants' else ''
+        ops.append(f'/amd64/bin/compact-linux -j -x /tmp/v-elf {grants}/tmp/v-elf /tmp/case {mode} V_{mode}_{commit} && echo FLEX_VFS_{mode}_OK')
     ops+=['echo FLEX_VFS_END']
     return [op+f'; echo RYZOVA_RUNTIME_STAGE_{119+i}' for i,op in enumerate(ops)]+['echo FLEX_VFS_DONE']
 

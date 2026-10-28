@@ -336,6 +336,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
     }
     if(nr==82){
         code=vfs_absolute(p,L_AT_FDCWD,r->rsi,other,&trailing);if(code)return code;
+        for(i=0;i<p->world->exec_count;i++)if(strcmp(other,p->world->execs[i].path)==0)return -13;
         target=vfs_lookup(p->world,other);
         if(trailing && target>=0 && !p->world->nodes[target].directory)return -20;
         if(target==index)return 0;
