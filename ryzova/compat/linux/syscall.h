@@ -59,7 +59,8 @@ typedef struct RyzLinuxWorld {
     RyzLinuxRandom random;
     void *random_context;
     RyzVnode nodes[RYZ_VFS_NODES];
-    uint64_t next_inode, clock;
+    uint64_t next_inode, clock,random_bytes;
+    unsigned int memory_barriers[8];
     RyzLinuxDescription descriptions[RYZ_WORLD_DESCRIPTIONS];
     RyzLinuxPipe pipes[RYZ_WORLD_PIPES];
     uint64_t output_bytes,pipe_bytes;
@@ -79,7 +80,10 @@ typedef struct RyzLinuxProcess {
     uint64_t output_bytes;
     int cwd,barrier_registered;
     unsigned int vfs_cwd, file_umask;
-    uint32_t parent_pid,group_pid;
+    uint32_t parent_pid,group_pid,tgid;
+    struct RyzLinuxProcess *fd_owner,*action_owner,*fs_owner;
+    unsigned int fd_shares,memory_index;
+    int fd_detached;
     RyzLinuxWorld *world;
     RyzLinuxJobCall job_call;
     void *job_context;
@@ -92,6 +96,10 @@ typedef struct RyzLinuxProcess {
     int exited;
     uint8_t exit_status;
 } RyzLinuxProcess;
+
+#define RYZ_TICK(w) ((w)->clock==UINT64_MAX?UINT64_MAX:++(w)->clock)
+int64_t ryz_world_random(RyzLinuxWorld *,unsigned char *,size_t);
+#define RYZ_ACTION(p,i) ((p)->action_owner?(p)->action_owner->signal_actions[(i)]:(p)->signal_actions[(i)])
 
 /* Isolated guest memory window, virtual file-descriptor table and namespace. */
 int ryz_linux_process_init(RyzLinuxProcess *p, uint32_t namespace_id,

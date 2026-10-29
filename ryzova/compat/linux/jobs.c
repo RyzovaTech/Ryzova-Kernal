@@ -14,19 +14,28 @@ typedef struct SignalEvent {
     int code,status;
     uint64_t sequence;
 } SignalEvent;
+typedef struct FutexRestart {uint64_t frame,ip,address,deadline;int active;} FutexRestart;
 typedef struct Task {
     RyzCpu cpu;
-    RyzLinuxMemory memory;
     RyzLinuxProcess process;
-    int state,owned,vfork_parent;
+    int state,vfork_parent,mm_held;
+    unsigned int mm;
+    uint32_t vfork_parent_pid,vfork_wait_token,vfork_token;
     int blocked,suspended,term_signal,stop_event,continue_event;
+    int thread,notified,futex_waiting,futex_woken,yielded;
+    struct Task *leader;
+    uint64_t futex_address,futex_deadline,robust_head;
+    uint32_t futex_mask;
+    FutexRestart futex_frames[8],futex_restart;
     uint64_t suspend_mask,alt_sp,alt_size,signal_sequence;
     unsigned int signal_depth;
     int sleep_kind;
     uint64_t sleep_deadline,sleep_remaining,alarm_deadline,alarm_interval;
-    SignalEvent signals[64];
+    SignalEvent signals[64],process_signals[64];
 } Task;
+typedef struct MemorySlot {RyzLinuxMemory memory;unsigned int refs;int used,owned;} MemorySlot;
 typedef struct Jobs {
+    MemorySlot memories[RYZ_JOB_TASKS];
     RyzLinuxWorld world;
     Task tasks[RYZ_JOB_TASKS];
     size_t capacity;
@@ -70,6 +79,40 @@ static int vector(RyzCpu *c,uint64_t at,char strings[RYZ_PROCESS_ARGS][257],cons
     }
     return -7;
 }
+static void mm_release(Jobs *jobs,Task *task)
+{
+    MemorySlot *slot;
+    if(!task->mm_held)return;
+    slot=&jobs->memories[task->mm];task->mm_held=0;
+    if(--slot->refs==0){jobs->world.memory_barriers[task->mm]=0;if(slot->owned)free(slot->memory.bytes);memset(slot,0,sizeof(*slot));}
+}
+static int mm_free(Jobs *jobs)
+{
+    unsigned int i;for(i=0;i<RYZ_JOB_TASKS;i++)if(!jobs->memories[i].used)return (int)i;
+    return -1;
+}
+static Task *group_leader(Jobs *jobs,Task *task)
+{
+    unsigned int i;for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE && jobs->tasks[i].process.ns.pid==task->process.tgid)return &jobs->tasks[i];
+    return task;
+}
+static int group_live(Jobs *jobs,uint32_t tgid)
+{
+    unsigned int i;
+    for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE && jobs->tasks[i].state!=ZOMBIE && jobs->tasks[i].process.tgid==tgid)return 1;
+    return 0;
+}
+static void group_exit(Jobs *jobs,Task *task,unsigned int signal,unsigned int code)
+{
+    unsigned int i;Task *leader=group_leader(jobs,task);
+    leader->term_signal=(int)signal;leader->process.exit_status=(uint8_t)code;
+    for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE && jobs->tasks[i].process.tgid==task->process.tgid){
+        jobs->tasks[i].process.exited=1;jobs->tasks[i].process.exit_status=(uint8_t)code;jobs->tasks[i].term_signal=(int)signal;
+        if(jobs->tasks[i].state==STOPPED)jobs->tasks[i].state=RUN;
+    }
+}
+static int futex_wake(Jobs *,Task *,uint64_t,uint32_t,uint32_t);
+static void robust_exit(Jobs *,Task *);
 static void exited(Jobs *,Task *);
 static int timer_interrupt(Task *);
 #include "jobs_signals.h"
@@ -77,44 +120,56 @@ static int timer_interrupt(Task *);
 
 static void release_vfork(Jobs *jobs,Task *task)
 {
-    if(task->vfork_parent>=0){jobs->tasks[task->vfork_parent].state=RUN;task->vfork_parent=-1;}
+    if(task->vfork_parent>=0){Task *parent=&jobs->tasks[task->vfork_parent];if(parent->state==VFORK_WAIT && parent->process.ns.pid==task->vfork_parent_pid && parent->vfork_wait_token==task->vfork_token)parent->state=RUN;task->vfork_parent=-1;}
+}
+static void finish_group(Jobs *jobs,Task *leader,Task *last)
+{
+    unsigned int i;Task *parent;
+    if(group_live(jobs,leader->process.tgid) || leader->notified)return;
+    leader->notified=1;leader->term_signal=last->term_signal;leader->process.exit_status=last->process.exit_status;
+    child_notification(jobs,leader,leader->term_signal?2:1,leader->term_signal?leader->term_signal:leader->process.exit_status);
+    for(i=1;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE && jobs->tasks[i].process.parent_pid==leader->process.tgid)
+        jobs->tasks[i].process.parent_pid=jobs->tasks[0].process.tgid;
+    parent=task_parent(jobs,leader);
+    if(leader!=&jobs->tasks[0] && parent && (little(RYZ_ACTION(&parent->process,16),8)==1 || (little(RYZ_ACTION(&parent->process,16)+8,8)&2))){
+        memset(leader,0,sizeof(*leader));leader->vfork_parent=-1;
+    }
 }
 static void exited(Jobs *jobs,Task *task)
 {
-    unsigned int i;
-    if(task->cpu.tid_address && ryz_memory_access(task->cpu.m,task->cpu.tid_address,4,RYZ_WRITE))
+    Task *leader=group_leader(jobs,task);
+    robust_exit(jobs,task);
+    if(task->cpu.tid_address && ryz_memory_access(task->cpu.m,task->cpu.tid_address,4,RYZ_WRITE)){
         memset(task->cpu.m->bytes+(size_t)(task->cpu.tid_address-task->cpu.m->base),0,4);
-    ryz_world_close(&task->process,0);task->state=ZOMBIE;release_vfork(jobs,task);
-    child_notification(jobs,task,task->term_signal?2:1,task->term_signal?task->term_signal:task->process.exit_status);
-    for(i=1;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE &&
-        jobs->tasks[i].process.parent_pid==task->process.ns.pid)
-        jobs->tasks[i].process.parent_pid=jobs->tasks[0].process.ns.pid;
-    if(task!=&jobs->tasks[0]){
-        Task *parent=task_parent(jobs,task);
-        if(parent && (little(parent->process.signal_actions[16],8)==1 || (little(parent->process.signal_actions[16]+8,8)&2))){
-            if(task->owned)free(task->memory.bytes);
-            memset(task,0,sizeof(*task));task->vfork_parent=-1;
-        }
+        futex_wake(jobs,task,task->cpu.tid_address,1,0xffffffffU);
     }
+    ryz_world_close(&task->process,0);mm_release(jobs,task);task->state=ZOMBIE;release_vfork(jobs,task);
+    finish_group(jobs,leader,task);
+    if(task->thread){memset(task,0,sizeof(*task));task->vfork_parent=-1;}
 }
 static int64_t fork_task(Jobs *jobs,Task *parent,int vfork)
 {
-    Task *child;unsigned int i;unsigned char *bytes=NULL;
+    Task *child;unsigned int i;int memory_slot;unsigned char *bytes=NULL;
     if(jobs->forks>=RYZ_JOB_FORKS || parent->vfork_parent>=0)return -11;
     for(i=1;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state==FREE)break;
     if(i==RYZ_JOB_TASKS)return -11;
+    memory_slot=vfork?(int)parent->mm:mm_free(jobs);if(memory_slot<0)return -12;
     if(!vfork){bytes=malloc((size_t)parent->cpu.m->size);if(!bytes)return -12;memcpy(bytes,parent->cpu.m->bytes,(size_t)parent->cpu.m->size);}
     child=&jobs->tasks[i];memset(child,0,sizeof(*child));child->vfork_parent=-1;
-    child->process=parent->process;child->process.generated_signals=0;child->process.barrier_registered=0;
+    child->process=parent->process;
+    memcpy(child->process.signal_actions,RYZ_ACTION(&parent->process,0),sizeof child->process.signal_actions);
+    child->process.fs_owner=NULL;child->process.action_owner=NULL;child->process.fd_owner=NULL;child->process.fd_shares=1;child->process.fd_detached=0;child->process.generated_signals=0;child->process.barrier_registered=0;
     child->alt_sp=parent->alt_sp;child->alt_size=parent->alt_size;child->signal_depth=parent->signal_depth;
     ryz_world_fork(&parent->process,&child->process);
-    child->process.ns.pid=jobs->next_pid++;child->process.parent_pid=parent->process.ns.pid;
+    child->process.ns.pid=child->process.tgid=jobs->next_pid++;child->process.parent_pid=parent->process.tgid;
     child->cpu=parent->cpu;child->cpu.p=&child->process;child->cpu.r[0]=0;
     child->cpu.ip=parent->cpu.cur;child->cpu.r[1]=parent->cpu.cur;child->cpu.r[11]=parent->cpu.flags;child->cpu.tid_address=0;
-    if(vfork){child->vfork_parent=(int)(parent-jobs->tasks);parent->state=VFORK_WAIT;}
+    child->mm=(unsigned int)memory_slot;child->process.memory_index=child->mm;child->mm_held=1;
+    if(vfork){child->vfork_parent=(int)(parent-jobs->tasks);child->vfork_parent_pid=parent->process.ns.pid;child->vfork_token=++parent->vfork_wait_token;parent->state=VFORK_WAIT;jobs->memories[child->mm].refs++;}
     else{
-        child->memory=*parent->cpu.m;child->memory.bytes=bytes;child->memory.process=&child->process;child->owned=1;
-        child->cpu.m=&child->memory;child->process.guest_bytes=bytes;child->process.memory_context=&child->memory;
+        MemorySlot *slot=&jobs->memories[child->mm];slot->used=slot->owned=1;slot->refs=1;
+        slot->memory=*parent->cpu.m;slot->memory.bytes=bytes;slot->memory.process=&child->process;
+        child->cpu.m=&slot->memory;child->process.guest_bytes=bytes;child->process.memory_context=&slot->memory;
     }
     child->state=RUN;jobs->forks++;parent->cpu.result->forks++;
     {unsigned int live=0;for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE)live++;
@@ -128,7 +183,7 @@ static int64_t wait_task(Jobs *jobs,Task *parent,const RyzLinuxRegs *r)
     if(r->rsi && !ryz_memory_access(parent->cpu.m,r->rsi,4,RYZ_WRITE))return -14;
     if(r->r10 && !ryz_memory_access(parent->cpu.m,r->r10,144,RYZ_WRITE))return -14;
     for(i=1;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE &&
-        jobs->tasks[i].process.parent_pid==parent->process.ns.pid){
+        jobs->tasks[i].process.parent_pid==parent->process.tgid && !jobs->tasks[i].thread){
         Task *candidate=&jobs->tasks[i];
         if(wanted>0 && (uint64_t)wanted!=candidate->process.ns.pid)continue;
         if(wanted==0 && candidate->process.group_pid!=parent->process.group_pid)continue;
@@ -142,20 +197,20 @@ static int64_t wait_task(Jobs *jobs,Task *parent,const RyzLinuxRegs *r)
             if(r->rsi)encode(parent->cpu.m->bytes+(size_t)(r->rsi-parent->cpu.m->base),65535,4);
             candidate->continue_event=0;return candidate->process.ns.pid;
         }
-        if(candidate->state==ZOMBIE){child=candidate;break;}
+        if(candidate->state==ZOMBIE && !group_live(jobs,candidate->process.tgid)){child=candidate;break;}
     }
     if(!found)return -10;
     if(!child)return r->rdx&1?0:RYZ_LINUX_BLOCKED;
     wanted=child->process.ns.pid;
     if(r->rsi)encode(parent->cpu.m->bytes+(size_t)(r->rsi-parent->cpu.m->base),child->term_signal?(uint64_t)child->term_signal:(uint64_t)child->process.exit_status<<8,4);
     if(r->r10)memset(parent->cpu.m->bytes+(size_t)(r->r10-parent->cpu.m->base),0,144);
-    if(child->owned)free(child->memory.bytes);
     memset(child,0,sizeof(*child));child->vfork_parent=-1;return wanted;
 }
 static int exec_task(Jobs *jobs,Task *task,const RyzLinuxRegs *r,int64_t *answer)
 {
     ExecArgs *snapshot;RyzLinuxMemory *next;RyzVmResult *result=task->cpu.result;
-    unsigned char *bytes;char path[257];size_t i;uint64_t entry,stack;int status;const RyzLinuxExec *grant=NULL;
+    Task *replacement,*leader=group_leader(jobs,task);int moved=task!=leader;
+    unsigned char *bytes;int memory_slot;char path[257];size_t i;uint64_t entry,stack;int status;const RyzLinuxExec *grant=NULL;
     if(result->execs>=RYZ_JOB_EXECS){*answer=-11;return RYZ_VM_OK;}
     status=guest_string(&task->cpu,r->rdi,path,sizeof(path));
     if(status){*answer=status;return RYZ_VM_OK;}
@@ -174,21 +229,55 @@ static int exec_task(Jobs *jobs,Task *task,const RyzLinuxRegs *r,int64_t *answer
     status=ryz_prepare_job(grant->image,grant->size,bytes,jobs->capacity,&snapshot->args,&jobs->world,next,&entry,&stack);
     free(snapshot);
     if(status!=RYZ_VM_OK){free(bytes);free(next);*answer=-8;return RYZ_VM_OK;}
+    memory_slot=jobs->memories[task->mm].refs==1?(int)task->mm:mm_free(jobs);
+    if(memory_slot<0){free(bytes);free(next);*answer=-12;return RYZ_VM_OK;}
+    replacement=malloc(sizeof(*replacement));
+    if(!replacement){free(bytes);free(next);*answer=-12;return RYZ_VM_OK;}
+    /* Keep the shared resource owner intact until the caller has detached. */
+    for(i=0;i<RYZ_JOB_TASKS;i++)if(&jobs->tasks[i]!=task && jobs->tasks[i].state!=FREE && jobs->tasks[i].process.tgid==task->process.tgid){
+        ryz_world_close(&jobs->tasks[i].process,0);mm_release(jobs,&jobs->tasks[i]);
+    }
     ryz_world_close(&task->process,1);
-    if(task->owned)free(task->memory.bytes);
-    task->memory=*next;free(next);task->owned=1;
-    task->process.guest_base=task->memory.base;task->process.guest_bytes=bytes;task->process.guest_size=(size_t)task->memory.size;
-    task->process.memory_context=&task->memory;task->memory.process=&task->process;
-    for(i=0;i<64;i++)if(little(task->process.signal_actions[i],8)!=1)memset(task->process.signal_actions[i],0,32);
-    task->process.barrier_registered=0;task->alt_sp=task->alt_size=0;task->signal_depth=0;task->sleep_kind=0;task->blocked=task->suspended=0;
-    ryz_cpu_init(&task->cpu,&task->process,&task->memory,entry,stack,result);task->cpu.cur=entry;
-    release_vfork(jobs,task);result->execs++;return RYZ_CPU_EXECUTED;
+    *replacement=*task;
+    memcpy(replacement->process.signal_actions,RYZ_ACTION(&task->process,0),sizeof replacement->process.signal_actions);
+    if(moved){
+        memcpy(replacement->process_signals,leader->process_signals,sizeof replacement->process_signals);
+        replacement->alarm_deadline=leader->alarm_deadline;replacement->alarm_interval=leader->alarm_interval;
+        if(leader->signal_sequence>replacement->signal_sequence)replacement->signal_sequence=leader->signal_sequence;
+    }
+    replacement->vfork_wait_token=leader->vfork_wait_token+1;
+    replacement->process.ns.pid=replacement->process.tgid;
+    replacement->process.fd_owner=replacement->process.fs_owner=replacement->process.action_owner=NULL;
+    replacement->process.fd_shares=1;replacement->process.fd_detached=0;
+    replacement->thread=replacement->notified=0;replacement->leader=NULL;replacement->state=RUN;
+    release_vfork(jobs,task);replacement->vfork_parent=-1;
+    mm_release(jobs,task);
+    for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE && jobs->tasks[i].process.tgid==replacement->process.tgid){
+        memset(&jobs->tasks[i],0,sizeof(Task));jobs->tasks[i].vfork_parent=-1;
+    }
+    *leader=*replacement;free(replacement);task=leader;
+    task->mm=(unsigned int)memory_slot;task->process.memory_index=task->mm;task->mm_held=1;
+    jobs->memories[task->mm].used=jobs->memories[task->mm].owned=1;jobs->memories[task->mm].refs=1;
+    jobs->memories[task->mm].memory=*next;free(next);
+    task->cpu.m=&jobs->memories[task->mm].memory;task->cpu.m->process=&task->process;
+    task->process.guest_base=task->cpu.m->base;task->process.guest_bytes=bytes;task->process.guest_size=(size_t)task->cpu.m->size;
+    task->process.memory_context=task->cpu.m;
+    for(i=0;i<64;i++)if(little(RYZ_ACTION(&task->process,i),8)!=1)memset(RYZ_ACTION(&task->process,i),0,32);
+    task->process.barrier_registered=0;task->alt_sp=task->alt_size=0;task->signal_depth=0;task->sleep_kind=0;task->robust_head=0;task->futex_waiting=task->futex_woken=task->futex_restart.active=0;task->futex_deadline=0;task->blocked=task->suspended=0;
+    memset(task->futex_frames,0,sizeof task->futex_frames);
+    ryz_cpu_init(&task->cpu,&task->process,&jobs->memories[task->mm].memory,entry,stack,result);task->cpu.cur=entry;
+    result->execs++;
+    if(moved){result->syscall_count++;return RYZ_CPU_MOVED;}
+    return RYZ_CPU_EXECUTED;
 }
+#include "jobs_threads.h"
+
 static int job_call(void *context,void *cpu,const RyzLinuxRegs *r,int64_t *answer)
 {
     Jobs *jobs=context;Task *task=NULL;unsigned int i;
     for(i=0;i<RYZ_JOB_TASKS;i++)if(&jobs->tasks[i].cpu==cpu){task=&jobs->tasks[i];break;}
     if(!task)return RYZ_VM_BAD_INPUT;
+    if(r->rax==56 || r->rax==202 || r->rax==273 || r->rax==274 || r->rax==24 || r->rax==60 || r->rax==231)return thread_call(jobs,task,r,answer);
     if(r->rax==57 || r->rax==58)*answer=fork_task(jobs,task,r->rax==58);
     else if(r->rax==61)*answer=wait_task(jobs,task,r);
     else if(r->rax==59)return exec_task(jobs,task,r,answer);
@@ -231,18 +320,18 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     for(i=0;i<RYZ_JOB_TASKS;i++)jobs->tasks[i].vfork_parent=-1;
     jobs->capacity=capacity<RYZ_PROCESS_MAX_SPAN?capacity:RYZ_PROCESS_MAX_SPAN;
     jobs->next_pid=1001;jobs->world.execs=config->execs;jobs->world.exec_count=config->exec_count;jobs->world.random=config->random;jobs->world.random_context=config->random_context;
-    root=&jobs->tasks[0];status=ryz_prepare_job(image,length,arena,capacity,args,&jobs->world,&root->memory,&entry,&stack);
+    root=&jobs->tasks[0];root->mm_held=1;jobs->memories[0].used=1;jobs->memories[0].refs=1;root->cpu.m=&jobs->memories[0].memory;status=ryz_prepare_job(image,length,arena,capacity,args,&jobs->world,root->cpu.m,&entry,&stack);
     if(status!=RYZ_VM_OK){free(jobs);return status;}
-    if(ryz_linux_process_init(&root->process,1,1000,1000,1000,root->memory.base,arena,(size_t)root->memory.size,output,opaque)!=0){free(jobs);return RYZ_VM_BAD_INPUT;}
+    if(ryz_linux_process_init(&root->process,1,1000,1000,1000,root->cpu.m->base,arena,(size_t)root->cpu.m->size,output,opaque)!=0){free(jobs);return RYZ_VM_BAD_INPUT;}
     root->process.parent_pid=1;root->process.files=files;
-    root->memory.process=&root->process;root->process.memory_context=&root->memory;root->process.memory_read=ryz_memory_read;root->process.memory_write=ryz_memory_write;root->process.memory_call=ryz_memory_call;
+    root->cpu.m->process=&root->process;root->process.memory_context=root->cpu.m;root->process.memory_read=ryz_memory_read;root->process.memory_write=ryz_memory_write;root->process.memory_call=ryz_memory_call;
     root->process.job_call=job_call;root->process.job_context=jobs;
     ryz_world_attach(&root->process,&jobs->world);root->state=RUN;result->peak_tasks=1;
-    ryz_cpu_init(&root->cpu,&root->process,&root->memory,entry,stack,result);
+    ryz_cpu_init(&root->cpu,&root->process,&jobs->memories[0].memory,entry,stack,result);
     status=RYZ_VM_OK;
-    while(root->state!=ZOMBIE){
+    while(group_live(jobs,root->process.tgid)){
         progress=0;
-        for(i=0;i<RYZ_JOB_TASKS && root->state!=ZOMBIE;i++){
+        for(i=0;i<RYZ_JOB_TASKS && group_live(jobs,root->process.tgid);i++){
             Task *task=&jobs->tasks[i];
             if(task->state==FREE || task->state==ZOMBIE)continue;
             timer_poll(jobs,task);
@@ -254,13 +343,16 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
                 if(signal_deliver(jobs,task))progress=1;
                 if(task->process.exited){exited(jobs,task);break;}
                 if(task->state!=RUN)break;
+                if(task->futex_restart.active && task->cpu.ip!=task->futex_restart.ip)task->futex_restart.active=0;
                 task->cpu.m->process=&task->process;
                 status=ryz_cpu_tick(&task->cpu);
                 if(jobs->world.clock<UINT64_MAX)jobs->world.clock++;
+                if(status==RYZ_CPU_MOVED){status=RYZ_VM_OK;progress=1;break;}
                 if(status==RYZ_CPU_BLOCKED){task->blocked=1;result->blocked_syscalls++;status=RYZ_VM_OK;break;}
                 if(status!=RYZ_VM_OK)goto done;
                 task->blocked=0;progress=1;
                 if(task->process.exited){exited(jobs,task);break;}
+                if(task->yielded){task->yielded=0;break;}
             }
         }
         if(!progress){if(timer_advance(jobs))continue;status=RYZ_JOB_DEADLOCK;break;}
@@ -269,6 +361,6 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
  done:
     result->pipe_bytes=jobs->world.pipe_bytes;
     for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE)ryz_world_close(&jobs->tasks[i].process,0);
-    for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].owned)free(jobs->tasks[i].memory.bytes);
+    for(i=0;i<RYZ_JOB_TASKS;i++)mm_release(jobs,&jobs->tasks[i]);
     free(jobs);return status;
 }

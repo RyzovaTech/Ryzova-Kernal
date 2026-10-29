@@ -250,7 +250,7 @@ static int guest_syscall(Cpu *c)
         return RYZ_VM_OK;
     }
     r.rax=nr;r.rdi=c->r[7];r.rsi=c->r[6];r.rdx=c->r[2];r.r10=c->r[10];r.r8=c->r[8];r.r9=c->r[9];
-    if((nr==15 || nr==35 || nr==36 || nr==37 || nr==38 || nr==128 || nr==230 || nr==34 || nr==57 || nr==58 || nr==59 || nr==61 || nr==62 || nr==127 || nr==130 || nr==131 || nr==200 || nr==234) && c->p->job_call){
+    if((nr==56 || nr==202 || nr==273 || nr==274 || nr==24 || nr==60 || nr==231 || nr==15 || nr==35 || nr==36 || nr==37 || nr==38 || nr==128 || nr==230 || nr==34 || nr==57 || nr==58 || nr==59 || nr==61 || nr==62 || nr==127 || nr==130 || nr==131 || nr==200 || nr==234) && c->p->job_call){
         int state=c->p->job_call(c->p->job_context,c,&r,&answer);
         if(state==RYZ_CPU_BLOCKED)return state;
         if(state==RYZ_CPU_EXECUTED){c->result->syscall_count++;return RYZ_VM_OK;}
@@ -302,7 +302,7 @@ static int step(Cpu *c)
     if(c->rex&8)c->size=8;
     if(c->fault) return RYZ_VM_MAP_ERROR;
     size=c->size;
-    if(locked && op!=0x86 && op!=0x87 && op!=0x09 && op!=0x80 && op!=0x81 && op!=0x83 && op!=0x0f)return RYZ_VM_OPCODE_UNSUPPORTED;
+    if(locked && !(op<=0x31 && ((op&7)<=1)) && op!=0xfe && op!=0xff && op!=0x86 && op!=0x87 && op!=0x09 && op!=0x80 && op!=0x81 && op!=0x83 && op!=0x0f)return RYZ_VM_OPCODE_UNSUPPORTED;
     if(size==2 && ((op>=0x50 && op<=0x5f) || op==0x68 || op==0x6a ||
                    op==0xe8 || op==0xc3 || op==0xc9 || op==0x63))
         return RYZ_VM_OPCODE_UNSUPPORTED;
@@ -376,7 +376,7 @@ static int step(Cpu *c)
     }else if(op==0x80 || op==0x81 || op==0x83){
         if(op==0x80)size=1;
         rm=decode(c,&reg,&group,size);
-        if(locked && (rm.reg>=0 || group!=1))return RYZ_VM_OPCODE_UNSUPPORTED;
+        if(locked && (rm.reg>=0 || group==7))return RYZ_VM_OPCODE_UNSUPPORTED;
         b=fetch(c,op==0x83?1:(size==8?4:size));
         if(op==0x83)b=(uint64_t)(int64_t)(int8_t)b;
         else if(size==8)b=(uint64_t)(int64_t)(int32_t)b;
@@ -407,6 +407,7 @@ static int step(Cpu *c)
     }else if(op==0xfe || op==0xff){
         if(op==0xfe)size=1;
         rm=decode(c,&reg,&group,op==0xfe?1:8);
+        if(locked && (group>1 || rm.reg>=0))return RYZ_VM_OPCODE_UNSUPPORTED;
         if(op==0xfe && group>1)return RYZ_VM_OPCODE_UNSUPPORTED;
         if(group<=1){ a=get(c,rm,size); saved=c->flags&CF; v=arithmetic(c,group==0?0:5,a,1,size); c->flags=(c->flags&~(uint64_t)CF)|saved; if(!c->fault)put(c,rm,size,v); }
         else if(group==2 || group==4){ if(size==2)return RYZ_VM_OPCODE_UNSUPPORTED; target=get(c,rm,8); if(group==2 && !c->fault)push(c,c->cur); jump=1; }
@@ -436,10 +437,18 @@ static int step(Cpu *c)
     else if(op==0x90){ }
     else if(op==0x0f){
         op2=(unsigned int)fetch(c,1);
-        if(locked && op2!=0xb0 && op2!=0xb1)return RYZ_VM_OPCODE_UNSUPPORTED;
+        if(locked && op2!=0xc0 && op2!=0xc1 && op2!=0xb0 && op2!=0xb1)return RYZ_VM_OPCODE_UNSUPPORTED;
         if(op2==5){ if(c->fault)return RYZ_VM_MAP_ERROR; rv=guest_syscall(c); if(rv!=RYZ_VM_OK)return rv; }
         else if(op2==0x1e && c->repeat){if(fetch(c,1)!=0xfa)return RYZ_VM_OPCODE_UNSUPPORTED;}
         else if(op2>=0x80 && op2<=0x8f){ v=(uint64_t)(int64_t)(int32_t)fetch(c,4); target=c->cur+v; jump=condition(c,op2); }
+        else if(op2==0xc0 || op2==0xc1){
+            if(op2==0xc0)size=1;
+            rm=decode(c,&reg,&group,size);rr=regop(c,reg,size);
+            if(locked && rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED;
+            if(rm.reg<0 && !ryz_memory_access(c->m,address(c,rm)+c->segment,size,RYZ_READ|RYZ_WRITE))return RYZ_VM_MAP_ERROR;
+            a=get(c,rm,size);b=get(c,rr,size);
+            if(!c->fault){v=arithmetic(c,0,a,b,size);put(c,rm,size,v);put(c,rr,size,a);}
+        }
         else if(op2==0xb0 || op2==0xb1){
             if(op2==0xb0)size=1;
             rm=decode(c,&reg,&group,size);
@@ -553,7 +562,8 @@ int ryz_cpu_tick(RyzCpu *c)
     int rv;
     if(c->result->executed_steps>=cpu_limit(c))return RYZ_VM_STEP_LIMIT;
     c->result->last_rip=c->ip;c->result->executed_steps++;c->extra_steps=0;
-    rv=step(c);c->result->executed_steps+=c->extra_steps;return rv;
+    rv=step(c);if(rv==RYZ_CPU_MOVED)return rv;
+    c->result->executed_steps+=c->extra_steps;return rv;
 }
 int ryz_cpu_run(RyzLinuxProcess *p,RyzLinuxMemory *m,uint64_t entry,uint64_t stack,RyzVmResult *result)
 {

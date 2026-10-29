@@ -33,7 +33,12 @@ static char runtime[] = "linux-amd64-runtime-v1\n"
     "signal-depth=8 realtime-queue=33 per-task-standard-signals=coalesced\n"
     "dynamic=explicit-interpreter-and-library-grants pie=true tls=guest-linker\n"
     "time=logical-microsecond-per-instruction timers=alarm,setitimer,nanosleep,sigtimedwait\n"
-    "entropy=native-OS-capability threads=false sockets=false general-linux=false\n";
+    "entropy=native-OS-capability,1MiB-group-limit threads=cooperative sockets=false general-linux=false\n";
+static char threads[] = "linux-amd64-threads-v1\n"
+    "clone=shared-mm,files,fs,sighand,tls tids=synthetic thread-group=true\n"
+    "futex=wait,wake,bitset,requeue,timeout robust=owner-died clear-child-tid=true\n"
+    "limits=8-live-tasks,32-cumulative-creations priority-inheritance=false\n"
+    "exec=group-replacement scheduling=cooperative native-parallel=false\n";
 static char shell[] = "experimental-bounded-ash-v1\n"
     "workloads=script,variables,loops,functions,conditionals,input,output,append,cat,wc\n"
     "paths=/input:read,/output:write cwd=/,/tmp descriptors=16\n"
@@ -83,6 +88,7 @@ main(int argc, char **argv)
     leaf(linux, "jobs", jobs);
     leaf(linux, "filesystem", filesystem);
     leaf(linux, "runtime", runtime);
+    leaf(linux, "threads", threads);
     closefile(linux);
     closefile(compact);
     fs.read = fsread;

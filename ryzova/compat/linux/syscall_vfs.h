@@ -10,7 +10,7 @@ static void vfs_init(RyzLinuxWorld *w)
 }
 static void vfs_stamp(RyzLinuxProcess *p,RyzVnode *node,int data)
 {
-    uint64_t now=++p->world->clock;
+    uint64_t now=RYZ_TICK(p->world);
     node->ctime=now/1000000;node->ctime_ns=(now%1000000)*1000;
     if(data){node->mtime=node->ctime;node->mtime_ns=node->ctime_ns;}
 }
@@ -182,7 +182,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
     if(nr==228 || nr==229 || nr==201){
         uint64_t now;
         if(nr!=201 && r->rdi!=0 && r->rdi!=1 && r->rdi!=7)return -22;
-        now=++p->world->clock;
+        now=RYZ_TICK(p->world);
         if(nr==201){
             if(r->rdi){if(!buffer(p,r->rdi,8,1,&bytes))return -14;encode(bytes,now/1000000,8);}
             return (int64_t)(now/1000000);
@@ -209,7 +209,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
             for(k=1;k<4;k+=2)if(times[k]>=1000000000 && times[k]!=1073741822 && times[k]!=1073741823)return -22;
         }else{times[0]=times[2]=0;times[1]=times[3]=1073741823;}
         if(times[1]==1073741822 && times[3]==1073741822)return 0;
-        node=&p->world->nodes[index];now=++p->world->clock;
+        node=&p->world->nodes[index];now=RYZ_TICK(p->world);
         if(times[1]!=1073741822){node->atime=times[1]==1073741823?now/1000000:times[0];node->atime_ns=times[1]==1073741823?(now%1000000)*1000:times[1];}
         if(times[3]!=1073741822){node->mtime=times[3]==1073741823?now/1000000:times[2];node->mtime_ns=times[3]==1073741823?(now%1000000)*1000:times[3];}
         node->ctime=now/1000000;node->ctime_ns=(now%1000000)*1000;return 0;

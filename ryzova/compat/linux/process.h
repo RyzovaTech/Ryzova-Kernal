@@ -38,6 +38,7 @@ typedef struct RyzCpu {
 #define RYZ_CPU_BLOCKED 7
 #define RYZ_JOB_DEADLOCK 8
 #define RYZ_CPU_EXECUTED 9
+#define RYZ_CPU_MOVED 10
 void ryz_cpu_init(RyzCpu *,RyzLinuxProcess *,RyzLinuxMemory *,uint64_t,uint64_t,RyzVmResult *);
 int ryz_cpu_tick(RyzCpu *);
 int ryz_prepare_job(const unsigned char *,size_t,unsigned char *,size_t,const RyzProcessArgs *,RyzLinuxWorld *,RyzLinuxMemory *,uint64_t *,uint64_t *);

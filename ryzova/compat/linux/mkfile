@@ -3,7 +3,7 @@
 
 TARG=compact-linux
 OFILES=elf64.$O namespace.$O syscall.$O subset_vm.$O memory.$O process.$O cpu.$O jobs.$O native_runner.$O
-HFILES=portable.h elf64.h namespace.h syscall.h subset_vm.h process.h jobs.h syscall_vfs.h jobs_signals.h jobs_timers.h
+HFILES=portable.h elf64.h namespace.h syscall.h subset_vm.h process.h jobs.h syscall_vfs.h jobs_signals.h jobs_timers.h jobs_threads.h
 BIN=/$objtype/bin
 CFLAGS=$CFLAGS -DRYZ_PLAN9
 

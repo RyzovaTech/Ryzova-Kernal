@@ -61,7 +61,8 @@ Native evidence must come from the source-built-kernel gate in
 `scripts/phase9_runtime.py`; host reference execution alone is not native proof.
 
 This advances the requested full Compact Linux environment; it does not complete
-it. Threads/clone/futex, general sockets/network grants, persistent/general file
+it. The thread extension is described in [COMPACT-LINUX-THREADS.md](COMPACT-LINUX-THREADS.md).
+General sockets/network grants, persistent/general file
 mounts, broader instruction coverage, interactive terminals and complete Python,
 Git/compiler/toolchain qualification remain unfinished. Do not advertise full
 Linux compatibility or physical/operational ARM64 qualification from these tests.

@@ -24,17 +24,19 @@ static int timer_interrupt(Task *task)
         if(!ryz_memory_access(task->cpu.m,task->sleep_remaining,16,RYZ_WRITE))error=14;
         else timer_write(task,task->sleep_remaining,left,0);
     }
+    task->futex_waiting=task->futex_woken=0;task->futex_deadline=0;
     task->sleep_kind=0;task->sleep_deadline=task->sleep_remaining=0;return error;
 }
 static void timer_poll(Jobs *jobs,Task *task)
 {
     uint64_t now=jobs->world.clock,next;
-    if(task->alarm_deadline && now>=task->alarm_deadline){
-        signal_queue(jobs,task,14,task->process.ns.pid,128,0);
-        if(!task->alarm_interval)task->alarm_deadline=0;
+    Task *owner=task->leader?task->leader:task;
+    if(owner->alarm_deadline && now>=owner->alarm_deadline){
+        signal_queue_process(jobs,task,14,task->process.ns.pid,128,0);
+        if(!owner->alarm_interval)owner->alarm_deadline=0;
         else{
-            next=task->alarm_interval-(now-task->alarm_deadline)%task->alarm_interval;
-            task->alarm_deadline=now<=UINT64_MAX-next?now+next:0;
+            next=owner->alarm_interval-(now-owner->alarm_deadline)%owner->alarm_interval;
+            owner->alarm_deadline=now<=UINT64_MAX-next?now+next:0;
         }
     }
 }
@@ -42,8 +44,9 @@ static int timer_advance(Jobs *jobs)
 {
     unsigned int i;uint64_t next=UINT64_MAX;int found=0;
     for(i=0;i<RYZ_JOB_TASKS;i++){
-        Task *t=&jobs->tasks[i];if(t->state==FREE || t->state==ZOMBIE)continue;
-        if(t->alarm_deadline && (!found || t->alarm_deadline<next)){next=t->alarm_deadline;found=1;}
+        Task *t=&jobs->tasks[i],*owner=t->leader?t->leader:t;if(t->state==FREE || t->state==ZOMBIE)continue;
+        if(t->state==RUN && owner->alarm_deadline && (!found || owner->alarm_deadline<next)){next=owner->alarm_deadline;found=1;}
+        if(t->state==RUN && t->futex_waiting && t->futex_deadline && (!found || t->futex_deadline<next)){next=t->futex_deadline;found=1;}
         if(t->state==RUN && t->sleep_kind && t->sleep_deadline && (!found || t->sleep_deadline<next)){next=t->sleep_deadline;found=1;}
     }
     if(!found || next<=jobs->world.clock)return 0;
@@ -52,14 +55,15 @@ static int timer_advance(Jobs *jobs)
 static int timer_call(Task *task,const RyzLinuxRegs *r,int64_t *answer)
 {
     RyzCpu *c=&task->cpu;uint64_t now=task->process.world->clock,duration=0,interval=0,remaining=0,at,rem,mask;
-    unsigned int i,chosen=64;int error;unsigned char *b;
+    unsigned int i,chosen=64,pass;SignalEvent *selected=task->signals;int error;unsigned char *b;
+    Task *owner=task->leader?task->leader:task;
     if(r->rax==37){
-        remaining=task->alarm_deadline>now?task->alarm_deadline-now:0;
+        remaining=owner->alarm_deadline>now?owner->alarm_deadline-now:0;
         remaining=remaining/1000000+(remaining%1000000!=0);
         if(remaining>UINT64_C(0xffffffff))remaining=UINT64_C(0xffffffff);
         duration=(uint64_t)(uint32_t)r->rdi*1000000;
         if(duration>UINT64_MAX-now){*answer=-22;return RYZ_VM_OK;}
-        task->alarm_deadline=duration?now+duration:0;task->alarm_interval=0;*answer=(int64_t)remaining;return RYZ_VM_OK;
+        owner->alarm_deadline=duration?now+duration:0;owner->alarm_interval=0;*answer=(int64_t)remaining;return RYZ_VM_OK;
     }
     if(r->rax==36 || r->rax==38){
         if(r->rdi!=0){*answer=-22;return RYZ_VM_OK;}
@@ -70,19 +74,21 @@ static int timer_call(Task *task,const RyzLinuxRegs *r,int64_t *answer)
         }
         if(at){
             if(!ryz_memory_access(c->m,at,32,RYZ_WRITE)){*answer=-14;return RYZ_VM_OK;}
-            timer_write(task,at,task->alarm_interval,1);timer_write(task,at+16,task->alarm_deadline>now?task->alarm_deadline-now:0,1);
+            timer_write(task,at,owner->alarm_interval,1);timer_write(task,at+16,owner->alarm_deadline>now?owner->alarm_deadline-now:0,1);
         }else if(r->rax==36){*answer=-14;return RYZ_VM_OK;}
-        if(r->rax==38){task->alarm_interval=interval;task->alarm_deadline=duration?now+duration:0;}
+        if(r->rax==38){owner->alarm_interval=interval;owner->alarm_deadline=duration?now+duration:0;}
         *answer=0;return RYZ_VM_OK;
     }
     if(r->rax==128){
         if(r->r10!=8){*answer=-22;return RYZ_VM_OK;}
         if(!ryz_memory_access(c->m,r->rdi,8,RYZ_READ) || (r->rsi && !ryz_memory_access(c->m,r->rsi,128,RYZ_WRITE))){*answer=-14;return RYZ_VM_OK;}
         mask=little(c->m->bytes+(size_t)(r->rdi-c->m->base),8)&~SIG_UNBLOCKABLE;
-        for(i=0;i<64;i++)if(task->signals[i].sig && ((mask>>(task->signals[i].sig-1))&1) &&
-            (chosen==64 || task->signals[i].sig<task->signals[chosen].sig || (task->signals[i].sig==task->signals[chosen].sig && task->signals[i].sequence<task->signals[chosen].sequence)))chosen=i;
+        for(pass=0;pass<2 && chosen==64;pass++){
+            selected=pass?owner->process_signals:task->signals;
+            for(i=0;i<64;i++)if(selected[i].sig && ((mask>>(selected[i].sig-1))&1) && (chosen==64 || selected[i].sig<selected[chosen].sig || (selected[i].sig==selected[chosen].sig && selected[i].sequence<selected[chosen].sequence)))chosen=i;
+        }
         if(chosen!=64){
-            SignalEvent *e=&task->signals[chosen];*answer=e->sig;
+            SignalEvent *e=&selected[chosen];*answer=e->sig;
             if(r->rsi){b=c->m->bytes+(size_t)(r->rsi-c->m->base);memset(b,0,128);encode(b,e->sig,4);encode(b+8,(uint32_t)e->code,4);encode(b+16,e->pid,4);encode(b+20,e->uid,4);if(e->sig==17)encode(b+24,(uint32_t)e->status,4);}
             e->sig=0;task->sleep_kind=0;return RYZ_VM_OK;
         }

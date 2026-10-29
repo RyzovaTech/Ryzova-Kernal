@@ -156,7 +156,7 @@ int ryz_prepare_job(const unsigned char *image,size_t length,unsigned char *aren
     for(i=0;i<args->argc;i++)if(!string(m,&top,args->argv[i],&av[i]))return RYZ_VM_BAD_INPUT;
     for(i=0;i<args->envc;i++)if(!string(m,&top,args->envp[i],&ev[i]))return RYZ_VM_BAD_INPUT;
     top-=16;random=top;
-    if(world->random(world->random_context,arena+(size_t)(top-low),16)!=16)return RYZ_VM_BAD_INPUT;
+    if(ryz_world_random(world,arena+(size_t)(top-low),16)!=16)return RYZ_VM_BAD_INPUT;
     aux[0]=3;aux[1]=phdr;aux[2]=4;aux[3]=56;aux[4]=5;aux[5]=phnum;
     aux[6]=6;aux[7]=RYZ_PAGE;aux[8]=7;aux[9]=interp_base;aux[10]=9;aux[11]=plans[0].entry;
     aux[12]=11;aux[13]=1000;aux[14]=12;aux[15]=1000;aux[16]=13;aux[17]=1000;aux[18]=14;aux[19]=1000;
