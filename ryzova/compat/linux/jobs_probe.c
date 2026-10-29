@@ -10,7 +10,7 @@
 #include "network_posix.h"
 static int64_t sink(void *context,int fd,const unsigned char *bytes,size_t size)
 {
-    (void)context;return fwrite(bytes,1,size,fd==2?stderr:stdout)==size?(int64_t)size:-1;
+    ssize_t n;(void)context;n=write(fd==2?2:1,bytes,size);return n<0?-1:(int64_t)n;
 }
 static int64_t entropy(void *context,unsigned char *bytes,size_t size)
 {

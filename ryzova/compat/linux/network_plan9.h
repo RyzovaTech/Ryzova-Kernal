@@ -7,15 +7,33 @@ static int network_alarm(void *context,char *note)
 {
     USED(context);if(strcmp(note,"alarm"))return 0;network_alarms++;return 1;
 }
+static int network_clock_fd=-1;
+static int network_stdio[3]={1,1,1};
+static void network_prepare(void)
+{
+    int i,copy;
+    for(i=0;i<3;i++){
+        copy=dup(i,-1);
+        if(copy>=0){close(copy);continue;}
+        network_stdio[i]=0;copy=open("/dev/null",ORDWR);
+        if(copy<0)sysfatal("reserve standard descriptors: %r");
+        if(copy!=i){if(dup(copy,i)<0)sysfatal("reserve standard descriptor: %r");close(copy);}
+    }
+    if(!atnotify(network_alarm,1))sysfatal("network deadline handler unavailable");
+}
 static uint64_t network_now(void *context)
 {
-    uvlong ticks,hz,seconds,remainder;USED(context);ticks=fastticks(&hz);
-    if(!hz || hz>10000000000ULL || ticks==~(uvlong)0)return UINT64_MAX;
-    seconds=ticks/hz;remainder=ticks%hz;
-    if(seconds>UINT64_MAX/1000000000)return UINT64_MAX;
-    remainder=remainder*1000000000/hz;
-    if(seconds*1000000000>UINT64_MAX-remainder)return UINT64_MAX;
-    return seconds*1000000000+remainder;
+    unsigned char bytes[32];uint64_t value=0;unsigned int i;USED(context);
+    if(network_clock_fd<0)network_clock_fd=open("/dev/bintime",OREAD|OCEXEC);
+    if(network_clock_fd<0 || pread(network_clock_fd,bytes,sizeof bytes,0)!=(long)sizeof bytes)return UINT64_MAX;
+    /* The fourth big-endian word is kernel monotonic uptime in nanoseconds.
+     * Reading the device avoids requiring newer libc time helper symbols. */
+    for(i=24;i<32;i++)value=(value<<8)|bytes[i];
+    return value;
+}
+static void network_finish(void)
+{
+    if(network_clock_fd>=0){close(network_clock_fd);network_clock_fd=-1;}
 }
 static void network_wait(void *context){USED(context);sleep(1);}
 static int64_t network_open(void *context)

@@ -21,6 +21,7 @@ static int64_t network_open(void *context)
 {
     NetworkHost *host=context;struct pollfd p;int fd,error;socklen_t size=sizeof error;
     fd=socket(AF_INET,SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC,0);if(fd<0)return -errno;
+    if(fd<3){int copy=fcntl(fd,F_DUPFD_CLOEXEC,3);error=errno;close(fd);if(copy<0)return -error;fd=copy;}
     if(connect(fd,(struct sockaddr *)&host->address,sizeof host->address)){
         if(errno!=EINPROGRESS){error=errno;close(fd);return -error;}
         p.fd=fd;p.events=POLLOUT;p.revents=0;

@@ -7,7 +7,7 @@ import shutil
 from phase9_dynamic import build
 from phase9_persistence import commands as persistence_commands,start as persistence_start
 ROOT=Path(__file__).resolve().parents[1]
-CASES=('http','poll','peek','msg-peek','nonblock','fork','duplicate','denied')
+CASES=('http','poll','peek','msg-peek','nonblock','fork','duplicate','denied','closed-stdio')
 def fixtures(directory,commit):
     directory=Path(directory);cache=ROOT/'artifacts/musl-fixtures';build(cache);shutil.copy2(cache/'external-http',directory/'external-http')
     (directory/'external-probe.txt').write_text('FLEX_EXTERNAL_SOURCE_'+commit+'\n')
@@ -20,7 +20,9 @@ def commands(commit):
     ops=['hget http://10.0.2.2:8000/external-http > /tmp/ex-http','sha1sum -2 256 /tmp/ex-http','hget http://10.0.2.2:8000/external-hosts > /tmp/ex-hosts','sha1sum -2 256 /tmp/ex-hosts','cat /compact/linux/network',
          f"g=(-n '10.20.30.40:8080=tcp!10.0.2.2!8000'); e=/tmp/ex-http; k=FLEX_EXTERNAL_SOURCE_{commit}",'u=http://10.20.30.40:8080/external-probe.txt',
          "h=(-x '/etc/hosts=/tmp/ex-hosts'); v=http://resource.flex.test:8080/external-probe.txt",'echo FLEX_EXTERNAL_BEGIN']
-    for mode in CASES:ops.append(f'$c -j -b 4194304 $l $g $e {mode} $k E_{mode}_{commit} && echo FLEX_EXTERNAL_{mode}_RUN_OK')
+    for mode in CASES:
+        redirect=' >[0=] >[1=]' if mode=='closed-stdio' else ''
+        ops.append(f'$c -j -b 4194304 $l $g $e {mode} $k E_{mode}_{commit}{redirect} && echo FLEX_EXTERNAL_{mode}_RUN_OK')
     ops += ['$c -j -b 4194304 $g /tmp/busybox wget -Y off -q -O - $u && echo FLEX_EXTERNAL_WGET_OK',
             '$c -j -b 4194304 $g -W /tmp/ex-state /tmp/busybox wget -Y off -q -O /tmp/download $u && echo FLEX_EXTERNAL_WGET_SAVE_OK',
             '$c -j -R /tmp/ex-state /tmp/busybox cat /tmp/download && echo FLEX_EXTERNAL_WGET_RELOAD_OK',

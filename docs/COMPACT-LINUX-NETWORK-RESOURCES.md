@@ -49,7 +49,8 @@ claimed.
 The combined local/external payload quota is 4 MiB. External received payload
 also consumes this quota. Guest ring buffers remain 4096 bytes per endpoint.
 `-t N` selects an invocation wall budget of 1–10000 ms when routes are granted;
-the default is 5000 ms. The clock uses native monotonic fast ticks. The budget is
+the default is 5000 ms. The clock reads the fourth big-endian word of native `/dev/bintime`: kernel
+monotonic uptime. It does not require newer libc time-helper symbols. The budget is
 checked around callbacks and during guest scheduling; one bounded callback and
 cleanup can extend completion past the nominal deadline. Idle attempts are
 bounded independently of clock progress. A budget failure or a provider contract
@@ -61,7 +62,9 @@ guest poll/timer deadlines can expire while waiting for a native response. This
 is an artificial environment clock, not a promise of full Linux realtime timing.
 
 The embedding API accepts trusted `RyzNetworkResources`/`RyzNetworkOps` callbacks.
-Providers must enforce their own per-call bounds; arbitrary blocking C callbacks
+Native standard descriptors are reserved before opening clock/network resources;
+closed caller output streams still report I/O errors rather than becoming TCP
+handles. Providers must enforce their own per-call bounds; arbitrary blocking C callbacks
 cannot be preempted by the interpreter. Invalid readiness bits, impossible byte
 counts and backwards/invalid clocks fail closed. The production Plan 9 adapter
 and the Linux reference adapter implement the bounded callback contract.
@@ -76,7 +79,7 @@ provider errors and contract failures, stalled peers, clock failures and exact
 handle ownership. Selected successful application outputs are compared with
 Linux. ASan/UBSan run on both real I/O and provider-contract tests.
 
-The native gate requires eight application invocations plus four unmodified
+The native gate requires nine application invocations plus four unmodified
 BusyBox download/persistence/static-name invocations, denial without a
 route, termination of a real stalled native HTTP request, independent host HTTP
 request observations, exact source challenges, fixture hashes and clean exit

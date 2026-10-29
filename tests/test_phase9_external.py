@@ -21,9 +21,9 @@ class ExternalGateTests(unittest.TestCase):
         for mode in gate.CASES:lines += ['FLEX_EXTERNAL_OK '+mode,'E_'+mode+'_'+commit,result,'FLEX_EXTERNAL_'+mode+'_RUN_OK']
         lines += ['FLEX_EXTERNAL_SOURCE_'+commit,result,'FLEX_EXTERNAL_WGET_OK',result,'FLEX_EXTERNAL_WGET_SAVE_OK','FLEX_EXTERNAL_SOURCE_'+commit,result,'FLEX_EXTERNAL_WGET_RELOAD_OK','FLEX_EXTERNAL_SOURCE_'+commit,result,'FLEX_EXTERNAL_NAMED_OK','COMPACT_LINUX_RESULT status=11 exited=0 exit=0 steps=100 syscalls=10','FLEX_EXTERNAL_DEADLINE_DENIED','EXTERNAL_HTTP_FAILED line=39 errno=101','FLEX_EXTERNAL_UNGRANTED_DENIED','FLEX_EXTERNAL_END','FLEX_EXTERNAL_DONE']
         serial=('\n'.join(lines)+'\n').encode();digests={'external-http':digest,'external-hosts':digest}
-        self.assertTrue(gate.inspect(serial,commit,digests,10,1)['passed'])
-        for token in ('FLEX_EXTERNAL_DONE','FLEX_EXTERNAL_UNGRANTED_DENIED','FLEX_EXTERNAL_DEADLINE_DENIED','E_peek_'+commit,digest):self.assertFalse(gate.inspect(serial.replace(token.encode(),b'MISSING'),commit,digests,10,1)['passed'])
-        self.assertFalse(gate.inspect(serial,commit,digests,0,1)['passed']);self.assertFalse(gate.inspect(serial.replace(b'exit=0',b'exit=1',1),commit,digests,10,1)['passed'])
+        self.assertTrue(gate.inspect(serial,commit,digests,len(gate.CASES)+2,1)['passed'])
+        for token in ('FLEX_EXTERNAL_DONE','FLEX_EXTERNAL_UNGRANTED_DENIED','FLEX_EXTERNAL_DEADLINE_DENIED','E_peek_'+commit,digest):self.assertFalse(gate.inspect(serial.replace(token.encode(),b'MISSING'),commit,digests,len(gate.CASES)+2,1)['passed'])
+        self.assertFalse(gate.inspect(serial,commit,digests,0,1)['passed']);self.assertFalse(gate.inspect(serial.replace(b'exit=0',b'exit=1',1),commit,digests,len(gate.CASES)+2,1)['passed'])
         self.assertTrue(all(len(command)<220 for command in gate.commands(commit)))
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -109,6 +109,14 @@ class ExternalTests(unittest.TestCase):
         for mode in ('http','poll','peek','msg-peek','nonblock','fork','duplicate','denied'):
             with self.subTest(mode=mode):
                 vm=self.vm(mode,runner=runner,env=env);self.assertEqual(vm.returncode,0,vm.stderr);self.assertNotIn(b'AddressSanitizer',vm.stderr)
+    def test_closed_standard_fds_do_not_become_network_handles(self):
+        base=[str(self.runner),'-b','4194304','-x',f'/lib/ld-musl-x86_64.so.1={self.libc}','-n',f'10.20.30.40:8080=127.0.0.1:{self.server.server_port}',str(self.fixture),'closed-stdio','FLEX_EXTERNAL_SOURCE_challenge','challenge']
+        before=len(self.server.requests)
+        for script in ('exec 1>&-; exec "$@"','exec 0<&-; exec 1>&-; exec "$@"'):
+            result=subprocess.run(['/bin/sh','-c',script,'closed-stdio',*base],capture_output=True,timeout=10)
+            self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(result.stdout,b'')
+            self.assertIn(b'FLEX_EXTERNAL_OK closed-stdio\nchallenge\n',result.stderr)
+        self.assertEqual(len(self.server.requests),before+2)
     def test_cli_rejects_bad_and_duplicate_grants_before_opening_connections(self):
         for text in ('999.1.2.3:80=127.0.0.1:1','10.1.2.3:0=127.0.0.1:1','10.1.2.3:80=','1.2.3:80=127.0.0.1:1'):
             vm=self.vm('http',grant=False,extra=('-n',text));self.assertNotEqual(vm.returncode,0);self.assertNotIn(b'FLEX_EXTERNAL_OK',vm.stdout)

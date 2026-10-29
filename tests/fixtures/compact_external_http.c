@@ -34,6 +34,7 @@ int main(int argc,char **argv)
         address.sin_port=htons(8081);CHECK(connect(fd,(void *)&address,sizeof address)==-1 && errno==ENETUNREACH);CHECK(!close(fd));goto done;
     }
     CHECK(!connect_to(fd,&address,nonblock));
+    if(!strcmp(mode,"closed-stdio"))CHECK(write(1,"not-a-request",13)==-1);
     if(!strcmp(mode,"duplicate")){
         other=socket(AF_INET,SOCK_STREAM,0);CHECK(other>=0 && connect(other,(void *)&address,sizeof address)==-1 && errno==EADDRINUSE);CHECK(!close(fd));fd=other;CHECK(!connect_to(fd,&address,0));
     }
@@ -55,5 +56,6 @@ int main(int argc,char **argv)
     }
     response[used]=0;CHECK(strstr(response," 200 OK\r\n") && strstr(response,argv[2]));CHECK(!close(fd));
  done:
+    if(!strcmp(mode,"closed-stdio")){fprintf(stderr,"FLEX_EXTERNAL_OK %s\n%s\n",mode,argv[3]);return 0;}
     printf("FLEX_EXTERNAL_OK %s\n",mode);puts(argv[3]);return 0;
 }

@@ -20,6 +20,7 @@ static int64_t
 output(void *context, int fd, const unsigned char *bytes, size_t size)
 {
     USED(context);
+    if(fd>=0 && fd<3 && !network_stdio[fd])return -1;
     return write(fd, bytes, size);
 }
 
@@ -75,7 +76,7 @@ main(int argc, char **argv)
     }
     if(rfork(RFNAMEG|RFENVG) < 0)
         sysfatal("private process namespace: %r");
-    if(network.count){config.network=&network;if(!atnotify(network_alarm,1))sysfatal("network deadline handler unavailable");}
+    if(network.count){network_prepare();config.network=&network;}
     if(stateinpath || stateoutpath)config.filesystem=&filesystem;
     if(stateinpath){statein=readimage(stateinpath,RYZ_FS_SNAPSHOT_MAX,&filesystem.input_size);filesystem.input=statein;}
     if(stateoutpath){stateout=malloc(RYZ_FS_SNAPSHOT_MAX);if(!stateout)sysfatal("allocate filesystem export: %r");filesystem.output=stateout;filesystem.output_capacity=RYZ_FS_SNAPSHOT_MAX;}
@@ -157,6 +158,7 @@ main(int argc, char **argv)
         }
         if(close(fd)<0){remove(stateoutpath);sysfatal("close filesystem snapshot: %r");}
     }
+    if(network.count)network_finish();
     free(statein);free(stateout);
     for(gi=0;gi<config.exec_count;gi++)if(grants[gi].image!=image)free((void *)grants[gi].image);
     free(input);
