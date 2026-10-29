@@ -56,6 +56,7 @@ static void encode(unsigned char *b,uint64_t value,unsigned int n)
 {
     unsigned int i;for(i=0;i<n;i++)b[i]=(unsigned char)(value>>(8*i));
 }
+#include "filesystem_state.h"
 static int guest_string(RyzCpu *c,uint64_t at,char *out,size_t maximum)
 {
     size_t i;
@@ -314,6 +315,10 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
 {
     Jobs *jobs;Task *root;uint64_t entry,stack;unsigned int i,j,q;size_t n;int status,progress;
     if(result)memset(result,0,sizeof(*result));
+    if(config && config->filesystem){
+        RyzFilesystemResources *fs=config->filesystem;fs->output_size=0;
+        if((fs->input_size && !fs->input) || fs->input_size>RYZ_FS_SNAPSHOT_MAX || (fs->output && fs->output_capacity<RYZ_FS_SNAPSHOT_MAX) || (!fs->output && fs->output_capacity))return RYZ_VM_BAD_INPUT;
+    }
     if(files){
         if(!files->input || !files->output || files->input_size>RYZ_LINUX_FILE_MAX ||
            files->output_capacity==0 || files->output_capacity>RYZ_LINUX_FILE_MAX)return RYZ_VM_BAD_INPUT;
@@ -331,6 +336,7 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     for(i=0;i<RYZ_JOB_TASKS;i++)jobs->tasks[i].vfork_parent=-1;
     jobs->capacity=capacity<RYZ_PROCESS_MAX_SPAN?capacity:RYZ_PROCESS_MAX_SPAN;
     jobs->next_pid=1001;jobs->world.execs=config->execs;jobs->world.exec_count=config->exec_count;jobs->world.random=config->random;jobs->world.random_context=config->random_context;
+    if(config->filesystem && config->filesystem->input && !fs_import(&jobs->world,config->filesystem->input,config->filesystem->input_size)){free(jobs);return RYZ_VM_BAD_INPUT;}
     root=&jobs->tasks[0];root->mm_held=1;jobs->memories[0].used=1;jobs->memories[0].refs=1;root->cpu.m=&jobs->memories[0].memory;status=ryz_prepare_job(image,length,arena,capacity,args,&jobs->world,root->cpu.m,&entry,&stack);
     if(status!=RYZ_VM_OK){free(jobs);return status;}
     if(ryz_linux_process_init(&root->process,1,1000,1000,1000,root->cpu.m->base,arena,(size_t)root->cpu.m->size,output,opaque)!=0){free(jobs);return RYZ_VM_BAD_INPUT;}
@@ -373,5 +379,6 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     result->pipe_bytes=jobs->world.pipe_bytes;
     for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE)ryz_world_close(&jobs->tasks[i].process,0);
     for(i=0;i<RYZ_JOB_TASKS;i++)mm_release(jobs,&jobs->tasks[i]);
+    if(config->filesystem && config->filesystem->output)fs_export(&jobs->world,config->filesystem);
     free(jobs);return status;
 }

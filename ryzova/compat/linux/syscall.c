@@ -371,7 +371,7 @@ static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, i
     if(!guest_range(p,destination,sizeof data,&out) ||
        (p->memory_write && !p->memory_write(p->memory_context,destination,sizeof data)))return -L_EFAULT;
     memset(data,0,sizeof data);
-    encode(data,p->ns.namespace_id,8);encode(data+8,inode,8);encode(data+16,1,8);
+    encode(data,kind==RYZ_NS_SOCKET?UINT64_C(0x100000000)+p->ns.namespace_id:p->ns.namespace_id,8);encode(data+8,inode,8);encode(data+16,1,8);
     encode(data+24,mode,4);encode(data+28,p->ns.uid,4);encode(data+32,p->ns.gid,4);
     encode(data+40,device,8);encode(data+48,bytes,8);encode(data+56,4096,8);encode(data+64,(bytes+511)/512,8);
     memcpy(out,data,sizeof data);return 0;

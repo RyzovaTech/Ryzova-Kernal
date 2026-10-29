@@ -34,6 +34,11 @@ static char runtime[] = "linux-amd64-runtime-v1\n"
     "dynamic=explicit-interpreter-and-library-grants pie=true tls=guest-linker\n"
     "time=logical-microsecond-per-instruction timers=alarm,setitimer,nanosleep,sigtimedwait\n"
     "entropy=native-OS-capability,1MiB-group-limit threads=cooperative sockets=invocation-local-streams general-linux=false\n";
+static char persistence[] = "linux-amd64-filesystem-snapshot-v1\n"
+    "launch=compact-linux -j -R snapshot-in -W new-snapshot-out ELF args\n"
+    "scope=/tmp format=FLEXFS1 permissions=0600 export=exclusive-create\n"
+    "validation=checksum,topology,names,inodes,bounds auth=none\n"
+    "general-host-mounts=false crash-atomic-replace=false\n";
 static char sockets[] = "linux-amd64-local-sockets-v1\n"
     "domain=unix-abstract,ipv4-loopback type=stream namespace=invocation-private\n"
     "operations=pair,bind,listen,connect,accept,read,write,sendmsg,recvmsg,poll,shutdown\n"
@@ -95,6 +100,7 @@ main(int argc, char **argv)
     leaf(linux, "runtime", runtime);
     leaf(linux, "threads", threads);
     leaf(linux, "sockets", sockets);
+    leaf(linux, "persistence", persistence);
     closefile(linux);
     closefile(compact);
     fs.read = fsread;

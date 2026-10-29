@@ -34,7 +34,7 @@ main(int argc, char **argv)
     char *grant_text[RYZ_PROCESS_ARGS],*eq;
     RyzLinuxExec grants[RYZ_PROCESS_ARGS];
     size_t gi;
-    RyzJobConfig config;
+    RyzJobConfig config;RyzFilesystemResources filesystem;char *stateinpath=nil,*stateoutpath=nil;unsigned char *statein=nil,*stateout=nil;
     RyzProcessArgs args;
     long n;
     size_t used, image_limit, arena_limit;
@@ -43,6 +43,7 @@ main(int argc, char **argv)
     RyzLinuxFiles files;
     RyzVmResult result;
 
+    memset(&filesystem,0,sizeof filesystem);
     filemode=processmode=jobsmode=0;
     memset(&config,0,sizeof(config));config.random=entropy;config.execs=grants;memset(grants,0,sizeof(grants)); inputpath=nil; argi=1;
     memset(&args,0,sizeof args);
@@ -50,6 +51,8 @@ main(int argc, char **argv)
         if(strcmp(argv[argi],"-j")==0){jobsmode=processmode=1;argi++;}
         else if(strcmp(argv[argi],"-b")==0 && argi+1<argc){
             char *end;ulong n=strtoul(argv[argi+1],&end,10);if(!n || n>16777216 || *end)sysfatal("invalid instruction budget");config.max_steps=(uint32_t)n;argi+=2;
+        }else if(strcmp(argv[argi],"-R")==0 && argi+1<argc && !stateinpath){stateinpath=argv[argi+1];argi+=2;
+        }else if(strcmp(argv[argi],"-W")==0 && argi+1<argc && !stateoutpath){stateoutpath=argv[argi+1];argi+=2;
         }else if(strcmp(argv[argi],"-x")==0 && argi+1<argc && config.exec_count<RYZ_PROCESS_ARGS){grant_text[config.exec_count++]=argv[argi+1];argi+=2;}
         else if(strcmp(argv[argi],"-p")==0){ processmode=1; argi++; }
         else if(strcmp(argv[argi],"-i")==0 && argi+1<argc && !filemode){
@@ -59,12 +62,15 @@ main(int argc, char **argv)
         }else if(strcmp(argv[argi],"--")==0){ argi++; break; }
         else break;
     }
-    if(argi>=argc || ((config.exec_count || config.max_steps) && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
-        fprint(2, "usage: compact-linux [-p | -j [-x guest-path[=host-ELF]]] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
+    if(argi>=argc || ((config.exec_count || config.max_steps || stateinpath || stateoutpath) && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
+        fprint(2, "usage: compact-linux [-p | -j [-x guest-path[=host-ELF]]] [-R snapshot-in] [-W new-snapshot-out] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
         exits("usage");
     }
     if(rfork(RFNAMEG|RFENVG) < 0)
         sysfatal("private process namespace: %r");
+    if(stateinpath || stateoutpath)config.filesystem=&filesystem;
+    if(stateinpath){statein=readimage(stateinpath,RYZ_FS_SNAPSHOT_MAX,&filesystem.input_size);filesystem.input=statein;}
+    if(stateoutpath){stateout=malloc(RYZ_FS_SNAPSHOT_MAX);if(!stateout)sysfatal("allocate filesystem export: %r");filesystem.output=stateout;filesystem.output_capacity=RYZ_FS_SNAPSHOT_MAX;}
     imagepath=argv[argi];
     args.argv=(const char *const *)(argv+argi); args.argc=argc-argi;
     args.envp=env;
@@ -134,6 +140,16 @@ main(int argc, char **argv)
     if(jobsmode)fprint(2,"COMPACT_JOBS_STATS forks=%ud execs=%ud peak=%ud blocked=%ud pipebytes=%llud\n",(uint)result.forks,(uint)result.execs,(uint)result.peak_tasks,(uint)result.blocked_syscalls,(uvlong)result.pipe_bytes);
     if(processmode && status != RYZ_VM_OK)
         fprint(2,"COMPACT_PROCESS_FAULT rip=%llux\n",result.last_rip);
+    if(stateoutpath && filesystem.output_size){
+        fd=create(stateoutpath,OWRITE|OEXCL,0600);if(fd<0)sysfatal("create new filesystem snapshot (never overwrite): %r");
+        used=0;while(used<filesystem.output_size){
+            n=write(fd,stateout+used,filesystem.output_size-used);
+            if(n<=0){close(fd);remove(stateoutpath);sysfatal("write filesystem snapshot: %r");}
+            used+=(size_t)n;
+        }
+        if(close(fd)<0){remove(stateoutpath);sysfatal("close filesystem snapshot: %r");}
+    }
+    free(statein);free(stateout);
     for(gi=0;gi<config.exec_count;gi++)if(grants[gi].image!=image)free((void *)grants[gi].image);
     free(input);
     free(fileout);
