@@ -38,7 +38,8 @@ static char network[] = "linux-amd64-tcp-resources-v1\n"
     "grant=guest-IP:port=tcp!native-host!port routing=exact-explicit-grant\n"
     "limits=4-grants,1-connection-per-grant,4MiB-traffic,5000ms-default,10000ms-max\n"
     "backend=native-Plan9-dial,conservative-readiness dns=caller-dial-only\n"
-    "guest-dns=false udp=false external-listen=false external-half-write-close=false\n";
+    "guest-dns=false static-names=explicit-/etc/hosts-file-grant udp=false\n"
+    "external-listen=false external-half-write-close=false\n";
 static char persistence[] = "linux-amd64-filesystem-snapshot-v1\n"
     "launch=compact-linux -j -R snapshot-in -W new-snapshot-out ELF args\n"
     "scope=/tmp format=FLEXFS1 permissions=0600 export=exclusive-create\n"

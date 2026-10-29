@@ -17,13 +17,13 @@ import phase9_external as gate
 class ExternalGateTests(unittest.TestCase):
     def test_native_gate_requires_http_observations_every_challenge_and_no_grant_denial(self):
         commit='a'*40;digest='b'*64;result='COMPACT_LINUX_RESULT status=0 exited=1 exit=0 steps=10 syscalls=10'
-        lines=['linux-amd64-tcp-resources-v1',digest+'  /tmp/ex-http']+[f'RYZOVA_RUNTIME_STAGE_{i}' for i in range(gate.start(commit),gate.start(commit)+len(gate.commands(commit))-1)]+['FLEX_EXTERNAL_BEGIN']
+        lines=['linux-amd64-tcp-resources-v1',digest+'  /tmp/ex-http',digest+'  /tmp/ex-hosts']+[f'RYZOVA_RUNTIME_STAGE_{i}' for i in range(gate.start(commit),gate.start(commit)+len(gate.commands(commit))-1)]+['FLEX_EXTERNAL_BEGIN']
         for mode in gate.CASES:lines += ['FLEX_EXTERNAL_OK '+mode,'E_'+mode+'_'+commit,result,'FLEX_EXTERNAL_'+mode+'_RUN_OK']
-        lines += ['FLEX_EXTERNAL_SOURCE_'+commit,result,'FLEX_EXTERNAL_WGET_OK',result,'FLEX_EXTERNAL_WGET_SAVE_OK','FLEX_EXTERNAL_SOURCE_'+commit,result,'FLEX_EXTERNAL_WGET_RELOAD_OK','COMPACT_LINUX_RESULT status=11 exited=0 exit=0 steps=100 syscalls=10','FLEX_EXTERNAL_DEADLINE_DENIED','EXTERNAL_HTTP_FAILED line=39 errno=101','FLEX_EXTERNAL_UNGRANTED_DENIED','FLEX_EXTERNAL_END','FLEX_EXTERNAL_DONE']
-        serial=('\n'.join(lines)+'\n').encode();digests={'external-http':digest}
-        self.assertTrue(gate.inspect(serial,commit,digests,9,1)['passed'])
-        for token in ('FLEX_EXTERNAL_DONE','FLEX_EXTERNAL_UNGRANTED_DENIED','FLEX_EXTERNAL_DEADLINE_DENIED','E_peek_'+commit,digest):self.assertFalse(gate.inspect(serial.replace(token.encode(),b'MISSING'),commit,digests,9,1)['passed'])
-        self.assertFalse(gate.inspect(serial,commit,digests,0,1)['passed']);self.assertFalse(gate.inspect(serial.replace(b'exit=0',b'exit=1',1),commit,digests,9,1)['passed'])
+        lines += ['FLEX_EXTERNAL_SOURCE_'+commit,result,'FLEX_EXTERNAL_WGET_OK',result,'FLEX_EXTERNAL_WGET_SAVE_OK','FLEX_EXTERNAL_SOURCE_'+commit,result,'FLEX_EXTERNAL_WGET_RELOAD_OK','FLEX_EXTERNAL_SOURCE_'+commit,result,'FLEX_EXTERNAL_NAMED_OK','COMPACT_LINUX_RESULT status=11 exited=0 exit=0 steps=100 syscalls=10','FLEX_EXTERNAL_DEADLINE_DENIED','EXTERNAL_HTTP_FAILED line=39 errno=101','FLEX_EXTERNAL_UNGRANTED_DENIED','FLEX_EXTERNAL_END','FLEX_EXTERNAL_DONE']
+        serial=('\n'.join(lines)+'\n').encode();digests={'external-http':digest,'external-hosts':digest}
+        self.assertTrue(gate.inspect(serial,commit,digests,10,1)['passed'])
+        for token in ('FLEX_EXTERNAL_DONE','FLEX_EXTERNAL_UNGRANTED_DENIED','FLEX_EXTERNAL_DEADLINE_DENIED','E_peek_'+commit,digest):self.assertFalse(gate.inspect(serial.replace(token.encode(),b'MISSING'),commit,digests,10,1)['passed'])
+        self.assertFalse(gate.inspect(serial,commit,digests,0,1)['passed']);self.assertFalse(gate.inspect(serial.replace(b'exit=0',b'exit=1',1),commit,digests,10,1)['passed'])
         self.assertTrue(all(len(command)<220 for command in gate.commands(commit)))
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -90,6 +90,11 @@ class ExternalTests(unittest.TestCase):
             self.assertEqual(download.returncode,0,download.stderr);self.assertEqual(download.stdout,b'')
             reload=subprocess.run([str(self.runner),'-R',str(state),str(busybox),'cat','/tmp/download'],capture_output=True,timeout=10)
             self.assertEqual(reload.returncode,0,reload.stderr);self.assertEqual(reload.stdout,expected)
+            hosts=Path(directory)/'hosts';hosts.write_text('10.20.30.40 resource.flex.test\n')
+            named=[*base,'-x',f'/etc/hosts={hosts}',str(busybox),'wget','-Y','off','-q','-O','-','http://resource.flex.test:8080/external-probe.txt']
+            mapped=subprocess.run(named,capture_output=True,timeout=10);self.assertEqual(mapped.returncode,0,mapped.stderr);self.assertEqual(mapped.stdout,expected)
+            before=len(self.server.requests);hosts.write_text('10.20.30.41 resource.flex.test\n')
+            denied=subprocess.run(named,capture_output=True,timeout=10);self.assertEqual(denied.returncode,2);self.assertEqual(len(self.server.requests),before)
     def test_provider_contracts_budgets_and_exactly_once_ownership_under_sanitizers(self):
         runner=self.directory/'resources';sources=[p for p in self.sources if not p.endswith('jobs_probe.c')]
         subprocess.run([*self.flags,'-fsanitize=address,undefined','-no-pie',*sources,str(ROOT/'tests/phase9_external_resources_test.c'),'-o',str(runner)],check=True,capture_output=True)

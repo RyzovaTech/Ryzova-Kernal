@@ -22,6 +22,12 @@ backing native tuple. Native DNS may resolve a hostname explicitly supplied in a
 caller dial string; guest DNS APIs, UDP, IPv6 socket APIs and external listeners
 are not implemented.
 
+The existing immutable file-grant path can also supply `/etc/hosts`, for example
+`-x '/etc/hosts=/tmp/caller-hosts'`. Unmodified musl/BusyBox can then resolve a
+caller-provided name to the guest alias. This is static naming data, not guest DNS;
+the resulting IP and port still require their own explicit TCP route. Tests verify
+that changing the hosts file to an ungranted address cannot bypass the route.
+
 Each invocation allows four routes and one active connection per route. Fork,
 duplication and shared thread file tables retain references to the same resource;
 the backend handle closes on the final reference, on full shutdown, or during
@@ -70,8 +76,8 @@ provider errors and contract failures, stalled peers, clock failures and exact
 handle ownership. Selected successful application outputs are compared with
 Linux. ASan/UBSan run on both real I/O and provider-contract tests.
 
-The native gate requires eight application invocations plus three unmodified
-BusyBox download/persistence invocations, denial without a
+The native gate requires eight application invocations plus four unmodified
+BusyBox download/persistence/static-name invocations, denial without a
 route, termination of a real stalled native HTTP request, independent host HTTP
 request observations, exact source challenges, fixture hashes and clean exit
 records. These establish the tested Plan 9/QEMU TCP path; they do not certify
