@@ -50,3 +50,11 @@ network grants, persistent/general mounts, broader ISA/terminal support and
 complete Python/Git/SDK workloads still need implementation and qualification.
 Physical hardware and operational ARM64 remain unqualified. This work is not an
 authorization to merge the cumulative draft pull requests.
+
+Qualified runtime/helper commit: `d18265bbb1899ba9d9651329ccefbe3c5d126e31`.
+The independent source-built AMD64 kernel passed all 21 thread/lifetime
+workloads, including blocked cancellation and worker exec, plus all previous
+native runtime gates. The final source passed 125 local regression methods.
+Built, installed and independently extracted kernel SHA256 matched:
+`23555f94d520ce991e05efdffc4938bf889ba7963528c03b5b31d7eadce21ccc`.
+See [exact source, fixture hashes and native evidence](validation/phase9-10-local-native.json).
