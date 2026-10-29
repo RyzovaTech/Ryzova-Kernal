@@ -33,7 +33,12 @@ static char runtime[] = "linux-amd64-runtime-v1\n"
     "signal-depth=8 realtime-queue=33 per-task-standard-signals=coalesced\n"
     "dynamic=explicit-interpreter-and-library-grants pie=true tls=guest-linker\n"
     "time=logical-microsecond-per-instruction timers=alarm,setitimer,nanosleep,sigtimedwait\n"
-    "entropy=native-OS-capability,1MiB-group-limit threads=cooperative sockets=invocation-local-streams general-linux=false\n";
+    "entropy=native-OS-capability,1MiB-group-limit threads=cooperative sockets=local-streams,explicit-TCP-resources general-linux=false\n";
+static char network[] = "linux-amd64-tcp-resources-v1\n"
+    "grant=guest-IP:port=tcp!native-host!port routing=exact-explicit-grant\n"
+    "limits=4-grants,1-connection-per-grant,4MiB-traffic,5000ms-default,10000ms-max\n"
+    "backend=native-Plan9-dial,conservative-readiness dns=caller-dial-only\n"
+    "guest-dns=false udp=false external-listen=false external-half-write-close=false\n";
 static char persistence[] = "linux-amd64-filesystem-snapshot-v1\n"
     "launch=compact-linux -j -R snapshot-in -W new-snapshot-out ELF args\n"
     "scope=/tmp format=FLEXFS1 permissions=0600 export=exclusive-create\n"
@@ -101,6 +106,7 @@ main(int argc, char **argv)
     leaf(linux, "threads", threads);
     leaf(linux, "sockets", sockets);
     leaf(linux, "persistence", persistence);
+    leaf(linux, "network", network);
     closefile(linux);
     closefile(compact);
     fs.read = fsread;

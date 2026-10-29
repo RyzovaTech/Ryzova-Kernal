@@ -2,6 +2,7 @@
 /* Native Plan 9 user-space application; interprets a bounded Linux ELF subset. */
 #include "jobs.h"
 #include <libsec.h>
+#include "network_plan9.h"
 #define IMAGE_LIMIT (1024U * 1024U)
 
 static unsigned char *
@@ -35,6 +36,7 @@ main(int argc, char **argv)
     RyzLinuxExec grants[RYZ_PROCESS_ARGS];
     size_t gi;
     RyzJobConfig config;RyzFilesystemResources filesystem;char *stateinpath=nil,*stateoutpath=nil;unsigned char *statein=nil,*stateout=nil;
+    RyzNetworkResources network;RyzNetworkGrant network_grants[RYZ_NETWORK_GRANTS];NetworkHost network_hosts[RYZ_NETWORK_GRANTS];
     RyzProcessArgs args;
     long n;
     size_t used, image_limit, arena_limit;
@@ -43,6 +45,7 @@ main(int argc, char **argv)
     RyzLinuxFiles files;
     RyzVmResult result;
 
+    memset(&network,0,sizeof network);memset(network_grants,0,sizeof network_grants);network.grants=network_grants;network.now_ns=network_now;network.wait=network_wait;
     memset(&filesystem,0,sizeof filesystem);
     filemode=processmode=jobsmode=0;
     memset(&config,0,sizeof(config));config.random=entropy;config.execs=grants;memset(grants,0,sizeof(grants)); inputpath=nil; argi=1;
@@ -51,6 +54,10 @@ main(int argc, char **argv)
         if(strcmp(argv[argi],"-j")==0){jobsmode=processmode=1;argi++;}
         else if(strcmp(argv[argi],"-b")==0 && argi+1<argc){
             char *end;ulong n=strtoul(argv[argi+1],&end,10);if(!n || n>16777216 || *end)sysfatal("invalid instruction budget");config.max_steps=(uint32_t)n;argi+=2;
+        }else if(strcmp(argv[argi],"-n")==0 && argi+1<argc && network.count<RYZ_NETWORK_GRANTS){
+            if(!network_parse(argv[argi+1],&network_grants[network.count],&network_hosts[network.count]))sysfatal("invalid TCP resource grant");
+            network.count++;argi+=2;
+        }else if(strcmp(argv[argi],"-t")==0 && argi+1<argc){char *end;ulong value=strtoul(argv[argi+1],&end,10);if(*end || !value || value>10000)sysfatal("invalid network time budget");network.wall_milliseconds=(unsigned int)value;argi+=2;
         }else if(strcmp(argv[argi],"-R")==0 && argi+1<argc && !stateinpath){stateinpath=argv[argi+1];argi+=2;
         }else if(strcmp(argv[argi],"-W")==0 && argi+1<argc && !stateoutpath){stateoutpath=argv[argi+1];argi+=2;
         }else if(strcmp(argv[argi],"-x")==0 && argi+1<argc && config.exec_count<RYZ_PROCESS_ARGS){grant_text[config.exec_count++]=argv[argi+1];argi+=2;}
@@ -62,12 +69,13 @@ main(int argc, char **argv)
         }else if(strcmp(argv[argi],"--")==0){ argi++; break; }
         else break;
     }
-    if(argi>=argc || ((config.exec_count || config.max_steps || stateinpath || stateoutpath) && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
-        fprint(2, "usage: compact-linux [-p | -j [-x guest-path[=host-ELF]]] [-R snapshot-in] [-W new-snapshot-out] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
+    if(argi>=argc || (network.wall_milliseconds && !network.count) || ((config.exec_count || config.max_steps || stateinpath || stateoutpath || network.count || network.wall_milliseconds) && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
+        fprint(2, "usage: compact-linux [-p | -j [-x guest-path[=host-ELF]]] [-n guest-IP:port=tcp!host!port] [-t network-ms] [-R snapshot-in] [-W new-snapshot-out] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
         exits("usage");
     }
     if(rfork(RFNAMEG|RFENVG) < 0)
         sysfatal("private process namespace: %r");
+    if(network.count){config.network=&network;if(atnotify(network_alarm,1)<0)sysfatal("network deadline handler: %r");}
     if(stateinpath || stateoutpath)config.filesystem=&filesystem;
     if(stateinpath){statein=readimage(stateinpath,RYZ_FS_SNAPSHOT_MAX,&filesystem.input_size);filesystem.input=statein;}
     if(stateoutpath){stateout=malloc(RYZ_FS_SNAPSHOT_MAX);if(!stateout)sysfatal("allocate filesystem export: %r");filesystem.output=stateout;filesystem.output_capacity=RYZ_FS_SNAPSHOT_MAX;}

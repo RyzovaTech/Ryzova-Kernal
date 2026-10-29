@@ -57,9 +57,31 @@ typedef struct RyzVnode {
 #define RYZ_NET_SOCKETS 32U
 #define RYZ_NET_BUFFER 4096U
 #define RYZ_NET_BACKLOG 8U
+#define RYZ_NETWORK_GRANTS 4U
+/* Trusted embedding callbacks: bounded open; nonblocking/bounded ready/read/write;
+ * negative Linux errno, read=0 EOF, ready uses 1/4/8/16/8192 only.
+ * The core owns successful handles and closes each exactly once. */
+typedef struct RyzNetworkOps {
+    int64_t (*open)(void *);
+    int (*ready)(void *,int64_t);
+    int64_t (*read)(void *,int64_t,unsigned char *,size_t);
+    int64_t (*write)(void *,int64_t,const unsigned char *,size_t);
+    void (*close)(void *,int64_t);
+} RyzNetworkOps;
+typedef struct RyzNetworkGrant {
+    unsigned char address[4];unsigned int port;
+    const RyzNetworkOps *ops;void *context;
+} RyzNetworkGrant;
+typedef struct RyzNetworkResources {
+    const RyzNetworkGrant *grants;size_t count;
+    uint64_t (*now_ns)(void *);
+    void (*wait)(void *);void *context;
+    unsigned int wall_milliseconds;
+} RyzNetworkResources;
 typedef struct RyzLinuxSocket {
     int used,domain,bound,listening,connected,peer,read_closed,write_closed;
     int reuseaddr,keepalive,nodelay;
+    unsigned int external;int external_eof,external_hup,external_error,external_no_fill;int64_t external_handle;
     unsigned int backlog,pending_count,pending[RYZ_NET_BACKLOG];
     unsigned int local_length,remote_length;
     unsigned char local[128],remote[128];
@@ -77,6 +99,9 @@ typedef struct RyzLinuxWorld {
     RyzLinuxPipe pipes[RYZ_WORLD_PIPES];
     RyzLinuxSocket sockets[RYZ_NET_SOCKETS];
     uint64_t network_bytes;
+    const RyzNetworkResources *network;
+    uint64_t network_start,network_last;
+    unsigned int network_waits,network_failed,network_busy[RYZ_NETWORK_GRANTS];
     unsigned int next_port;
     uint64_t output_bytes,pipe_bytes;
     const RyzLinuxExec *execs;
@@ -122,6 +147,8 @@ int ryz_linux_process_init(RyzLinuxProcess *p, uint32_t namespace_id,
     unsigned char *guest_bytes, size_t guest_size,
     RyzLinuxWrite write_output, void *write_context);
 
+int ryz_network_budget(RyzLinuxWorld *);
+int ryz_network_idle(RyzLinuxWorld *);
 void ryz_world_attach(RyzLinuxProcess *,RyzLinuxWorld *);
 void ryz_world_fork(RyzLinuxProcess *,RyzLinuxProcess *);
 void ryz_world_close(RyzLinuxProcess *,int);

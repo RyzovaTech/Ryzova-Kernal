@@ -1,5 +1,70 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-/* Bounded invocation-local stream sockets; no host socket forwarding. */
+/* Bounded streams with opt-in, caller-owned native resource adapters. */
+int ryz_network_budget(RyzLinuxWorld *w)
+{
+    uint64_t now,limit;
+    if(!w->network)return 1;
+    if(w->network_failed)return 0;
+    now=w->network->now_ns(w->network->context);limit=(uint64_t)(w->network->wall_milliseconds?w->network->wall_milliseconds:5000)*1000000;
+    if(now==UINT64_MAX || now<w->network_last || now-w->network_start>=limit){w->network_failed=1;return 0;}
+    w->network_last=now;return 1;
+}
+static void net_elapsed(RyzLinuxWorld *w,uint64_t before)
+{
+    uint64_t elapsed;
+    if(!ryz_network_budget(w))return;
+    elapsed=(w->network_last-before)/1000;
+    w->clock=elapsed>UINT64_MAX-w->clock?UINT64_MAX:w->clock+elapsed;
+}
+int ryz_network_idle(RyzLinuxWorld *w)
+{
+    unsigned int i,limit;uint64_t before;
+    if(!w->network)return 0;
+    for(i=0;i<RYZ_NET_SOCKETS;i++)if(w->sockets[i].used && w->sockets[i].external && w->sockets[i].external_handle>=0)break;
+    if(i==RYZ_NET_SOCKETS)return 0;
+    limit=w->network->wall_milliseconds?w->network->wall_milliseconds:5000;
+    if(!ryz_network_budget(w) || ++w->network_waits>limit)return -1;
+    before=w->network_last;w->network->wait(w->network->context);net_elapsed(w,before);
+    return w->network_failed?-1:1;
+}
+static void net_external_close(RyzLinuxWorld *w,RyzLinuxSocket *s)
+{
+    const RyzNetworkGrant *g;
+    if(!s->external || s->external_handle<0)return;
+    g=&w->network->grants[s->external-1];g->ops->close(g->context,s->external_handle);
+    w->network_busy[s->external-1]=0;s->external_handle=-1;s->external_eof=s->external_hup=1;
+}
+static int net_external_ready(RyzLinuxWorld *w,RyzLinuxSocket *s)
+{
+    const RyzNetworkGrant *g;uint64_t before;int ready;
+    if(s->external_handle<0)return 17;
+    if(!ryz_network_budget(w))return 8;
+    g=&w->network->grants[s->external-1];before=w->network_last;
+    ready=g->ops->ready(g->context,s->external_handle);net_elapsed(w,before);
+    if(ready==-11)return 0;
+    if(ready<0){if(ready< -4095)w->network_failed=1;s->external_error=5;return 8;}
+    if(ready&~(1|4|8|16|8192)){w->network_failed=1;s->external_error=5;return 8;}
+    if(ready&8)s->external_error=5;
+    if(ready&16)s->external_hup=1;
+    return ready;
+}
+static void net_external_fill(RyzLinuxWorld *w,RyzLinuxSocket *s)
+{
+    const RyzNetworkGrant *g;size_t at,count;int ready;int64_t n;uint64_t before;
+    if(s->external_eof || s->read_closed || s->external_error || s->size==RYZ_NET_BUFFER)return;
+    ready=net_external_ready(w,s);if(!(ready&(1|16|8192)))return;
+    if(w->network_bytes>=4U*1024U*1024U){s->external_error=28;return;}
+    at=(s->head+s->size)%RYZ_NET_BUFFER;count=RYZ_NET_BUFFER-at;
+    if(count>RYZ_NET_BUFFER-s->size)count=RYZ_NET_BUFFER-s->size;
+    if(count>4U*1024U*1024U-w->network_bytes)count=(size_t)(4U*1024U*1024U-w->network_bytes);
+    g=&w->network->grants[s->external-1];before=w->network_last;
+    n=g->ops->read(g->context,s->external_handle,s->bytes+at,count);net_elapsed(w,before);
+    if(n==-11)return;
+    if(n<0){if(n< -4095)w->network_failed=1;s->external_error=n>=-4095?(int)-n:5;return;}
+    if((uint64_t)n>count){w->network_failed=1;s->external_error=5;return;}
+    if(!n)s->external_eof=1;
+    else{s->size+=(size_t)n;w->network_bytes+=(uint64_t)n;}
+}
 static void net_cleanup(RyzLinuxWorld *w)
 {
     unsigned int i,j;unsigned char keep[RYZ_NET_SOCKETS];
@@ -9,6 +74,7 @@ static void net_cleanup(RyzLinuxWorld *w)
         for(j=0;j<w->sockets[i].pending_count;j++)keep[w->sockets[i].pending[j]]=1;
     for(i=0;i<RYZ_NET_SOCKETS;i++)if(w->sockets[i].used && !keep[i]){
         int peer=w->sockets[i].peer;
+        net_external_close(w,&w->sockets[i]);
         if(peer>=0 && peer<(int)RYZ_NET_SOCKETS && w->sockets[peer].used && w->sockets[peer].peer==(int)i)w->sockets[peer].peer=-1;
         memset(&w->sockets[i],0,sizeof w->sockets[i]);
     }
@@ -44,8 +110,6 @@ static int net_input(RyzLinuxProcess *p,uint64_t at,uint64_t size,int domain,uns
     memset(out,0,128);
     if(domain==2){
         if(size<16)return -22;
-        if(in[4]!=0 && in[4]!=127)return -101;
-        if(in[4]==0 && (in[5] || in[6] || in[7]))return -101;
         memcpy(out,in,8);*length=16;return 0;
     }
     if(domain!=1 || size<3 || in[2]!=0)return -95; /* abstract Unix names only */
@@ -95,6 +159,15 @@ static unsigned int net_poll(RyzLinuxProcess *p,uint64_t fd,unsigned int events)
     RyzLinuxSocket *s=&p->world->sockets[p->fds[fd].socket];unsigned int out=0;
     if(s->listening)return s->pending_count?(events&1U):0;
     if(!s->connected)return (events&4U)|16U;
+    if(s->external){
+        int ready;net_external_fill(p->world,s);ready=net_external_ready(p->world,s);
+        if(s->size || s->read_closed || s->external_eof)out|=events&1U;
+        if(!s->write_closed && !s->external_error)out|=events&(unsigned int)ready&4U;
+        if(s->external_eof)out|=events&8192U;
+        if(s->external_hup || (s->read_closed && s->write_closed))out|=16U;
+        if(s->external_error)out|=8U;
+        return out;
+    }
     if(s->size || s->read_closed || s->peer<0 || p->world->sockets[s->peer].write_closed)out|=events&1U;
     if(!s->write_closed && s->peer>=0 && !p->world->sockets[s->peer].read_closed && p->world->sockets[s->peer].size<RYZ_NET_BUFFER)out|=events&4U;
     if(s->peer<0 || (s->read_closed && s->write_closed))out|=16U;
@@ -110,6 +183,23 @@ static int64_t net_io(RyzLinuxProcess *p,uint64_t fd,uint64_t address,uint64_t c
     if(count>RYZ_LINUX_IO_MAX)return -22;
     if(count && !buffer(p,address,(size_t)count,!write,&bytes))return -14;
     if(!s->connected)return write?-32:-107;
+    if(write && s->external){
+        const RyzNetworkGrant *g=&p->world->network->grants[s->external-1];int64_t result;uint64_t before;int ready;
+        if(s->write_closed || s->external_handle<0){if(!(flags&16384))p->generated_signals|=UINT64_C(1)<<12;return -32;}
+        if(!count)return 0;
+        if(p->world->network_bytes>=4U*1024U*1024U)return -28;
+        ready=net_external_ready(p->world,s);
+        if((ready&16) && !(ready&4)){if(!(flags&16384))p->generated_signals|=UINT64_C(1)<<12;return -32;}
+        if(!(ready&4))return s->external_error?-s->external_error:(p->fds[fd].nonblock || (flags&64)?-11:RYZ_LINUX_BLOCKED);
+        n=(size_t)count;if(n>RYZ_NET_BUFFER)n=RYZ_NET_BUFFER;
+        if(n>4U*1024U*1024U-p->world->network_bytes)n=(size_t)(4U*1024U*1024U-p->world->network_bytes);
+        before=p->world->network_last;result=g->ops->write(g->context,s->external_handle,bytes,n);net_elapsed(p->world,before);
+        if(result==-11)return p->fds[fd].nonblock || (flags&64)?-11:RYZ_LINUX_BLOCKED;
+        if(result<0){if(result< -4095)p->world->network_failed=1;if(result==-32 && !(flags&16384))p->generated_signals|=UINT64_C(1)<<12;return result>=-4095?result:-5;}
+        if((uint64_t)result>n){p->world->network_failed=1;return -5;}
+        if(!result)return -5;
+        p->world->network_bytes+=(uint64_t)result;return result;
+    }
     if(write){
         if(s->write_closed || s->peer<0 || p->world->sockets[s->peer].read_closed){if(!(flags&16384))p->generated_signals|=UINT64_C(1)<<12;return -32;}
         if(!count)return 0;
@@ -122,6 +212,10 @@ static int64_t net_io(RyzLinuxProcess *p,uint64_t fd,uint64_t address,uint64_t c
         peer->size+=n;p->world->network_bytes+=n;return (int64_t)n;
     }
     if(!count || s->read_closed)return 0;
+    if(s->external){
+        if(!s->external_no_fill)net_external_fill(p->world,s);
+        if(!s->size){if(s->external_error)return -s->external_error;if(s->external_eof)return 0;return p->fds[fd].nonblock || (flags&64)?-11:RYZ_LINUX_BLOCKED;}
+    }
     if(!s->size)return s->peer<0 || p->world->sockets[s->peer].write_closed?0:(p->fds[fd].nonblock || (flags&64)?-11:RYZ_LINUX_BLOCKED);
     n=s->size;if(n>count)n=(size_t)count;
     for(i=0;i<n;i++)bytes[i]=s->bytes[(s->head+i)%RYZ_NET_BUFFER];
@@ -132,7 +226,7 @@ static int64_t net_message(RyzLinuxProcess *p,const RyzLinuxRegs *r)
 {
     unsigned char header[56],vectors[16*16],*in,*ignored;uint64_t n,i,total=0,done=0,at,count,name;
     int receiving=r->rax==47;int64_t result;RyzLinuxSocket *socket=&p->world->sockets[p->fds[r->rdi].socket];
-    size_t saved_head=socket->head,saved_size=socket->size;
+    size_t saved_head,saved_size;
     if(r->rdx & ~(uint64_t)(2|64|16384))return -95;
     if(!receiving && (r->rdx&2))return -95;
     if(!buffer(p,r->rsi,56,0,&in) || (receiving && !buffer(p,r->rsi,56,1,&in)))return -14;
@@ -147,17 +241,20 @@ static int64_t net_message(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         if(count>RYZ_LINUX_IO_MAX-total)return -90;
         total+=count;if(count && !receiving && !buffer(p,at,(size_t)count,0,&ignored))return -14;
     }
-    if(!n){result=net_io(p,r->rdi,0,0,r->rdx,!receiving);if(result<0)return result;}
+    if(receiving && (r->rdx&2) && socket->external){net_external_fill(p->world,socket);socket->external_no_fill=1;}
+    saved_head=socket->head;saved_size=socket->size;
+    if(!n){result=net_io(p,r->rdi,0,0,r->rdx,!receiving);if(result<0){socket->external_no_fill=0;return result;}}
     for(i=0;i<n;i++){
         at=word64(vectors+i*16);count=word64(vectors+i*16+8);
         if(!count)continue;
         if(receiving && done && !socket->size)break;
         if(receiving && socket->size && count>socket->size)count=socket->size;
         result=net_io(p,r->rdi,at,count,receiving?(r->rdx&~UINT64_C(2)):r->rdx,!receiving);
-        if(result<0){if(!done)return result;break;}
+        if(result<0){if(!done){socket->external_no_fill=0;return result;}break;}
         done+=(uint64_t)result;if((uint64_t)result<count)break;
     }
     if(receiving && (r->rdx&2)){socket->head=saved_head;socket->size=saved_size;}
+    socket->external_no_fill=0;
     if(receiving){
         net_output(p,name,r->rsi+8,socket->remote,socket->remote_length);
         buffer(p,r->rsi,56,1,&in);encode(in+40,0,8);encode(in+48,0,4);
@@ -189,6 +286,8 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
     if(r->rax==49 || r->rax==42){
         error=net_input(p,r->rsi,r->rdx,s->domain,address,&length);if(error)return error;
         if(r->rax==49){
+            if(s->domain==2 && address[4]!=0 && address[4]!=127)return -101;
+            if(s->domain==2 && !address[4] && (address[5] || address[6] || address[7]))return -101;
             if(s->bound || s->connected)return -22;
             if(net_bound(w,s->domain,address,length,-1)>=0)return -98;
             memcpy(s->local,address,length);s->local_length=length;
@@ -198,6 +297,23 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         if(s->connected)return -106;
         if(s->listening)return -22;
         if(s->domain==2 && !address[4])return -101;
+        if(s->domain==2 && w->network){
+            unsigned int gi;
+            for(gi=0;gi<w->network->count;gi++){
+                const RyzNetworkGrant *g=&w->network->grants[gi];int64_t handle;uint64_t before;
+                if(memcmp(address+4,g->address,4) || g->port!=((unsigned int)address[2]*256+address[3]))continue;
+                if(w->network_busy[gi])return -98;
+                if(s->keepalive || s->nodelay)return -95;
+                if(!ryz_network_budget(w))return -110;
+                if(!s->bound && (error=net_autobind(w,s)))return error;
+                before=w->network_last;handle=g->ops->open(g->context);net_elapsed(w,before);
+                if(handle<0){if(handle< -4095)w->network_failed=1;return handle>=-4095?handle:-5;}
+                s->external=gi+1;s->external_handle=handle;w->network_busy[gi]=1;s->connected=1;
+                if(!s->local[4]){s->local[4]=127;s->local[7]=1;}
+                memcpy(s->remote,address,length);s->remote_length=length;return p->fds[r->rdi].nonblock?-115:0;
+            }
+        }
+        if(s->domain==2 && address[4]!=127)return -101;
         other=net_bound(w,s->domain,address,length,-1);
         if(other<0 || !w->sockets[other].listening)return -111;
         peer=&w->sockets[other];
@@ -238,6 +354,8 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
     if(r->rax==48){
         if(r->rsi>2)return -22;
         if(!s->connected)return -107;
+        if(s->external && r->rsi==1)return -95;
+        if(s->external && r->rsi==2)net_external_close(w,s);
         if(r->rsi!=1){s->read_closed=1;s->size=0;}
         if(r->rsi!=0)s->write_closed=1;
         return 0;
@@ -252,6 +370,7 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         unsigned int option=(unsigned int)r->rdx,value=0,count;
         if(r->rsi!=1 && !(r->rsi==6 && s->domain==2 && option==1))return -92;
         if(r->rax==54){
+            if(s->external)return -95;
             if(r->r8<4)return -22;
             if(!buffer(p,r->r10,4,0,&out))return -14;
             value=(unsigned int)out[0]|((unsigned int)out[1]<<8)|((unsigned int)out[2]<<16)|((unsigned int)out[3]<<24);
@@ -265,7 +384,7 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         count=(unsigned int)out[0]|((unsigned int)out[1]<<8)|((unsigned int)out[2]<<16)|((unsigned int)out[3]<<24);
         if(r->rsi==6)value=(unsigned int)s->nodelay;
         else if(option==3)value=1;
-        else if(option==4)value=0;
+        else if(option==4){value=(unsigned int)s->external_error;s->external_error=0;}
         else if(option==30)value=(unsigned int)s->listening;
         else if(option==7 || option==8)value=RYZ_NET_BUFFER;
         else if(option==2)value=(unsigned int)s->reuseaddr;

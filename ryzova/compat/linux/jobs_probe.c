@@ -1,9 +1,13 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Linux-host differential test harness, not native-kernel evidence. */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include "jobs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include "network_posix.h"
 static int64_t sink(void *context,int fd,const unsigned char *bytes,size_t size)
 {
     (void)context;return fwrite(bytes,1,size,fd==2?stderr:stdout)==size?(int64_t)size:-1;
@@ -17,15 +21,21 @@ static int64_t entropy(void *context,unsigned char *bytes,size_t size)
 int main(int argc,char **argv)
 {
     RyzFilesystemResources fs;char *stateinpath=NULL,*stateoutpath=NULL;unsigned char *statein=NULL,*stateout=NULL;
+    RyzNetworkResources network;RyzNetworkGrant network_grants[RYZ_NETWORK_GRANTS];NetworkHost network_hosts[RYZ_NETWORK_GRANTS];
     RyzProcessArgs args;RyzJobConfig config;RyzLinuxFiles files;RyzVmResult result;
     char *texts[RYZ_PROCESS_ARGS],*eq;RyzLinuxExec grants[RYZ_PROCESS_ARGS];size_t gi;
     const char *env[]={"FLEX_MODE=test","PATH=/bin"};
     unsigned char *image,*arena,*input=NULL,*out=NULL;FILE *file;long n;int first=1,status;
+    memset(&network,0,sizeof network);memset(network_grants,0,sizeof network_grants);network.grants=network_grants;network.now_ns=network_now;network.wait=network_wait;
     umask(077);memset(&fs,0,sizeof fs);
     memset(&files,0,sizeof(files));memset(&config,0,sizeof(config));config.random=entropy;
     while(first<argc){
         if(strcmp(argv[first],"-b")==0 && first+1<argc){
             char *end;unsigned long n=strtoul(argv[first+1],&end,10);if(!n || n>16777216 || *end)return 64;config.max_steps=(uint32_t)n;first+=2;
+        }else if(strcmp(argv[first],"-n")==0 && first+1<argc && network.count<RYZ_NETWORK_GRANTS){
+            if(!network_parse(argv[first+1],&network_grants[network.count],&network_hosts[network.count]))return 64;
+            network.count++;first+=2;
+        }else if(strcmp(argv[first],"-t")==0 && first+1<argc){char *end;unsigned long value=strtoul(argv[first+1],&end,10);if(*end || !value || value>10000)return 64;network.wall_milliseconds=(unsigned int)value;first+=2;
         }else if(strcmp(argv[first],"-R")==0 && first+1<argc && !stateinpath){stateinpath=argv[first+1];first+=2;
         }else if(strcmp(argv[first],"-W")==0 && first+1<argc && !stateoutpath){stateoutpath=argv[first+1];first+=2;
         }else if(strcmp(argv[first],"-x")==0 && first+1<argc && config.exec_count<RYZ_PROCESS_ARGS){texts[config.exec_count++]=argv[first+1];first+=2;}
@@ -37,7 +47,8 @@ int main(int argc,char **argv)
             fclose(file);files.input=input;files.output=out;files.output_capacity=RYZ_LINUX_FILE_MAX;first+=2;
         }else break;
     }
-    if(first>=argc)return 64;
+    if(first>=argc || (network.wall_milliseconds && !network.count))return 64;
+    if(network.count)config.network=&network;
     if(stateinpath || stateoutpath)config.filesystem=&fs;
     if(stateinpath){
         file=fopen(stateinpath,"rb");if(!file || fseek(file,0,SEEK_END))return 65;

@@ -10,8 +10,9 @@ Supported domains are AF_UNIX abstract addresses and AF_INET loopback addresses.
 AF_INET here identifies an isolated virtual stream endpoint; this does not claim
 an external TCP stack. Non-loopback addresses are rejected with ENETUNREACH.
 Filesystem Unix socket paths, external routes, DNS, IPv6 and datagrams are not
-implemented. External resource grants will require a separate transport backend;
-no such backend is implied by this implementation.
+implemented. An optional explicit TCP backend is documented in
+[COMPACT-LINUX-NETWORK-RESOURCES.md](COMPACT-LINUX-NETWORK-RESOURCES.md).
+The invocation-local profile by itself authorizes no external access.
 
 The stream API includes socket/socketpair, bind/listen/connect, accept/accept4,
 getsockname/getpeername, read/write/readv/writev, sendto/recvfrom without an

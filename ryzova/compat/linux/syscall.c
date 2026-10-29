@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-/* Virtual syscalls; only caller-supplied buffers and output callback are used. */
+/* Virtual Linux syscalls through caller-owned bounded resources. */
 #include "syscall.h"
 
 /* Linux AMD64 syscall and errno numbers (ABI constants). */

@@ -325,6 +325,15 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
         files->output_size=0;memset(files->output,0,files->output_capacity);
     }
     if(!result || !config || config->max_steps>16777216U || config->exec_count>RYZ_PROCESS_ARGS || (config->exec_count && !config->execs))return RYZ_VM_BAD_INPUT;
+    if(config->network){
+        const RyzNetworkResources *net=config->network;
+        if(!net->count || net->count>RYZ_NETWORK_GRANTS || !net->grants || !net->now_ns || !net->wait || net->wall_milliseconds>10000)return RYZ_VM_BAD_INPUT;
+        for(i=0;i<net->count;i++){
+            const RyzNetworkGrant *g=&net->grants[i];const RyzNetworkOps *ops=g->ops;
+            if(!g->address[0] || g->address[0]>=224 || !g->port || g->port>65535 || !ops || !ops->open || !ops->ready || !ops->read || !ops->write || !ops->close)return RYZ_VM_BAD_INPUT;
+            for(j=0;j<i;j++)if(g->port==net->grants[j].port && !memcmp(g->address,net->grants[j].address,4))return RYZ_VM_BAD_INPUT;
+        }
+    }
     for(i=0;i<config->exec_count;i++){
         if(!config->execs[i].path || config->execs[i].path[0]!='/')return RYZ_VM_BAD_INPUT;
         for(n=0;n<=256 && config->execs[i].path[n];n++);
@@ -337,6 +346,8 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     jobs->capacity=capacity<RYZ_PROCESS_MAX_SPAN?capacity:RYZ_PROCESS_MAX_SPAN;
     jobs->next_pid=1001;jobs->world.execs=config->execs;jobs->world.exec_count=config->exec_count;jobs->world.random=config->random;jobs->world.random_context=config->random_context;
     if(config->filesystem && config->filesystem->input && !fs_import(&jobs->world,config->filesystem->input,config->filesystem->input_size)){free(jobs);return RYZ_VM_BAD_INPUT;}
+    jobs->world.network=config->network;
+    if(config->network)jobs->world.network_start=jobs->world.network_last=config->network->now_ns(config->network->context);
     root=&jobs->tasks[0];root->mm_held=1;jobs->memories[0].used=1;jobs->memories[0].refs=1;root->cpu.m=&jobs->memories[0].memory;status=ryz_prepare_job(image,length,arena,capacity,args,&jobs->world,root->cpu.m,&entry,&stack);
     if(status!=RYZ_VM_OK){free(jobs);return status;}
     if(ryz_linux_process_init(&root->process,1,1000,1000,1000,root->cpu.m->base,arena,(size_t)root->cpu.m->size,output,opaque)!=0){free(jobs);return RYZ_VM_BAD_INPUT;}
@@ -347,6 +358,7 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     ryz_cpu_init(&root->cpu,&root->process,&jobs->memories[0].memory,entry,stack,result);
     status=RYZ_VM_OK;
     while(group_live(jobs,root->process.tgid)){
+        if(!ryz_network_budget(&jobs->world)){status=RYZ_JOB_NETWORK_LIMIT;break;}
         progress=0;
         for(i=0;i<RYZ_JOB_TASKS && group_live(jobs,root->process.tgid);i++){
             Task *task=&jobs->tasks[i];
@@ -356,6 +368,7 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
             if(task->process.exited && task->state!=ZOMBIE){exited(jobs,task);progress=1;}
             if(task->state!=RUN)continue;
             for(q=0;q<RYZ_JOB_QUANTUM && task->state==RUN;q++){
+                if((q&63)==0 && !ryz_network_budget(&jobs->world)){status=RYZ_JOB_NETWORK_LIMIT;goto done;}
                 timer_poll(jobs,task);
                 if(signal_deliver(jobs,task))progress=1;
                 if(task->process.exited){exited(jobs,task);break;}
@@ -372,10 +385,21 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
                 if(task->yielded){task->yielded=0;break;}
             }
         }
-        if(!progress){if(timer_advance(jobs))continue;status=RYZ_JOB_DEADLOCK;break;}
+        if(!progress){
+            int waiting=0;
+            for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state==RUN && jobs->tasks[i].blocked)waiting=1;
+            if(waiting && jobs->world.network){
+                int idle=ryz_network_idle(&jobs->world);
+                if(idle>0)continue;
+                if(idle<0){status=RYZ_JOB_NETWORK_LIMIT;break;}
+            }
+            if(timer_advance(jobs))continue;
+            status=RYZ_JOB_DEADLOCK;break;
+        }
     }
     if(root->state==ZOMBIE){result->exited=1;result->exit_status=(uint8_t)(root->term_signal?128+root->term_signal:root->process.exit_status);}
  done:
+    if(jobs->world.network_failed)status=RYZ_JOB_NETWORK_LIMIT;
     result->pipe_bytes=jobs->world.pipe_bytes;
     for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE)ryz_world_close(&jobs->tasks[i].process,0);
     for(i=0;i<RYZ_JOB_TASKS;i++)mm_release(jobs,&jobs->tasks[i]);
