@@ -37,7 +37,7 @@ def commands(commit):
         grants="-x '/tmp/bound=/tmp/v-elf' " if mode=='grants' else ''
         ops.append(f'/amd64/bin/compact-linux -j -x /tmp/v-elf {grants}/tmp/v-elf /tmp/case {mode} V_{mode}_{commit} && echo FLEX_VFS_{mode}_OK')
     ops+=['echo FLEX_VFS_END']
-    return [op+f'; echo RYZOVA_RUNTIME_STAGE_{119+i}' for i,op in enumerate(ops)]+['echo FLEX_VFS_DONE']
+    return [op+f'; echo RYZOVA_RUNTIME_STAGE_{119+i}' for i,op in enumerate(ops)]+['echo FLEX_VFS_DONE; echo RYZOVA_RUNTIME_STAGE_136']
 
 def inspect(serial,commit,digest):
     def line(value):return re.search(rb'(?:^|\r?\n)'+re.escape(value)+rb'(?:\r?\n|$)',serial) is not None

@@ -8,6 +8,7 @@
 #define SF 128U
 #define OF 2048U
 typedef RyzCpu Cpu;
+static uint32_t cpu_limit(Cpu *c){return c->result->instruction_limit?c->result->instruction_limit:RYZ_PROCESS_STEPS;}
 typedef struct Operand {
     int reg, high, rip;
     uint64_t address;
@@ -249,7 +250,7 @@ static int guest_syscall(Cpu *c)
         return RYZ_VM_OK;
     }
     r.rax=nr;r.rdi=c->r[7];r.rsi=c->r[6];r.rdx=c->r[2];r.r10=c->r[10];r.r8=c->r[8];r.r9=c->r[9];
-    if((nr==57 || nr==58 || nr==59 || nr==61) && c->p->job_call){
+    if((nr==15 || nr==35 || nr==36 || nr==37 || nr==38 || nr==128 || nr==230 || nr==34 || nr==57 || nr==58 || nr==59 || nr==61 || nr==62 || nr==127 || nr==130 || nr==131 || nr==200 || nr==234) && c->p->job_call){
         int state=c->p->job_call(c->p->job_context,c,&r,&answer);
         if(state==RYZ_CPU_BLOCKED)return state;
         if(state==RYZ_CPU_EXECUTED){c->result->syscall_count++;return RYZ_VM_OK;}
@@ -261,7 +262,7 @@ static int guest_syscall(Cpu *c)
         if(answer==RYZ_LINUX_BLOCKED)return RYZ_CPU_BLOCKED;
         c->r[1]=c->cur;c->r[11]=c->flags;c->r[0]=(uint64_t)answer;c->result->syscall_count++;return RYZ_VM_OK;
     }
-    if(!(c->p->world && (nr==21 || nr==74 || nr==75 || nr==76 || nr==77 || nr==81 || nr==82 || nr==83 || nr==84 || nr==87 || nr==90 || nr==91 || nr==95 || nr==217 || nr==258 || nr==263 || nr==280 || nr==228 || nr==229 || nr==201)) && nr!=7 && nr!=32 && nr!=33 && nr!=292 && nr!=40 && nr!=2 && nr!=8 && nr!=80 && nr!=63 && nr!=79 && nr!=105 && nr!=106 && nr!=117 && nr!=119 && nr!=13 && nr!=14 && nr!=110 && nr!=111 && nr!=4 && nr!=5 && nr!=6 && nr!=262 && nr!=107 && nr!=108 && nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
+    if(!(c->p->world && (nr==21 || nr==74 || nr==75 || nr==76 || nr==77 || nr==81 || nr==82 || nr==83 || nr==84 || nr==87 || nr==90 || nr==91 || nr==95 || nr==217 || nr==258 || nr==263 || nr==280 || nr==228 || nr==229 || nr==201 || nr==318 || nr==324 || nr==19)) && nr!=7 && nr!=32 && nr!=33 && nr!=292 && nr!=40 && nr!=2 && nr!=8 && nr!=80 && nr!=63 && nr!=79 && nr!=105 && nr!=106 && nr!=117 && nr!=119 && nr!=13 && nr!=14 && nr!=110 && nr!=111 && nr!=4 && nr!=5 && nr!=6 && nr!=262 && nr!=107 && nr!=108 && nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
        nr!=16 && nr!=20 && nr!=72 && nr!=39 && nr!=60 && nr!=102 && nr!=104 && nr!=186 && nr!=231 && nr!=257)
         return RYZ_VM_SYSCALL_UNSUPPORTED;
     r.rax=nr; r.rdi=c->r[7]; r.rsi=c->r[6]; r.rdx=c->r[2];
@@ -280,7 +281,7 @@ static int step(Cpu *c)
     int jump=0, rv, locked=0;
     Operand rm, rr;
     c->cur=c->ip; c->rex=c->rex_present=0; c->size=4;
-    c->repeat=0; c->segment=0;
+    c->repeat=0;c->operand16=0; c->segment=0;
     for(;;){
         op=(unsigned int)fetch(c,1);
         if(c->fault)return RYZ_VM_MAP_ERROR;
@@ -289,8 +290,8 @@ static int step(Cpu *c)
            op==0x26 || op==0x36 || op==0x64 || op==0x65){
             c->rex=c->rex_present=0;
             if(op==0xf0)locked=1;
-            if(op==0x66)c->size=2;
-            if(op==0xf3 || op==0xf2)c->repeat=1;
+            if(op==0x66){c->size=2;c->operand16=1;}
+            if(op==0xf3 || op==0xf2)c->repeat=(int)op;
             if(op==0x2e || op==0x3e || op==0x26 || op==0x36)c->segment=0;
             if(op==0x64)c->segment=c->fsbase;
             if(op==0x65)c->segment=c->gsbase;
@@ -301,16 +302,21 @@ static int step(Cpu *c)
     if(c->rex&8)c->size=8;
     if(c->fault) return RYZ_VM_MAP_ERROR;
     size=c->size;
-    if(locked && op!=0x09 && op!=0x80 && op!=0x81 && op!=0x83 && op!=0x0f)return RYZ_VM_OPCODE_UNSUPPORTED;
+    if(locked && op!=0x86 && op!=0x87 && op!=0x09 && op!=0x80 && op!=0x81 && op!=0x83 && op!=0x0f)return RYZ_VM_OPCODE_UNSUPPORTED;
     if(size==2 && ((op>=0x50 && op<=0x5f) || op==0x68 || op==0x6a ||
                    op==0xe8 || op==0xc3 || op==0xc9 || op==0x63))
         return RYZ_VM_OPCODE_UNSUPPORTED;
-    if(op==0xfc)c->flags&=~UINT64_C(1024);
+    if(op==0xf8)c->flags&=~UINT64_C(1);
+    else if(op==0xf9)c->flags|=1;
+    else if(op==0xf5)c->flags^=1;
+    else if(op==0x9c)push(c,c->flags);
+    else if(op==0x9d){v=pop(c);c->flags=(v&UINT64_C(0x250dd5))|0x202;}
+    else if(op==0xfc)c->flags&=~UINT64_C(1024);
     else if(op==0xfd)c->flags|=1024;
     else if(op==0xaa || op==0xab || op==0xa4 || op==0xa5){
         uint64_t iterations=c->repeat?c->r[1]:1, j, delta;
         if(op==0xaa || op==0xa4)size=1;
-        if(iterations>RYZ_PROCESS_STEPS-c->result->executed_steps)
+        if(iterations>cpu_limit(c)-c->result->executed_steps)
             return RYZ_VM_STEP_LIMIT;
         delta=(c->flags&1024)?(uint64_t)-(int64_t)size:size;
         for(j=0;j<iterations;j++){
@@ -329,6 +335,14 @@ static int step(Cpu *c)
     else if(op==0x68 || op==0x6a){ v=fetch(c,op==0x68?4:1); v=op==0x68?(uint64_t)(int64_t)(int32_t)v:(uint64_t)(int64_t)(int8_t)v; push(c,v); }
     else if(op>=0xb8 && op<=0xbf){ v=fetch(c,size); put(c,regop(c,op-0xb8+((c->rex&1)?8:0),size),size,v); }
     else if(op>=0xb0 && op<=0xb7){ v=fetch(c,1); put(c,regop(c,op-0xb0+((c->rex&1)?8:0),1),1,v); }
+    else if(op==0x86 || op==0x87){
+        if(op==0x86)size=1;
+        rm=decode(c,&reg,&group,size);rr=regop(c,reg,size);
+        if(locked && rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED;
+        if(rm.reg<0 && !ryz_memory_access(c->m,address(c,rm)+c->segment,size,RYZ_READ|RYZ_WRITE))return RYZ_VM_MAP_ERROR;
+        a=get(c,rm,size);b=get(c,rr,size);
+        if(!c->fault){put(c,rm,size,b);put(c,rr,size,a);}
+    }
     else if(op==0x88 || op==0x89 || op==0x8a || op==0x8b || op==0x8d){
         if(op==0x88 || op==0x8a) size=1;
         rm=decode(c,&reg,&group,size); rr=regop(c,reg,size);
@@ -424,6 +438,7 @@ static int step(Cpu *c)
         op2=(unsigned int)fetch(c,1);
         if(locked && op2!=0xb0 && op2!=0xb1)return RYZ_VM_OPCODE_UNSUPPORTED;
         if(op2==5){ if(c->fault)return RYZ_VM_MAP_ERROR; rv=guest_syscall(c); if(rv!=RYZ_VM_OK)return rv; }
+        else if(op2==0x1e && c->repeat){if(fetch(c,1)!=0xfa)return RYZ_VM_OPCODE_UNSUPPORTED;}
         else if(op2>=0x80 && op2<=0x8f){ v=(uint64_t)(int64_t)(int32_t)fetch(c,4); target=c->cur+v; jump=condition(c,op2); }
         else if(op2==0xb0 || op2==0xb1){
             if(op2==0xb0)size=1;
@@ -436,6 +451,35 @@ static int step(Cpu *c)
                 if(a==b)put(c,rm,size,get(c,regop(c,reg,size),size));
                 else put(c,regop(c,0,size),size,b);
             }
+        }
+        else if((op2==0x6e || op2==0x7e) && c->operand16 && !c->repeat){
+            n=(c->rex&8)?8:4;rm=decode(c,&reg,&group,n);
+            if(op2==0x6e){v=get(c,rm,n);if(!c->fault){memset(c->xmm[reg],0,16);for(count=0;count<n;count++)c->xmm[reg][count]=(unsigned char)(v>>(count*8));}}
+            else{v=0;for(count=0;count<n;count++)v|=(uint64_t)c->xmm[reg][count]<<(count*8);put(c,rm,n,v);}
+        }
+        else if((op2==0xd6 && c->operand16 && !c->repeat) || (op2==0x7e && c->repeat==0xf3)){
+            unsigned char bytes[8];
+            rm=decode(c,&reg,&group,8);
+            if(op2==0xd6){
+                memcpy(bytes,c->xmm[reg],8);
+                if(rm.reg>=0){memset(c->xmm[rm.reg],0,16);memcpy(c->xmm[rm.reg],bytes,8);}
+                else{v=0;for(count=0;count<8;count++)v|=(uint64_t)bytes[count]<<(count*8);put(c,rm,8,v);}
+            }else{
+                if(rm.reg>=0)memcpy(bytes,c->xmm[rm.reg],8);
+                else{v=get(c,rm,8);for(count=0;count<8;count++)bytes[count]=(unsigned char)(v>>(count*8));}
+                if(!c->fault){memset(c->xmm[reg],0,16);memcpy(c->xmm[reg],bytes,8);}
+            }
+        }
+        else if((op2==0x6f || op2==0x7f) && (c->operand16 || c->repeat==0xf3)){
+            rm=decode(c,&reg,&group,16);
+            if(c->operand16 && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
+            vector_move(c,rm,reg,op2==0x7f);
+        }
+        else if(op2==0x6c && c->operand16 && !c->repeat){
+            unsigned char bytes[8];rm=decode(c,&reg,&group,16);
+            if(rm.reg>=0)memcpy(bytes,c->xmm[rm.reg],8);
+            else{v=load(c,address(c,rm)+c->segment,8,RYZ_READ);for(count=0;count<8;count++)bytes[count]=(unsigned char)(v>>(count*8));}
+            if(!c->fault)memcpy(c->xmm[reg]+8,bytes,8);
         }
         else if(op2==0xef || op2==0x57){
             if((op2==0xef && size!=2) || c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
@@ -507,7 +551,7 @@ void ryz_cpu_init(RyzCpu *c,RyzLinuxProcess *p,RyzLinuxMemory *m,uint64_t entry,
 int ryz_cpu_tick(RyzCpu *c)
 {
     int rv;
-    if(c->result->executed_steps>=RYZ_PROCESS_STEPS)return RYZ_VM_STEP_LIMIT;
+    if(c->result->executed_steps>=cpu_limit(c))return RYZ_VM_STEP_LIMIT;
     c->result->last_rip=c->ip;c->result->executed_steps++;c->extra_steps=0;
     rv=step(c);c->result->executed_steps+=c->extra_steps;return rv;
 }

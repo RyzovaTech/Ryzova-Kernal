@@ -40,6 +40,7 @@ typedef struct RyzElf64Plan {
     RyzElf64Segment loads[RYZ_ELF64_MAX_LOAD];
 } RyzElf64Plan;
 
+int ryz_elf64_plan_relocated(const unsigned char *,size_t,uint64_t,int,RyzElf64Plan *);
 int ryz_elf64_plan(const unsigned char *image, size_t length, RyzElf64Plan *out);
 int ryz_elf64_materialize(const unsigned char *image, size_t image_length,
                           const RyzElf64Segment *segment,

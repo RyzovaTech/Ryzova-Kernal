@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Native Plan 9 user-space application; interprets a bounded Linux ELF subset. */
 #include "jobs.h"
+#include <libsec.h>
 #define IMAGE_LIMIT (1024U * 1024U)
 
 static unsigned char *
@@ -21,6 +22,10 @@ output(void *context, int fd, const unsigned char *bytes, size_t size)
     return write(fd, bytes, size);
 }
 
+static int64_t entropy(void *context,unsigned char *bytes,size_t size)
+{
+    (void)context;genrandom(bytes,(int)size);return (int64_t)size;
+}
 void
 main(int argc, char **argv)
 {
@@ -39,11 +44,13 @@ main(int argc, char **argv)
     RyzVmResult result;
 
     filemode=processmode=jobsmode=0;
-    memset(&config,0,sizeof(config));config.execs=grants;memset(grants,0,sizeof(grants)); inputpath=nil; argi=1;
+    memset(&config,0,sizeof(config));config.random=entropy;config.execs=grants;memset(grants,0,sizeof(grants)); inputpath=nil; argi=1;
     memset(&args,0,sizeof args);
     while(argi<argc){
         if(strcmp(argv[argi],"-j")==0){jobsmode=processmode=1;argi++;}
-        else if(strcmp(argv[argi],"-x")==0 && argi+1<argc && config.exec_count<RYZ_PROCESS_ARGS){grant_text[config.exec_count++]=argv[argi+1];argi+=2;}
+        else if(strcmp(argv[argi],"-b")==0 && argi+1<argc){
+            char *end;ulong n=strtoul(argv[argi+1],&end,10);if(!n || n>16777216 || *end)sysfatal("invalid instruction budget");config.max_steps=(uint32_t)n;argi+=2;
+        }else if(strcmp(argv[argi],"-x")==0 && argi+1<argc && config.exec_count<RYZ_PROCESS_ARGS){grant_text[config.exec_count++]=argv[argi+1];argi+=2;}
         else if(strcmp(argv[argi],"-p")==0){ processmode=1; argi++; }
         else if(strcmp(argv[argi],"-i")==0 && argi+1<argc && !filemode){
             filemode=1; inputpath=argv[argi+1]; argi+=2;
@@ -52,7 +59,7 @@ main(int argc, char **argv)
         }else if(strcmp(argv[argi],"--")==0){ argi++; break; }
         else break;
     }
-    if(argi>=argc || (config.exec_count && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
+    if(argi>=argc || ((config.exec_count || config.max_steps) && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
         fprint(2, "usage: compact-linux [-p | -j [-x guest-path[=host-ELF]]] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
         exits("usage");
     }

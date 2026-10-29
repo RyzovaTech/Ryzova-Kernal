@@ -40,7 +40,7 @@ static int overlapping(uint64_t lo1, uint64_t hi1,
     return lo1 < hi2 && lo2 < hi1;
 }
 
-int ryz_elf64_plan(const unsigned char *image, size_t length, RyzElf64Plan *out)
+int ryz_elf64_plan_relocated(const unsigned char *image,size_t length,uint64_t bias,int dynamic,RyzElf64Plan *out)
 {
     RyzElf64Plan plan;
     uint64_t phoff, entry, sum = 0;
@@ -62,7 +62,7 @@ int ryz_elf64_plan(const unsigned char *image, size_t length, RyzElf64Plan *out)
         return RYZ_ELF_BAD_HEADER;
 
     /* ET_EXEC only: PIE / dynamic linker and relocation deferred to Phase 5.2+. */
-    if (le16(image + 16) != 2 || le16(image + 18) != 62 ||
+    if ((le16(image + 16)!=2 && !(dynamic && le16(image+16)==3)) || (le16(image+16)==2 && bias!=0) || (bias & 4095) || le16(image + 18) != 62 ||
         le32(image + 20) != 1)
         return RYZ_ELF_UNSUPPORTED;
     if (le16(image + 52) != 64 || le16(image + 54) != 56)
@@ -74,6 +74,8 @@ int ryz_elf64_plan(const unsigned char *image, size_t length, RyzElf64Plan *out)
         return RYZ_ELF_BOUNDS;
 
     entry = le64(image + 24);
+    if(entry>USER_LIMIT || bias>USER_LIMIT-entry)return RYZ_ELF_BOUNDS;
+    entry+=bias;
     if (entry < USER_MIN || entry >= USER_LIMIT)
         return RYZ_ELF_POLICY;
 
@@ -91,8 +93,12 @@ int ryz_elf64_plan(const unsigned char *image, size_t length, RyzElf64Plan *out)
         uint64_t end, start, map_end;
         RyzElf64Segment *seg;
 
-        if (type == PT_DYNAMIC || type == PT_INTERP || type == PT_TLS)
-            return RYZ_ELF_UNSUPPORTED;
+        if(type==PT_DYNAMIC || type==PT_INTERP || type==PT_TLS){
+            if(!dynamic)return RYZ_ELF_UNSUPPORTED;
+            if(!span(length,offset,file_size) || file_size>memory_size || memory_size>RYZ_ELF64_MAX_MAPPED)return RYZ_ELF_BOUNDS;
+            if(type==PT_INTERP && (file_size<2 || file_size>256 || image[(size_t)(offset+file_size-1)]!=0 || image[(size_t)offset]!='/'))return RYZ_ELF_POLICY;
+            if(type==PT_TLS && alignment>1 && !power2(alignment))return RYZ_ELF_POLICY;
+        }
         if (type == PT_GNU_STACK && (flags & PF_X))
             return RYZ_ELF_POLICY;
         if (type != PT_LOAD)
@@ -109,6 +115,8 @@ int ryz_elf64_plan(const unsigned char *image, size_t length, RyzElf64Plan *out)
             return RYZ_ELF_POLICY;
         if (!span(length, offset, file_size))
             return RYZ_ELF_BOUNDS;
+        if(vaddr>USER_LIMIT || bias>USER_LIMIT-vaddr)return RYZ_ELF_BOUNDS;
+        vaddr+=bias;
         if (vaddr < USER_MIN || vaddr >= USER_LIMIT ||
             memory_size > USER_LIMIT - vaddr)
             return RYZ_ELF_BOUNDS;
@@ -149,6 +157,11 @@ int ryz_elf64_plan(const unsigned char *image, size_t length, RyzElf64Plan *out)
     plan.mapped_bytes = sum;
     *out = plan;
     return RYZ_ELF_OK;
+}
+
+int ryz_elf64_plan(const unsigned char *image,size_t length,RyzElf64Plan *out)
+{
+    return ryz_elf64_plan_relocated(image,length,0,0,out);
 }
 
 int ryz_elf64_materialize(const unsigned char *image, size_t image_length,

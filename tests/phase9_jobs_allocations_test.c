@@ -37,7 +37,7 @@ int main(int argc,char **argv)
     length=ftell(in);if(length<=0 || fseek(in,0,SEEK_SET))return 65;
     image=malloc((size_t)length);arena=malloc(RYZ_PROCESS_MAX_SPAN);if(!image || !arena)return 65;
     if(fread(image,1,(size_t)length,in)!=(size_t)length)return 65;
-    fclose(in);grant.path="/job";grant.image=image;grant.size=(size_t)length;config.execs=&grant;config.exec_count=1;
+    fclose(in);memset(&config,0,sizeof(config));grant.path="/job";grant.image=image;grant.size=(size_t)length;config.execs=&grant;config.exec_count=1;
     args.argv=av;args.argc=3;args.envp=ev;args.envc=1;
     memset(&files,0,sizeof(files));files.input=(const unsigned char *)"abcdefgh\n";files.input_size=9;files.output=output;files.output_capacity=sizeof(output);
     baseline=active;

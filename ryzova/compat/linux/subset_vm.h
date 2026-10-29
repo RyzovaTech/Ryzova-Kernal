@@ -12,7 +12,7 @@ enum RyzVmResultCode {
     RYZ_VM_SYSCALL_UNSUPPORTED = 5, RYZ_VM_ARITHMETIC_ERROR = 6
 };
 typedef struct RyzVmResult {
-    uint32_t executed_steps;
+    uint32_t executed_steps,instruction_limit;
     uint32_t syscall_count;
     uint32_t forks,execs,peak_tasks,blocked_syscalls;
     uint64_t last_rip,pipe_bytes;

@@ -275,10 +275,11 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
             uint64_t dest=nr==262?r->rdx:r->rsi;
             if(!buffer(p,dest,144,1,&bytes))return -14;
             memset(bytes,0,144);encode(bytes,p->ns.namespace_id,8);encode(bytes+8,1000+i,8);encode(bytes+16,1,8);
-            encode(bytes+24,0100111,4);encode(bytes+28,p->ns.uid,4);encode(bytes+32,p->ns.gid,4);
+            encode(bytes+24,0100555,4);encode(bytes+28,p->ns.uid,4);encode(bytes+32,p->ns.gid,4);
             encode(bytes+48,p->world->execs[i].size,8);encode(bytes+56,4096,8);return 0;
         }
-        if(nr==21)return (r->rsi & ~UINT64_C(1))?-13:0;
+        if((nr==2 || nr==257) && !(flags & ~(uint64_t)(02000000|0100000))){*handled=0;return 0;}
+        if(nr==21)return (r->rsi & ~UINT64_C(5))?-13:0;
         return -13;
     }
     if(index==-10000){
@@ -297,7 +298,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
     if(index<0 && index!=-2)return index;
     if(trailing && index>=0 && !p->world->nodes[index].directory)return -20;
     if(nr==2 || nr==257){
-        if(flags & ~(uint64_t)(3|0100|0200|01000|02000|04000|0200000|0400000|02000000))return -22;
+        if(flags & ~(uint64_t)(3|0100|0200|01000|02000|04000|0100000|0200000|0400000|02000000))return -22;
         if((flags & 3)==3)return -22;
         if(index>=0 && (flags & 0300)==0300)return -17;
         if(index<0 && (!(flags & 0100) || trailing))return -2;

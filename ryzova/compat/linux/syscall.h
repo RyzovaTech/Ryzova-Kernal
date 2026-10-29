@@ -54,7 +54,10 @@ typedef struct RyzVnode {
     char name[RYZ_NS_PATH_MAX];
     unsigned char bytes[RYZ_LINUX_FILE_MAX];
 } RyzVnode;
+typedef int64_t (*RyzLinuxRandom)(void *,unsigned char *,size_t);
 typedef struct RyzLinuxWorld {
+    RyzLinuxRandom random;
+    void *random_context;
     RyzVnode nodes[RYZ_VFS_NODES];
     uint64_t next_inode, clock;
     RyzLinuxDescription descriptions[RYZ_WORLD_DESCRIPTIONS];
@@ -74,13 +77,13 @@ typedef struct RyzLinuxProcess {
     RyzLinuxWrite write_output;
     void *write_context;
     uint64_t output_bytes;
-    int cwd;
+    int cwd,barrier_registered;
     unsigned int vfs_cwd, file_umask;
     uint32_t parent_pid,group_pid;
     RyzLinuxWorld *world;
     RyzLinuxJobCall job_call;
     void *job_context;
-    uint64_t signal_mask;
+    uint64_t signal_mask,generated_signals;
     unsigned char signal_actions[64][32];
     RyzLinuxFiles *files;
     RyzLinuxMemoryWrite memory_write, memory_read;

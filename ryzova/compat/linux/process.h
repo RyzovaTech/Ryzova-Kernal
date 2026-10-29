@@ -16,6 +16,8 @@
 typedef struct RyzLinuxMemory {
     unsigned char *bytes;
     uint64_t base, size, heap, brk, stack;
+    int dynamic;
+    RyzLinuxProcess *process;
     unsigned char pages[RYZ_PROCESS_MAX_SPAN / RYZ_PAGE];
 } RyzLinuxMemory;
 typedef struct RyzProcessArgs {
@@ -26,7 +28,7 @@ typedef struct RyzCpu {
     uint64_t r[16],ip,cur,flags,fsbase,gsbase,segment,tid_address;
     unsigned char xmm[16][16];
     uint32_t extra_steps;
-    int repeat;
+    int repeat,operand16;
     unsigned int rex,rex_present,size;
     int fault;
     RyzLinuxMemory *m;
@@ -38,6 +40,7 @@ typedef struct RyzCpu {
 #define RYZ_CPU_EXECUTED 9
 void ryz_cpu_init(RyzCpu *,RyzLinuxProcess *,RyzLinuxMemory *,uint64_t,uint64_t,RyzVmResult *);
 int ryz_cpu_tick(RyzCpu *);
+int ryz_prepare_job(const unsigned char *,size_t,unsigned char *,size_t,const RyzProcessArgs *,RyzLinuxWorld *,RyzLinuxMemory *,uint64_t *,uint64_t *);
 int ryz_prepare_process(const unsigned char *,size_t,unsigned char *,size_t,
     const RyzProcessArgs *,RyzLinuxMemory *,uint64_t *,uint64_t *);
 int ryz_memory_access(RyzLinuxMemory *, uint64_t, uint64_t, unsigned int);

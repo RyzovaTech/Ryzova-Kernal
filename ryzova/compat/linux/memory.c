@@ -42,6 +42,61 @@ static int freepages(RyzLinuxMemory *m, uint64_t lo, uint64_t hi)
             return 0;
     return 1;
 }
+static int64_t dynamic_memory(RyzLinuxMemory *m,const RyzLinuxRegs *r)
+{
+    uint64_t size,lo,hi,i,at,minimum,ceiling=m->stack-RYZ_PAGE,prot=r->rdx,offset=r->r9;
+    unsigned int flags;int fixed,anonymous;const RyzLinuxExec *file=NULL;
+    RyzLinuxProcess *p=m->process;
+    if(!r->rsi || r->rsi>m->size)return -22;
+    size=alignpage(r->rsi);
+    if(r->rax==9){
+        if((r->r10 & ~(uint64_t)(2|16|32|0x800|0x1000)) || !(r->r10&2))return -22;
+        if((prot & ~UINT64_C(7)) || (prot&6)==6)return -1;
+        anonymous=(r->r10&32)!=0;fixed=(r->r10&16)!=0;
+        if(anonymous){if((prot&4) || r->r8!=UINT64_MAX || offset)return -1;}
+        else{
+            if(!p || !p->world || r->r8>=RYZ_LINUX_FD_MAX || !p->fds[r->r8].open || p->fds[r->r8].node!=RYZ_NS_EXEC)return -9;
+            if(offset & (RYZ_PAGE-1))return -22;
+            file=&p->world->execs[p->fds[r->r8].vnode];
+        }
+        minimum=alignpage(m->brk);lo=r->rdi;
+        if(fixed){
+            if((lo & (RYZ_PAGE-1)) || lo<(anonymous?m->heap:minimum) || lo>=ceiling || size>ceiling-lo)return -22;
+            for(i=(lo-m->base)/RYZ_PAGE;i<(lo+size-m->base)/RYZ_PAGE;i++)if(!(m->pages[i]&16) && !(anonymous && lo>=m->heap && lo+size<=alignpage(m->brk)))return -1;
+        }else{
+            if(lo<minimum || lo>=ceiling || (lo & (RYZ_PAGE-1)) || size>ceiling-lo || !freepages(m,lo,lo+size)){
+                if(minimum>ceiling || size>ceiling-minimum)return -12;
+                at=ceiling-size;
+                for(;;){if(freepages(m,at,at+size))break;if(at==minimum)return -12;at-=RYZ_PAGE;}
+                lo=at;
+            }
+        }
+        hi=lo+size;flags=RYZ_MAP|16|((prot&1)?RYZ_READ:0)|((prot&2)?RYZ_WRITE:0)|((prot&4)?RYZ_EXEC:0);
+        if(!anonymous && !(prot&2))flags|=64;
+        memset(m->bytes+(size_t)(lo-m->base),0,(size_t)size);
+        if(file && offset<file->size){uint64_t n=file->size-offset;if(n>size)n=size;memcpy(m->bytes+(size_t)(lo-m->base),file->image+(size_t)offset,(size_t)n);}
+        mark(m,lo,hi,flags);
+        if(file){
+            uint64_t valid=offset<file->size?alignpage(file->size-offset):0;
+            if(valid<size)mark(m,lo+valid,hi,RYZ_MAP|16);
+        }
+        return (int64_t)lo;
+    }
+    lo=r->rdi;
+    if((lo & (RYZ_PAGE-1)) || lo<m->base || lo>=m->base+m->size || size>m->base+m->size-lo)return -22;
+    hi=lo+size;
+    if(r->rax==11){mark(m,lo,hi,0);memset(m->bytes+(size_t)(lo-m->base),0,(size_t)size);return 0;}
+    if((prot & ~UINT64_C(7)) || (prot&6)==6)return -1;
+    for(i=(lo-m->base)/RYZ_PAGE;i<(hi-m->base)/RYZ_PAGE;i++){
+        if(!(m->pages[i]&RYZ_MAP))return -12;
+        if((prot&4) && !(m->pages[i]&64))return -1;
+    }
+    for(i=(lo-m->base)/RYZ_PAGE;i<(hi-m->base)/RYZ_PAGE;i++){
+        flags=m->pages[i] & (RYZ_MAP|16|64);if(prot&2)flags&=~64U;
+        m->pages[i]=(unsigned char)(flags|((prot&1)?RYZ_READ:0)|((prot&2)?RYZ_WRITE:0)|((prot&4)?RYZ_EXEC:0));
+    }
+    return 0;
+}
 int64_t ryz_memory_call(void *context, const RyzLinuxRegs *r)
 {
     RyzLinuxMemory *m = context;
@@ -68,6 +123,7 @@ int64_t ryz_memory_call(void *context, const RyzLinuxRegs *r)
         m->brk = lo;
         return (int64_t)lo;
     }
+    if(m->dynamic)return dynamic_memory(m,r);
     size = r->rsi;
     if (size == 0 || size > m->size)
         return -22;

@@ -140,7 +140,7 @@ class JobsTests(unittest.TestCase):
         vm=self.run_vm(self.busybox,'ash','-c','while :; do :; done',grants=[])
         self.assertEqual(vm.returncode,2);self.assertIn(b'status=4 ',vm.stderr)
         vm=self.run_vm(self.busybox,'ash','-c','echo child & wait',grants=[])
-        self.assertEqual(vm.returncode,2);self.assertIn(b'status=5 ',vm.stderr)
+        self.assertEqual(vm.returncode,0,vm.stderr);self.assertEqual(vm.stdout,b'child\n')
 
     @unittest.skipUnless(os.environ.get('COMPACT_SHELL_DIR'),'set COMPACT_SHELL_DIR to pinned BusyBox fixture')
     def test_native_script_reference_output_and_group_isolation(self):

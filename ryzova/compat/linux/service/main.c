@@ -28,6 +28,12 @@ static char jobs[] = "linux-amd64-static-jobs-v1\n"
 static char filesystem[] = "linux-amd64-local-tmp-v1\n"
     "profile=jobs path=/tmp lifetime=one-invocation shared=fork,exec host-forwarding=false\n"
     "nodes=32 file-bytes=65536 permissions=owner timestamps=logical-clock symlinks=false hardlinks=false\n";
+static char runtime[] = "linux-amd64-runtime-v1\n"
+    "launch=compact-linux -j ELF args signals=guest-rt-frame,mask,kill,wait,altstack\n"
+    "signal-depth=8 realtime-queue=33 per-task-standard-signals=coalesced\n"
+    "dynamic=explicit-interpreter-and-library-grants pie=true tls=guest-linker\n"
+    "time=logical-microsecond-per-instruction timers=alarm,setitimer,nanosleep,sigtimedwait\n"
+    "entropy=native-OS-capability threads=false sockets=false general-linux=false\n";
 static char shell[] = "experimental-bounded-ash-v1\n"
     "workloads=script,variables,loops,functions,conditionals,input,output,append,cat,wc\n"
     "paths=/input:read,/output:write cwd=/,/tmp descriptors=16\n"
@@ -76,6 +82,7 @@ main(int argc, char **argv)
     leaf(linux, "shell", shell);
     leaf(linux, "jobs", jobs);
     leaf(linux, "filesystem", filesystem);
+    leaf(linux, "runtime", runtime);
     closefile(linux);
     closefile(compact);
     fs.read = fsread;

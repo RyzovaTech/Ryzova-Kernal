@@ -9,6 +9,9 @@
 typedef struct RyzJobConfig {
     const RyzLinuxExec *execs;
     size_t exec_count;
+    uint32_t max_steps;
+    RyzLinuxRandom random;
+    void *random_context;
 } RyzJobConfig;
 int ryz_vm_run_jobs_elf(const unsigned char *,size_t,unsigned char *,size_t,
     RyzLinuxFiles *,const RyzProcessArgs *,const RyzJobConfig *,RyzLinuxWrite,void *,RyzVmResult *);

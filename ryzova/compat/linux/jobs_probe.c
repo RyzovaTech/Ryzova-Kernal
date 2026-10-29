@@ -7,15 +7,23 @@ static int64_t sink(void *context,int fd,const unsigned char *bytes,size_t size)
 {
     (void)context;return fwrite(bytes,1,size,fd==2?stderr:stdout)==size?(int64_t)size:-1;
 }
+static int64_t entropy(void *context,unsigned char *bytes,size_t size)
+{
+    FILE *file;size_t n;(void)context;
+    file=fopen("/dev/urandom","rb");if(!file)return -1;
+    n=fread(bytes,1,size,file);fclose(file);return n==size?(int64_t)n:-1;
+}
 int main(int argc,char **argv)
 {
     RyzProcessArgs args;RyzJobConfig config;RyzLinuxFiles files;RyzVmResult result;
     char *texts[RYZ_PROCESS_ARGS],*eq;RyzLinuxExec grants[RYZ_PROCESS_ARGS];size_t gi;
     const char *env[]={"FLEX_MODE=test","PATH=/bin"};
     unsigned char *image,*arena,*input=NULL,*out=NULL;FILE *file;long n;int first=1,status;
-    memset(&files,0,sizeof(files));memset(&config,0,sizeof(config));
+    memset(&files,0,sizeof(files));memset(&config,0,sizeof(config));config.random=entropy;
     while(first<argc){
-        if(strcmp(argv[first],"-x")==0 && first+1<argc && config.exec_count<RYZ_PROCESS_ARGS){texts[config.exec_count++]=argv[first+1];first+=2;}
+        if(strcmp(argv[first],"-b")==0 && first+1<argc){
+            char *end;unsigned long n=strtoul(argv[first+1],&end,10);if(!n || n>16777216 || *end)return 64;config.max_steps=(uint32_t)n;first+=2;
+        }else if(strcmp(argv[first],"-x")==0 && first+1<argc && config.exec_count<RYZ_PROCESS_ARGS){texts[config.exec_count++]=argv[first+1];first+=2;}
         else if(strcmp(argv[first],"-i")==0 && first+1<argc && !input){
             file=fopen(argv[first+1],"rb");if(!file)return 65;
             input=malloc(RYZ_LINUX_FILE_MAX+1);out=malloc(RYZ_LINUX_FILE_MAX);if(!input || !out)return 65;

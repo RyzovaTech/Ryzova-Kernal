@@ -94,6 +94,15 @@ class BusyboxTests(unittest.TestCase):
                 body += ['xor %eax,%eax',f'{op}{suffix} {src},{dst}','setz (%r12)','add $8,%r12']
             self.same('xor %ebx,%ebx\n'+'\n'.join(body))
 
+    def test_scalar_vector_transfers_unpack_exchange_and_flags_match_cpu(self):
+        self.same('movabs $0x123456789abcdef0,%rax\nmovq %rax,%xmm8\n'
+                  'movd %eax,%xmm9\npunpcklqdq %xmm9,%xmm8\nmovdqa %xmm8,(%r12)\n'
+                  'movdqu 1(%r12),%xmm10\nmovdqu %xmm10,17(%r12)\n'
+                  'movq %xmm8,%xmm9\nmovdqa %xmm9,48(%r12)\nmovq (%r12),%xmm10\n'
+                  'movq %xmm10,%rbx\nmov %rbx,64(%r12)\nmovd %xmm9,%ecx\nmov %rcx,72(%r12)\n'
+                  'stc\nxchg %eax,80(%r12)\nsetc 84(%r12)\ncmc\nsetc 85(%r12)\n'
+                  '.byte 0xf3,0x0f,0x1e,0xfa\nadd $96,%r12')
+
     def test_virtual_segment_base_and_writev(self):
         # Only interpreted invocation: setting host FS would disrupt native libc startup/cleanup.
         binary = self.assemble('mov %r12,%rsi\nmov $0x1002,%edi\nmov $158,%eax\nsyscall\n'
