@@ -34,7 +34,8 @@ entropy is limited to 1 MiB per invocation, including AT_RANDOM.
 
 Qualification includes real unmodified musl pthread creation/join, mutexes,
 condition variables, TLS, shared descriptors/cwd/umask/actions, robust mutexes,
-cancellation, detach, directed signals, worker fork/exec, creation limits and
+cancellation at explicit cancellation points and while blocked in a condition
+wait, detach, directed signals, worker fork/exec, creation limits and
 raw syscall regressions. Supported cases are compared with Linux and repeated
 under address/undefined sanitizers. Virtual policy limits use explicit expected
 results instead of treating host Linux limits as equivalent.

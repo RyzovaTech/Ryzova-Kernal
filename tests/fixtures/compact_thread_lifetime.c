@@ -53,6 +53,9 @@ long app_main(long argc,char **argv,char **env)
   while((n=tid)!=0){long result=call(202,(long)&tid,0,n,0,0,0);CHECK(result==0 || result==-11);}
   CHECK(entry.lock==0xc0000000U);
  }else if(equal(argv[1],"futex")){
+  unsigned int same=7,partial=0x0302;
+  __asm__ volatile("xaddl %0,%0":"+a"(same)::"cc");CHECK(same==14);
+  __asm__ volatile("xaddb %%ah,%%al":"+a"(partial)::"cc");CHECK(partial==0x0205);
   CHECK(call(202,(long)&word,128,1,0,0,0)==-11);
   CHECK(call(202,(long)&word,128,0,(long)timeout,0,0)==-110);
   CHECK(call(202,(long)&word,129,1,0,0,0)==0);

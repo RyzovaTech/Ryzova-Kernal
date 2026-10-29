@@ -11,7 +11,7 @@ sys.path.insert(0,str(ROOT/'scripts'))
 from phase9_process import FLAGS
 import phase9_threads
 from phase9_runtime import commands as runtime_commands
-CASES=('basic','fds','fs','cond','robust','detach','cancel','kill','fork','exec','exec-failed','capacity','quota')
+CASES=('basic','fds','fs','cond','robust','detach','cancel','cancel-wait','kill','fork','exec','exec-failed','capacity','quota')
 class ThreadGateTests(unittest.TestCase):
     def test_native_gate_requires_every_workload_challenge_digest_and_clean_exit(self):
         commit='a'*40;digests={name:'b'*64 for name in phase9_threads.NAMES}
@@ -38,7 +38,7 @@ class ThreadTests(unittest.TestCase):
         cls.sources=[str(c/(n+'.c')) for n in ('elf64','namespace','syscall','subset_vm','memory','process','cpu','jobs','jobs_probe')]
         cls.flags=['cc','-std=c11','-Wall','-Wextra','-Werror','-O1','-fsanitize=undefined','-fno-sanitize-recover=all']
         cls.runner=cls.directory/'runner';subprocess.run([*cls.flags,*cls.sources,'-o',str(cls.runner)],check=True,capture_output=True)
-        cls.fixtures=Path(os.environ['COMPACT_MUSL_DIR']).resolve();cls.libc=cls.fixtures/'musl-libc.so';cls.fixture=cls.fixtures/'thread-fixture'
+        cls.fixtures=Path(os.environ['COMPACT_MUSL_DIR']).resolve();cls.libc=cls.fixtures/'musl-libc.so';cls.fixture=cls.directory/'thread-fixture'
         # Fixtures are built from unmodified musl; the application source is
         # rebuilt here, so another checkout's application cannot mask changes.
         cc=cls.fixtures/'install/bin/musl-gcc'

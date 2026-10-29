@@ -447,7 +447,7 @@ static int step(Cpu *c)
             if(locked && rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED;
             if(rm.reg<0 && !ryz_memory_access(c->m,address(c,rm)+c->segment,size,RYZ_READ|RYZ_WRITE))return RYZ_VM_MAP_ERROR;
             a=get(c,rm,size);b=get(c,rr,size);
-            if(!c->fault){v=arithmetic(c,0,a,b,size);put(c,rm,size,v);put(c,rr,size,a);}
+            if(!c->fault){v=arithmetic(c,0,a,b,size);put(c,rr,size,a);put(c,rm,size,v);}
         }
         else if(op2==0xb0 || op2==0xb1){
             if(op2==0xb0)size=1;

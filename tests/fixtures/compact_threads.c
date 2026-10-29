@@ -21,6 +21,15 @@ static const char *mode,*directory,*program,*challenge;
 static pid_t main_pid,main_ppid;
 static __thread int local=10;
 static void caught(int sig){if(sig==SIGUSR1)hit++;}
+static void unlock(void *unused){(void)unused;pthread_mutex_unlock(&mutex);}
+static void cancel_wait(void)
+{
+    pthread_mutex_lock(&mutex);
+    pthread_cleanup_push(unlock,0);
+    ready=1;pthread_cond_signal(&condition);
+    for(;;)pthread_cond_wait(&condition,&mutex);
+    pthread_cleanup_pop(1);
+}
 static void *work(void *arg)
 {
     long value=(long)arg;int i;
@@ -46,6 +55,7 @@ static void *work(void *arg)
         if(pthread_mutex_lock(&mutex))problem=4;return (void *)local;
     }else if(!strcmp(mode,"detach")){
         pthread_mutex_lock(&mutex);count++;pthread_cond_signal(&condition);pthread_mutex_unlock(&mutex);
+    }else if(!strcmp(mode,"cancel-wait")){cancel_wait();
     }else if(!strcmp(mode,"cancel")){
         pthread_mutex_lock(&mutex);ready=1;pthread_cond_signal(&condition);pthread_mutex_unlock(&mutex);
         for(;;){pthread_testcancel();sched_yield();}
@@ -105,16 +115,16 @@ int main(int argc,char **argv)
     if(!strcmp(mode,"basic")){
         CHECK(!pthread_create(&b,0,work,(void *)2));CHECK(!pthread_join(b,&rb) && (long)rb==12);
     }
-    if(!strcmp(mode,"cond") || !strcmp(mode,"cancel")){
+    if(!strcmp(mode,"cond") || !strcmp(mode,"cancel") || !strcmp(mode,"cancel-wait")){
         CHECK(!pthread_mutex_lock(&mutex));while(!ready)CHECK(!pthread_cond_wait(&condition,&mutex));CHECK(!pthread_mutex_unlock(&mutex));
-        if(!strcmp(mode,"cancel"))CHECK(!pthread_cancel(a));
+        if(!strcmp(mode,"cancel") || !strcmp(mode,"cancel-wait"))CHECK(!pthread_cancel(a));
     }
     if(!strcmp(mode,"kill")){pthread_barrier_wait(&barrier);CHECK(!pthread_kill(a,SIGUSR1));}
     if(!strcmp(mode,"detach")){
         CHECK(!pthread_detach(a));CHECK(!pthread_mutex_lock(&mutex));while(!count)CHECK(!pthread_cond_wait(&condition,&mutex));CHECK(!pthread_mutex_unlock(&mutex));
         for(status=0;status<100;status++)sched_yield();
     }else{
-        CHECK(!pthread_join(a,&ra));CHECK(!strcmp(mode,"cancel")?ra==PTHREAD_CANCELED:(long)ra==11);
+        CHECK(!pthread_join(a,&ra));CHECK((!strcmp(mode,"cancel") || !strcmp(mode,"cancel-wait"))?ra==PTHREAD_CANCELED:(long)ra==11);
     }
     CHECK(!problem && local==10);
     if(!strcmp(mode,"basic"))CHECK(count==40);

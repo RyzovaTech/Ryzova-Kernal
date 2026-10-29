@@ -9,7 +9,7 @@ from phase9_process import FLAGS
 from phase9_dynamic import build
 from phase9_runtime import commands as runtime_commands
 ROOT=Path(__file__).resolve().parents[1]
-PTHREADS=('basic','fds','fs','cond','robust','detach','cancel','kill','fork','exec','exec-failed','capacity','quota')
+PTHREADS=('basic','fds','fs','cond','robust','detach','cancel','cancel-wait','kill','fork','exec','exec-failed','capacity','quota')
 RAW=('leader-exit','exit-group','robust','futex','clock-ceiling','entropy-quota')
 NAMES={'thread-fixture':'th-elf','compact_thread_lifetime':'th-raw','compact_mm_lifetime':'th-mm'}
 
