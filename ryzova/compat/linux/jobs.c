@@ -24,7 +24,8 @@ typedef struct Task {
     int blocked,suspended,term_signal,stop_event,continue_event;
     int thread,notified,futex_waiting,futex_woken,yielded;
     struct Task *leader;
-    uint64_t futex_address,futex_deadline,robust_head;
+    uint64_t futex_address,futex_deadline,robust_head,poll_deadline;
+    int poll_active;
     uint32_t futex_mask;
     FutexRestart futex_frames[8],futex_restart;
     uint64_t suspend_mask,alt_sp,alt_size,signal_sequence;
@@ -263,7 +264,7 @@ static int exec_task(Jobs *jobs,Task *task,const RyzLinuxRegs *r,int64_t *answer
     task->process.guest_base=task->cpu.m->base;task->process.guest_bytes=bytes;task->process.guest_size=(size_t)task->cpu.m->size;
     task->process.memory_context=task->cpu.m;
     for(i=0;i<64;i++)if(little(RYZ_ACTION(&task->process,i),8)!=1)memset(RYZ_ACTION(&task->process,i),0,32);
-    task->process.barrier_registered=0;task->alt_sp=task->alt_size=0;task->signal_depth=0;task->sleep_kind=0;task->robust_head=0;task->futex_waiting=task->futex_woken=task->futex_restart.active=0;task->futex_deadline=0;task->blocked=task->suspended=0;
+    task->poll_active=0;task->process.barrier_registered=0;task->alt_sp=task->alt_size=0;task->signal_depth=0;task->sleep_kind=0;task->robust_head=0;task->futex_waiting=task->futex_woken=task->futex_restart.active=0;task->futex_deadline=0;task->blocked=task->suspended=0;
     memset(task->futex_frames,0,sizeof task->futex_frames);
     ryz_cpu_init(&task->cpu,&task->process,&jobs->memories[task->mm].memory,entry,stack,result);task->cpu.cur=entry;
     result->execs++;
@@ -277,6 +278,16 @@ static int job_call(void *context,void *cpu,const RyzLinuxRegs *r,int64_t *answe
     Jobs *jobs=context;Task *task=NULL;unsigned int i;
     for(i=0;i<RYZ_JOB_TASKS;i++)if(&jobs->tasks[i].cpu==cpu){task=&jobs->tasks[i];break;}
     if(!task)return RYZ_VM_BAD_INPUT;
+    if(r->rax==7){
+        RyzLinuxRegs probe=*r;int32_t timeout=(int32_t)r->rdx;uint64_t now=jobs->world.clock;
+        probe.rdx=0;*answer=ryz_linux_syscall(&task->process,&probe);
+        if(*answer || !timeout){task->poll_active=0;return RYZ_VM_OK;}
+        if(timeout>0){
+            if(!task->poll_active){uint64_t duration=(uint64_t)timeout*1000;task->poll_deadline=duration>UINT64_MAX-now?UINT64_MAX:now+duration;task->poll_active=1;}
+            if(now>=task->poll_deadline){task->poll_active=0;*answer=0;return RYZ_VM_OK;}
+        }
+        *answer=RYZ_LINUX_BLOCKED;return RYZ_CPU_BLOCKED;
+    }
     if(r->rax==56 || r->rax==202 || r->rax==273 || r->rax==274 || r->rax==24 || r->rax==60 || r->rax==231)return thread_call(jobs,task,r,answer);
     if(r->rax==57 || r->rax==58)*answer=fork_task(jobs,task,r->rax==58);
     else if(r->rax==61)*answer=wait_task(jobs,task,r);

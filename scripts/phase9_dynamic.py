@@ -42,7 +42,8 @@ def build(directory):
     from phase9_process import FLAGS
     subprocess.run(['cc',*FLAGS,str(fixtures/'compact_process_start.S'),str(fixtures/'compact_dynamic_memory.c'),'-o',str(directory/'dynamic-memory')],check=True,capture_output=True)
     subprocess.run([cc,*flags,'-pthread','-fPIE','-pie','-Wl,--dynamic-linker=/lib/ld-musl-x86_64.so.1',str(fixtures/'compact_threads.c'),'-o',str(directory/'thread-fixture')],check=True,capture_output=True)
+    subprocess.run([cc,*flags,'-pthread','-fPIE','-pie','-Wl,--dynamic-linker=/lib/ld-musl-x86_64.so.1',str(fixtures/'compact_socket_http.c'),'-o',str(directory/'socket-http')],check=True,capture_output=True)
     shutil.copy2(install/'lib/libc.so',directory/'musl-libc.so')
-    return {name:hashlib.sha256((directory/name).read_bytes()).hexdigest() for name in ('musl-libc.so','libflex.so','dynamic-hello','dynamic-dlopen','dynamic-needed','dynamic-memory','thread-fixture')}
+    return {name:hashlib.sha256((directory/name).read_bytes()).hexdigest() for name in ('musl-libc.so','libflex.so','dynamic-hello','dynamic-dlopen','dynamic-needed','dynamic-memory','thread-fixture','socket-http')}
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--build',required=True);args=parser.parse_args();print(build(args.build))

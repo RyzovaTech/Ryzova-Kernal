@@ -33,7 +33,12 @@ static char runtime[] = "linux-amd64-runtime-v1\n"
     "signal-depth=8 realtime-queue=33 per-task-standard-signals=coalesced\n"
     "dynamic=explicit-interpreter-and-library-grants pie=true tls=guest-linker\n"
     "time=logical-microsecond-per-instruction timers=alarm,setitimer,nanosleep,sigtimedwait\n"
-    "entropy=native-OS-capability,1MiB-group-limit threads=cooperative sockets=false general-linux=false\n";
+    "entropy=native-OS-capability,1MiB-group-limit threads=cooperative sockets=invocation-local-streams general-linux=false\n";
+static char sockets[] = "linux-amd64-local-sockets-v1\n"
+    "domain=unix-abstract,ipv4-loopback type=stream namespace=invocation-private\n"
+    "operations=pair,bind,listen,connect,accept,read,write,sendmsg,recvmsg,poll,shutdown\n"
+    "limits=32-endpoints,16-fds-per-table,8-backlog,4096-rx-bytes,4MiB-traffic\n"
+    "external-network=false dns=false datagram=false ancillary-fd-passing=false\n";
 static char threads[] = "linux-amd64-threads-v1\n"
     "clone=shared-mm,files,fs,sighand,tls tids=synthetic thread-group=true\n"
     "futex=wait,wake,bitset,requeue,timeout robust=owner-died clear-child-tid=true\n"
@@ -89,6 +94,7 @@ main(int argc, char **argv)
     leaf(linux, "filesystem", filesystem);
     leaf(linux, "runtime", runtime);
     leaf(linux, "threads", threads);
+    leaf(linux, "sockets", sockets);
     closefile(linux);
     closefile(compact);
     fs.read = fsread;

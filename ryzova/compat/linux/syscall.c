@@ -94,6 +94,7 @@ static void world_pull(RyzLinuxProcess *p)
         p->fds[i].cloexec=cloexec;
     }
 }
+static void net_cleanup(RyzLinuxWorld *);
 static void world_finish(RyzLinuxProcess *p,const unsigned int *old)
 {
     RyzLinuxWorld *w=p->world;
@@ -116,6 +117,7 @@ static void world_finish(RyzLinuxProcess *p,const unsigned int *old)
             if(w->descriptions[j].used && w->descriptions[j].fd.node==RYZ_NS_PIPE && w->descriptions[j].fd.pipe==i)active=1;
         if(!active)memset(&w->pipes[i],0,sizeof(w->pipes[i]));
     }
+    net_cleanup(w);
     if(p->fd_owner)memcpy(owner->fds,p->fds,sizeof p->fds);
     if(p->fs_owner){p->fs_owner->cwd=p->cwd;p->fs_owner->vfs_cwd=p->vfs_cwd;p->fs_owner->file_umask=p->file_umask;}
     w->output_bytes=p->output_bytes;
@@ -190,6 +192,7 @@ static int64_t duplicate_min(RyzLinuxProcess *p, uint64_t old, uint64_t minimum,
         if(!p->fds[i].open)return duplicate(p,old,i,cloexec);
     return -L_EMFILE;
 }
+static int64_t net_io(RyzLinuxProcess *,uint64_t,uint64_t,uint64_t,uint64_t,int);
 static int64_t vfs_write(RyzLinuxProcess *,uint64_t,uint64_t,uint64_t);
 static int64_t do_write(RyzLinuxProcess *p, uint64_t fd,
                         uint64_t address, uint64_t count)
@@ -200,6 +203,7 @@ static int64_t do_write(RyzLinuxProcess *p, uint64_t fd,
         return -L_EBADF;
     if (count > RYZ_LINUX_IO_MAX)
         return -L_EINVAL;
+    if(p->fds[fd].node==RYZ_NS_SOCKET && p->world)return net_io(p,fd,address,count,0,1);
     if(count==0)return p->fds[fd].mode==0?-L_EBADF:0;
     if (!guest_range(p, address, count, &buf))
         return -L_EFAULT;
@@ -257,6 +261,7 @@ static int64_t do_read(RyzLinuxProcess *p, uint64_t fd,
         return -L_EBADF;
     if (count > RYZ_LINUX_IO_MAX)
         return -L_EINVAL;
+    if(p->fds[fd].node==RYZ_NS_SOCKET && p->world)return net_io(p,fd,address,count,0,0);
     if(count==0)return p->fds[fd].mode==1?-L_EBADF:0;
     if (!guest_range(p, address, count, &buf))
         return -L_EFAULT;
@@ -355,6 +360,7 @@ static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, i
         code=resolve(p,path,length,&kind,&bytes,&inode);if(code)return code;
         if(kind!=RYZ_NS_EXEC)inode=(uint64_t)kind+1;
     }
+    if(kind==RYZ_NS_SOCKET){mode=0140000|0777;inode=2000+p->fds[key].socket;}
     if(kind==RYZ_NS_PIPE){mode=0010000|0600;inode=500+p->fds[key].pipe;}
     if(kind==RYZ_NS_EXEC){mode=0100000|0555;if(by_fd){inode=1000+p->fds[key].vnode;bytes=p->world->execs[p->fds[key].vnode].size;}}
     if(kind==RYZ_NS_INPUT){mode=0100000|0444;bytes=p->files->input_size;}
@@ -518,6 +524,7 @@ static int64_t signal_state(RyzLinuxProcess *p, const RyzLinuxRegs *r)
     }
     return 0;
 }
+#include "syscall_net.h"
 #include "syscall_vfs.h"
 
 static int64_t do_readv(RyzLinuxProcess *p,const RyzLinuxRegs *r)
@@ -652,6 +659,7 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
             fd=word64(data+i*8)&UINT64_C(0xffffffff);events=(uint64_t)data[i*8+4]|((uint64_t)data[i*8+5]<<8);revents=0;
             if(!(fd & UINT64_C(0x80000000))){
                 if(fd>=RYZ_LINUX_FD_MAX || !p->fds[fd].open)revents=32;
+                else if(p->fds[fd].node==RYZ_NS_SOCKET && p->world)revents=net_poll(p,fd,(unsigned int)events);
                 else if(p->fds[fd].node==RYZ_NS_PIPE && p->world){
                     RyzLinuxPipe *pipe=&p->world->pipes[p->fds[fd].pipe];
                     if(p->fds[fd].mode==0){
@@ -670,6 +678,8 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
         if(regs->rsi)memcpy(table,data,(size_t)regs->rsi*8);
         return ready;
     }
+    case 41:case 42:case 43:case 44:case 45:case 46:case 47:case 48:case 49:case 50:case 51:case 52:case 53:case 54:case 55:case 288:
+        return p->world?net_call(p,regs):-L_ENOSYS;
     case 40:return -L_ENOSYS; /* sendfile: callers can fall back to read/write. */
     case 32:return duplicate_min(p,regs->rdi,0,0);
     case 33:

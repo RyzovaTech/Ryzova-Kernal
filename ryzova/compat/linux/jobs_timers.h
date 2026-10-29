@@ -25,7 +25,7 @@ static int timer_interrupt(Task *task)
         else timer_write(task,task->sleep_remaining,left,0);
     }
     task->futex_waiting=task->futex_woken=0;task->futex_deadline=0;
-    task->sleep_kind=0;task->sleep_deadline=task->sleep_remaining=0;return error;
+    task->poll_active=0;task->sleep_kind=0;task->sleep_deadline=task->sleep_remaining=0;return error;
 }
 static void timer_poll(Jobs *jobs,Task *task)
 {
@@ -46,6 +46,7 @@ static int timer_advance(Jobs *jobs)
     for(i=0;i<RYZ_JOB_TASKS;i++){
         Task *t=&jobs->tasks[i],*owner=t->leader?t->leader:t;if(t->state==FREE || t->state==ZOMBIE)continue;
         if(t->state==RUN && owner->alarm_deadline && (!found || owner->alarm_deadline<next)){next=owner->alarm_deadline;found=1;}
+        if(t->state==RUN && t->poll_active && (!found || t->poll_deadline<next)){next=t->poll_deadline;found=1;}
         if(t->state==RUN && t->futex_waiting && t->futex_deadline && (!found || t->futex_deadline<next)){next=t->futex_deadline;found=1;}
         if(t->state==RUN && t->sleep_kind && t->sleep_deadline && (!found || t->sleep_deadline<next)){next=t->sleep_deadline;found=1;}
     }

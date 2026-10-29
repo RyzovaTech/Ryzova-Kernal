@@ -26,7 +26,7 @@ typedef struct RyzLinuxFD {
     enum RyzLinuxNode node;
     int mode, open, cloexec, append, nonblock;
     unsigned int description;
-    unsigned int pipe, vnode;
+    unsigned int pipe, vnode, socket;
     size_t offset;
 } RyzLinuxFD;
 #define RYZ_WORLD_DESCRIPTIONS 64U
@@ -54,6 +54,18 @@ typedef struct RyzVnode {
     char name[RYZ_NS_PATH_MAX];
     unsigned char bytes[RYZ_LINUX_FILE_MAX];
 } RyzVnode;
+#define RYZ_NET_SOCKETS 32U
+#define RYZ_NET_BUFFER 4096U
+#define RYZ_NET_BACKLOG 8U
+typedef struct RyzLinuxSocket {
+    int used,domain,bound,listening,connected,peer,read_closed,write_closed;
+    int reuseaddr,keepalive,nodelay;
+    unsigned int backlog,pending_count,pending[RYZ_NET_BACKLOG];
+    unsigned int local_length,remote_length;
+    unsigned char local[128],remote[128];
+    size_t head,size;
+    unsigned char bytes[RYZ_NET_BUFFER];
+} RyzLinuxSocket;
 typedef int64_t (*RyzLinuxRandom)(void *,unsigned char *,size_t);
 typedef struct RyzLinuxWorld {
     RyzLinuxRandom random;
@@ -63,6 +75,9 @@ typedef struct RyzLinuxWorld {
     unsigned int memory_barriers[8];
     RyzLinuxDescription descriptions[RYZ_WORLD_DESCRIPTIONS];
     RyzLinuxPipe pipes[RYZ_WORLD_PIPES];
+    RyzLinuxSocket sockets[RYZ_NET_SOCKETS];
+    uint64_t network_bytes;
+    unsigned int next_port;
     uint64_t output_bytes,pipe_bytes;
     const RyzLinuxExec *execs;
     size_t exec_count;

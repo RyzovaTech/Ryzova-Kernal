@@ -250,7 +250,7 @@ static int guest_syscall(Cpu *c)
         return RYZ_VM_OK;
     }
     r.rax=nr;r.rdi=c->r[7];r.rsi=c->r[6];r.rdx=c->r[2];r.r10=c->r[10];r.r8=c->r[8];r.r9=c->r[9];
-    if((nr==56 || nr==202 || nr==273 || nr==274 || nr==24 || nr==60 || nr==231 || nr==15 || nr==35 || nr==36 || nr==37 || nr==38 || nr==128 || nr==230 || nr==34 || nr==57 || nr==58 || nr==59 || nr==61 || nr==62 || nr==127 || nr==130 || nr==131 || nr==200 || nr==234) && c->p->job_call){
+    if((nr==7 || nr==56 || nr==202 || nr==273 || nr==274 || nr==24 || nr==60 || nr==231 || nr==15 || nr==35 || nr==36 || nr==37 || nr==38 || nr==128 || nr==230 || nr==34 || nr==57 || nr==58 || nr==59 || nr==61 || nr==62 || nr==127 || nr==130 || nr==131 || nr==200 || nr==234) && c->p->job_call){
         int state=c->p->job_call(c->p->job_context,c,&r,&answer);
         if(state==RYZ_CPU_BLOCKED)return state;
         if(state==RYZ_CPU_EXECUTED){c->result->syscall_count++;return RYZ_VM_OK;}
@@ -262,7 +262,7 @@ static int guest_syscall(Cpu *c)
         if(answer==RYZ_LINUX_BLOCKED)return RYZ_CPU_BLOCKED;
         c->r[1]=c->cur;c->r[11]=c->flags;c->r[0]=(uint64_t)answer;c->result->syscall_count++;return RYZ_VM_OK;
     }
-    if(!(c->p->world && (nr==21 || nr==74 || nr==75 || nr==76 || nr==77 || nr==81 || nr==82 || nr==83 || nr==84 || nr==87 || nr==90 || nr==91 || nr==95 || nr==217 || nr==258 || nr==263 || nr==280 || nr==228 || nr==229 || nr==201 || nr==318 || nr==324 || nr==19)) && nr!=7 && nr!=32 && nr!=33 && nr!=292 && nr!=40 && nr!=2 && nr!=8 && nr!=80 && nr!=63 && nr!=79 && nr!=105 && nr!=106 && nr!=117 && nr!=119 && nr!=13 && nr!=14 && nr!=110 && nr!=111 && nr!=4 && nr!=5 && nr!=6 && nr!=262 && nr!=107 && nr!=108 && nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
+    if(!(c->p->world && (nr==21 || nr==74 || nr==75 || nr==76 || nr==77 || nr==81 || nr==82 || nr==83 || nr==84 || nr==87 || nr==90 || nr==91 || nr==95 || nr==217 || nr==258 || nr==263 || nr==280 || nr==228 || nr==229 || nr==201 || nr==318 || nr==324 || nr==19 || (nr>=41 && nr<=55) || nr==288)) && nr!=7 && nr!=32 && nr!=33 && nr!=292 && nr!=40 && nr!=2 && nr!=8 && nr!=80 && nr!=63 && nr!=79 && nr!=105 && nr!=106 && nr!=117 && nr!=119 && nr!=13 && nr!=14 && nr!=110 && nr!=111 && nr!=4 && nr!=5 && nr!=6 && nr!=262 && nr!=107 && nr!=108 && nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
        nr!=16 && nr!=20 && nr!=72 && nr!=39 && nr!=60 && nr!=102 && nr!=104 && nr!=186 && nr!=231 && nr!=257)
         return RYZ_VM_SYSCALL_UNSUPPORTED;
     r.rax=nr; r.rdi=c->r[7]; r.rsi=c->r[6]; r.rdx=c->r[2];
@@ -392,10 +392,19 @@ static int step(Cpu *c)
     }else if(op==0xc0 || op==0xc1 || op==0xd0 || op==0xd1 || op==0xd2 || op==0xd3){
         if(op==0xc0 || op==0xd0 || op==0xd2)size=1;
         rm=decode(c,&reg,&group,size);
-        if(group!=4 && group!=5 && group!=7)return RYZ_VM_OPCODE_UNSUPPORTED;
+        if(group!=0 && group!=1 && group!=4 && group!=5 && group!=7)return RYZ_VM_OPCODE_UNSUPPORTED;
         count=op==0xc0 || op==0xc1?(unsigned int)fetch(c,1):(op==0xd0 || op==0xd1?1:(unsigned int)c->r[1]);
         count&=size==8?63:31; a=get(c,rm,size); n=size*8;
-        if(count!=0 && !c->fault){
+        if(count!=0 && !c->fault && group<=1){
+            unsigned int rotate=count%n;
+            v=a;
+            if(rotate)v=group==0?((a<<rotate)|(a>>(n-rotate))):((a>>rotate)|(a<<(n-rotate)));
+            v&=mask(size);c->flags&=~(uint64_t)CF;
+            type=group==0?(unsigned int)(v&1):(unsigned int)(v>>(n-1));
+            if(type)c->flags|=CF;
+            if(count==1){c->flags&=~(uint64_t)OF;if(group==0?(((v>>(n-1))&1)!=type):(((v>>(n-1))^(v>>(n-2)))&1))c->flags|=OF;}
+            put(c,rm,size,v);
+        }else if(count!=0 && !c->fault){
             saved=c->flags; b=(a>>(n-1))&1;
             if(group==4){ v=count>=n?0:a<<count; type=count>n?0:(unsigned int)((a>>(n-count))&1); }
             else { type=count>n?0:(unsigned int)((a>>(count-1))&1); v=count>=n?0:a>>count;
@@ -441,6 +450,12 @@ static int step(Cpu *c)
         if(op2==5){ if(c->fault)return RYZ_VM_MAP_ERROR; rv=guest_syscall(c); if(rv!=RYZ_VM_OK)return rv; }
         else if(op2==0x1e && c->repeat){if(fetch(c,1)!=0xfa)return RYZ_VM_OPCODE_UNSUPPORTED;}
         else if(op2>=0x80 && op2<=0x8f){ v=(uint64_t)(int64_t)(int32_t)fetch(c,4); target=c->cur+v; jump=condition(c,op2); }
+        else if(op2>=0xc8 && op2<=0xcf){
+            if(size==2)return RYZ_VM_OPCODE_UNSUPPORTED;
+            rr=regop(c,(op2-0xc8)+((c->rex&1)?8:0),size);a=get(c,rr,size);v=0;
+            for(n=0;n<size;n++){v=(v<<8)|(a&255);a>>=8;}
+            put(c,rr,size,v);
+        }
         else if(op2==0xc0 || op2==0xc1){
             if(op2==0xc0)size=1;
             rm=decode(c,&reg,&group,size);rr=regop(c,reg,size);
