@@ -19,7 +19,9 @@ jobs:
       - name: Build checksum-pinned unmodified musl fixtures
         run: python scripts/phase9_compiler.py --build artifacts/musl-fixtures
       - name: Fetch pinned unmodified BusyBox
-        run: python scripts/phase9_shell.py --fetch artifacts/jobs-fixtures
+        run: |
+          python scripts/phase9_shell.py --fetch artifacts/jobs-fixtures
+          python scripts/phase9_busybox.py --fetch artifacts/jobs-fixtures
       - name: Full portable execution, signal frames, timers and dynamic linker tests
         env:
           COMPACT_MUSL_DIR: artifacts/musl-fixtures

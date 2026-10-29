@@ -65,3 +65,10 @@ it. Threads/clone/futex, general sockets/network grants, persistent/general file
 mounts, broader instruction coverage, interactive terminals and complete Python,
 Git/compiler/toolchain qualification remain unfinished. Do not advertise full
 Linux compatibility or physical/operational ARM64 qualification from these tests.
+
+Qualified runtime/helper commit: `ce2b53a3f6c780b28281a66fe29a1b37f0965022`.
+The independent source-built kernel passed all 20 signal/timer cases, the
+background ash/trap script, three dynamic programs, memory mapping checks and
+TinyCC compile/generated-ELF execution. Local regression: 120/120 methods.
+The built/installed/independently extracted kernel SHA256 matched. Exact source
+and fixture hashes: [local native evidence](validation/phase9-9-local-native.json).
