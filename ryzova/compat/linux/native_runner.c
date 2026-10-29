@@ -75,7 +75,7 @@ main(int argc, char **argv)
     }
     if(rfork(RFNAMEG|RFENVG) < 0)
         sysfatal("private process namespace: %r");
-    if(network.count){config.network=&network;if(atnotify(network_alarm,1)<0)sysfatal("network deadline handler: %r");}
+    if(network.count){config.network=&network;if(!atnotify(network_alarm,1))sysfatal("network deadline handler unavailable");}
     if(stateinpath || stateoutpath)config.filesystem=&filesystem;
     if(stateinpath){statein=readimage(stateinpath,RYZ_FS_SNAPSHOT_MAX,&filesystem.input_size);filesystem.input=statein;}
     if(stateoutpath){stateout=malloc(RYZ_FS_SNAPSHOT_MAX);if(!stateout)sysfatal("allocate filesystem export: %r");filesystem.output=stateout;filesystem.output_capacity=RYZ_FS_SNAPSHOT_MAX;}
