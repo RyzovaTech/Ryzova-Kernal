@@ -13,7 +13,7 @@ from phase9_process import FLAGS
 import phase9_symlinks as gate
 from phase9_shell import DIGEST
 from test_phase9_persistence import seal,records
-CASES=('basic','nofollow','loops','at','rename','times','grants','trailing','boundary','permissions','trailing-mutations')
+CASES=('basic','nofollow','loops','at','rename','times','grants','trailing','boundary','permissions','trailing-mutations','thread-exec')
 class SymlinkTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):

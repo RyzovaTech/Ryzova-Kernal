@@ -8,7 +8,7 @@ import subprocess
 from phase9_process import FLAGS
 from phase9_external import commands as external_commands,start as external_start
 ROOT=Path(__file__).resolve().parents[1]
-CASES=('basic','nofollow','loops','at','rename','times','grants','trailing','boundary','permissions','trailing-mutations')
+CASES=('basic','nofollow','loops','at','rename','times','grants','trailing','boundary','permissions','trailing-mutations','thread-exec')
 SCRIPT=b'''set -e
 /busybox mkdir -p /tmp/tree/sub
 echo linked-content > /tmp/tree/sub/file

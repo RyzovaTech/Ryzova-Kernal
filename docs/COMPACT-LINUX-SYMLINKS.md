@@ -26,7 +26,9 @@ without accidentally removing or renaming its directory target.
 
 Explicit image grants take precedence over a same-named node restored from a
 snapshot. Links cannot make a granted image writable. Execution through a link
-still requires the resolved image to have an explicit execution grant. Guest
+still requires the resolved image to have an explicit execution grant. Shared
+filesystem state is refreshed before resolution, including a worker exec after
+another thread changes the shared cwd. Guest
 paths absent from the namespace fail even when an identically named host file
 exists. Hardlinks, O_PATH, procfs magic links, ownership changes, live mounts and
 arbitrary Linux applications remain unsupported.

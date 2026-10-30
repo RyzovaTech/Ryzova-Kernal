@@ -116,7 +116,9 @@ static int vfs_normalize(RyzLinuxProcess *p,uint64_t dirfd,const char *source,ch
 }
 int ryz_linux_path(RyzLinuxProcess *p,uint64_t dirfd,uint64_t address,char *out,int follow,int *trailing)
 {
-    const char *path;size_t length;int code=guest_path(p,address,&path,&length);
+    const char *path;size_t length;int code;
+    /* Exec reaches this resolver without the ordinary syscall state pull. */
+    world_pull(p);code=guest_path(p,address,&path,&length);
     if(code)return code;
     vfs_init(p->world);return vfs_normalize(p,dirfd,path,out,follow,trailing);
 }

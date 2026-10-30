@@ -9,9 +9,22 @@ static U length(const char *s){U n=0;while(s[n])n++;return n;}
 static void print(const char *s){C(1,1,s,length(s));}
 static int content(const char *path,const char *text)
 {char bytes[256];long fd=C(2,path,0,0),n;if(fd<0)return 0;n=C(0,fd,bytes,255);C(3,fd,0,0);if(n<0)return 0;bytes[n]=0;return equal(bytes,text);}
+static unsigned char thread_stack[16384] __attribute__((aligned(16)));
+static volatile int thread_ready;static char *thread_args[5],*thread_env[1];
+__attribute__((naked)) static long spawn(void *fn,void *top,U flags)
+{
+ (void)fn;(void)top;(void)flags;
+ __asm__ volatile("mov %rdi,%r9; mov %rdx,%rdi; xor %edx,%edx; xor %r10d,%r10d; xor %r8d,%r8d; and $-16,%rsi; mov $56,%eax; syscall; test %eax,%eax; jnz 1f; xor %ebp,%ebp; call *%r9; mov %eax,%edi; mov $60,%eax; syscall; ud2; 1: ret");
+}
+static long exec_worker(void)
+{
+ while(!thread_ready)C(24,0,0,0);
+ C(59,"application",thread_args,thread_env);C(231,91,0,0);return 91;
+}
 long app_main(long argc,char **argv,char **env)
 {
  long fd,dir,n,status,pid;char bytes[256];U st[18],other[18];(void)env;CHECK(argc==4);
+ if(equal(argv[2],"thread-executed")){print("FLEX_SYMLINK_OK thread-exec\n");print(argv[3]);print("\n");return 0;}
  if(equal(argv[2],"executed")){CHECK(argc==4);return 7;}
  if(!equal(argv[2],"reload") && !equal(argv[2],"legacy") && !equal(argv[2],"shadow")){CHECK(!C(83,argv[1],0700,0));}
  CHECK(!C(80,argv[1],0,0));
@@ -76,6 +89,11 @@ long app_main(long argc,char **argv,char **env)
   CHECK(C(2,"link",0101,0600)==-13 && !C(6,"link",st,0));
   CHECK(!C(90,"sub",0700,0) && C(95,077,0,0)>=0 && !C(88,"missing","masked",0));
   CHECK(!C(6,"masked",st,0) && (((unsigned int *)st)[6]&0777)==0777);
+ }else if(equal(argv[2],"thread-exec")){
+  CHECK(!C(83,"sub",0700,0) && !C(88,argv[0],"sub/application",0));
+  thread_args[0]=argv[0];thread_args[1]=argv[1];thread_args[2]="thread-executed";thread_args[3]=argv[3];
+  CHECK(spawn(exec_worker,thread_stack+sizeof thread_stack,0x10f00)>0);
+  CHECK(!C(80,"sub",0,0));thread_ready=1;for(;;)C(24,0,0,0);
  }else if(equal(argv[2],"grants")){
   char *av[5]={argv[0],argv[1],"executed",argv[3],0},*ev[1]={0};
   CHECK(!C(88,"/dev/null","null",0));fd=C(2,"null",1,0);CHECK(fd>=0 && C(1,fd,"x",1)==1 && !C(3,fd,0,0));
