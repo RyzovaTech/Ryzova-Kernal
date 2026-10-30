@@ -93,6 +93,7 @@ class MountTests(unittest.TestCase):
     def test_traversal_links_root_rename_and_oversized_operations_are_denied(self):
         self.populate()
         self.check('denials')
+        self.check('permissions')
         self.check('symlink-routes')
         self.check('dir-inodes')
         with tempfile.TemporaryDirectory() as outside:

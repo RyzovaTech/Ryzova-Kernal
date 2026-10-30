@@ -74,10 +74,11 @@ static int64_t resource_host_call(void *context,RyzFsCall *c)
         if(!fstatat(other,dest,&s,AT_SYMLINK_NOFOLLOW)){error=host_stat(&s,&c->stat);if(error){result=error;break;}}
         else if(errno!=ENOENT){result=-errno;break;}
         result=renameat(parent,leaf,other,dest)?-errno:0;break;
-    case RYZ_FS_CHMOD:case RYZ_FS_TRUNCATE:
-        fd=openat(parent,leaf,(c->operation==RYZ_FS_TRUNCATE?O_WRONLY:O_RDONLY)|O_NOFOLLOW|O_CLOEXEC|O_NONBLOCK);
+    case RYZ_FS_CHMOD:result=fchmodat(parent,leaf,(mode_t)c->mode,AT_SYMLINK_NOFOLLOW)?-errno:0;break;
+    case RYZ_FS_TRUNCATE:
+        fd=openat(parent,leaf,O_WRONLY|O_NOFOLLOW|O_CLOEXEC|O_NONBLOCK);
         if(fd<0){result=-errno;break;}
-        result=(c->operation==RYZ_FS_TRUNCATE?ftruncate(fd,(off_t)c->offset):fchmod(fd,(mode_t)c->mode))?-errno:0;close(fd);break;
+        result=ftruncate(fd,(off_t)c->offset)?-errno:0;close(fd);break;
     }
  done:
     if(other>=0)close(other);

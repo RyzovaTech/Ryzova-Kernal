@@ -8,7 +8,7 @@ import subprocess
 from phase9_process import FLAGS
 from phase9_rootfs import commands as root_commands, start as root_start
 ROOT = Path(__file__).resolve().parents[1]
-CASES = ('readonly', 'views', 'hidden', 'denials', 'lifetime', 'sync', 'rename-failure', 'symlink-routes', 'dir-inodes', 'eof')
+CASES = ('readonly', 'views', 'hidden', 'denials', 'lifetime', 'sync', 'rename-failure', 'symlink-routes', 'dir-inodes', 'eof', 'permissions')
 SCRIPT = b'''set -e
 /busybox mkdir -p /home/share/shell
 printf 'int main(void){return 0;}\\n' > /home/share/shell/main.c

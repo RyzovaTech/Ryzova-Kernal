@@ -67,6 +67,15 @@ long app_main(long argc,char **argv,char **env)
   n=C(82,"/home/share/first","/home/share/second",0);
   if(n==-17)CHECK(content("/home/share/first","first") && content("/home/share/second","second"));
   else CHECK(!n && content("/home/share/second","first"));
+ }else if(eq(argv[1],"permissions")){
+  CHECK(C(21,"/home/share/missing",0,0)==-2);
+  CHECK(!C(90,"/home/share/project/source.c",0,0));
+  CHECK(C(2,"/home/share/project/source.c",0,0)==-13 && C(76,"/home/share/project/source.c",0,0)==-13);
+  CHECK(!C(90,"/home/share/project/source.c",0640,0));
+  dir=C(2,"/home/share/project",0200000,0);CHECK(dir>=0 && !C(90,"/home/share/project",0500,0));
+  CHECK(C(2,"/home/share/project/new",0102,0600)==-13 && C(87,"/home/share/project/source.c",0,0)==-13);
+  CHECK(!C(90,"/home/share/project",0,0) && C(81,dir,0,0)==-13);
+  CHECK(!C(90,"/home/share/project",0700,0) && !C(3,dir,0,0));
  }else if(eq(argv[1],"symlink-routes")){
   CHECK(!C(88,"/home/share/must-not-exist","/tmp/missing",0));
   CHECK(C(83,"/tmp/missing",0700,0)==-17 && C(4,"/home/share/must-not-exist",st,0)==-2);
