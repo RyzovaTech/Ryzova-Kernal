@@ -29,6 +29,7 @@ typedef struct RyzLinuxFD {
     unsigned int pipe, vnode, socket;
     size_t offset;
 } RyzLinuxFD;
+#include "resource_fs.h"
 #define RYZ_WORLD_DESCRIPTIONS 64U
 #define RYZ_WORLD_PIPES 4U
 #define RYZ_LINUX_BLOCKED ((int64_t)-4096)
@@ -96,6 +97,10 @@ typedef struct RyzLinuxWorld {
     RyzLinuxRandom random;
     void *random_context;
     RyzVnode nodes[RYZ_VFS_NODES];
+    const RyzFsResources *resources;
+    RyzFsOpen resource_open[RYZ_WORLD_DESCRIPTIONS];
+    unsigned int resource_anchors[RYZ_FS_MOUNTS],resource_revoked,resource_calls,resource_creates;
+    uint64_t resource_bytes;
     unsigned int root_tree; /* Explicit guest root profile; never host authority. */
     uint64_t next_inode, clock,random_bytes;
     unsigned int mapped_nodes[RYZ_VFS_NODES];
@@ -124,7 +129,8 @@ typedef struct RyzLinuxProcess {
     void *write_context;
     uint64_t output_bytes;
     int cwd,barrier_registered;
-    unsigned int vfs_cwd, file_umask;
+    unsigned int vfs_cwd, file_umask,fs_read_mask,fs_write_mask;
+    char resource_cwd[RYZ_NS_PATH_MAX];
     uint32_t parent_pid,group_pid,tgid;
     struct RyzLinuxProcess *fd_owner,*action_owner,*fs_owner;
     unsigned int fd_shares,memory_index;
@@ -156,6 +162,8 @@ int ryz_network_budget(RyzLinuxWorld *);
 int ryz_network_idle(RyzLinuxWorld *);
 /* Resolve guest namespace paths, following at most 40 symbolic links. */
 int ryz_linux_path(RyzLinuxProcess *,uint64_t,uint64_t,char *,int,int *);
+int ryz_resources_install(RyzLinuxWorld *);
+void ryz_resource_exec_view(RyzLinuxProcess *,const char *);
 void ryz_world_attach(RyzLinuxProcess *,RyzLinuxWorld *);
 void ryz_world_fork(RyzLinuxProcess *,RyzLinuxProcess *);
 void ryz_world_close(RyzLinuxProcess *,int);

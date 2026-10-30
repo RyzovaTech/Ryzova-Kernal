@@ -1,0 +1,253 @@
+{
+  "schema": "compact-linux-phase-acceptance/v1",
+  "phase": "CLX-02",
+  "date": "2026-10-30",
+  "implementation_head": "92904fd4ea8309265cb26ad738fbb62ce72d0eae",
+  "native_checkout": "bff2f22b58a4e3ce38c009e6819eb59e200c6b15",
+  "source_archive_sha256": "21c95141e9cd4a468aef583de2b5ef6d5a5b7bfdec8945717c45468a6d06ec90",
+  "kernel_sha256": "627416b50ffce41885a50e902e48dac61a6dac31c27c89ddb797d2e785365bda",
+  "ci": {
+    "triggered": 30,
+    "passed": 30,
+    "workflows": [
+      {
+        "name": "Phase 9.2 Compact native adapter regressions",
+        "id": 41073495135,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 9.3 Linux file environment regressions",
+        "id": 41073494823,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 6.0-6.3 optional remote resources local PoC",
+        "id": 41073495171,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 4.2-4.4 integration and SDK checks",
+        "id": 41073495184,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 7 native 9P evidence acceptance unit tests",
+        "id": 41073494827,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 5.0-5.1 ELF64 security and load-plan foundation",
+        "id": 41073495140,
+        "conclusion": "success"
+      },
+      {
+        "name": "M4 Legacy AMD64 Preservation and Controller Safety",
+        "id": 41073494990,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 5.7 macOS Mach-O structural feasibility",
+        "id": 41073495224,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 6.0-6.5 final research source acceptance",
+        "id": 41073495132,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 5.8 cross-platform compatibility acceptance inventory",
+        "id": 41073495243,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 5.9 experimental source acceptance and Phase 6 entry",
+        "id": 41073494914,
+        "conclusion": "success"
+      },
+      {
+        "name": "Ryzova source foundation checks",
+        "id": 41073495211,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 5.4 real Linux ELF subset interpreter PoC",
+        "id": 41073495226,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 5.6 compatibility security regression",
+        "id": 41073495149,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 4 baseline and rollback safety",
+        "id": 41073494969,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 4.6-4.9 release evidence and variant checks",
+        "id": 41073495257,
+        "conclusion": "success"
+      },
+      {
+        "name": "License and project-policy inventory",
+        "id": 41073495147,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 4 closeout and Phase 5 experimental entry",
+        "id": 41073495271,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 5.2-5.3 Linux syscall and namespace virtual-runtime tests",
+        "id": 41073494955,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 9.5 unmodified BusyBox applet qualification",
+        "id": 41073495066,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 5.5 Windows PE32+ structural feasibility",
+        "id": 41073495225,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 9.4 Linux compiled process and memory regressions",
+        "id": 41073495238,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 6 native guest TCP 9P protocol and evidence tests",
+        "id": 41073495378,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 7 mutually authenticated 9P bridge security regression",
+        "id": 41073495197,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 9.1 Compact contract",
+        "id": 41073495194,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 9.6 unmodified BusyBox ash and file resources",
+        "id": 41073495134,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 9.7 bounded Linux process groups and pipes",
+        "id": 41073495293,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 8.1 authenticated 9P host socket regression",
+        "id": 41073494977,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 9.9 Linux signals and dynamic application runtime",
+        "id": 41073495510,
+        "conclusion": "success"
+      },
+      {
+        "name": "Phase 3 AMD64 native source build (experimental)",
+        "id": 41073495042,
+        "conclusion": "success"
+      }
+    ]
+  },
+  "regression": {
+    "phase5": 63,
+    "phase9": 136,
+    "plan_guards": 10,
+    "skips": 0,
+    "regression_qualified": true,
+    "run_id": 41073495510,
+    "artifact_id": 12986517020
+  },
+  "native": {
+    "run_id": 41073495042,
+    "artifact_id": 12985119784,
+    "root_gate": true,
+    "mount_gate": true,
+    "inherited_gates": true,
+    "positive_mount_invocations": 20,
+    "expected_guest_limit_faults": 1
+  },
+  "acceptance": {
+    "FS-ROOT": "passed",
+    "FS-ISOLATION": "passed",
+    "FS-PERSIST": "passed"
+  },
+  "profile": "bounded-managed-root-and-live-directory-capabilities",
+  "phase_complete": true,
+  "v1_complete": false,
+  "limits": {
+    "mounts": 4,
+    "executable_views": 16,
+    "file_bytes": 65536,
+    "enumerated_children": 32,
+    "creations_per_invocation": 32,
+    "data_transfer_bytes": 4194304,
+    "backend_calls": 65536
+  },
+  "not_qualified": [
+    "general POSIX semantics on native 9P mounts",
+    "physical power-loss durability",
+    "V1 application targets",
+    "operational ARM64",
+    "physical hardware"
+  ],
+  "integration": {
+    "merge_authorized": true,
+    "pr": 78,
+    "final_revision_checks_required": true
+  },
+  "runtime_sources_sha256": {
+    "ryzova/compat/linux/cpu.c": "118e23fd55e942508ea2450dbd65277a5efdb97d1ab231d386905996f3be3914",
+    "ryzova/compat/linux/elf64.c": "2225a5bd2fd628e2c46317d5fcf8bb4e5202e7c3db9bdfd1606197c508ceb0e9",
+    "ryzova/compat/linux/elf64.h": "02d2be68ea0021295ac714dc5b5e74a505a9eeded5572e26f8c157badf495cdd",
+    "ryzova/compat/linux/elf64_probe.c": "6a27db2a114e3c395ee8bd8eddfaf92f52cd29451981f9341ff1a1fcefc1c6d9",
+    "ryzova/compat/linux/filesystem_state.h": "0e44a26fc34b6ec0f7778bcc6db8b94711eb9517b4716f3268e49f177644d156",
+    "ryzova/compat/linux/filesystem_tree.h": "6f854f3be72ed001f1b5130d014153fc772196f15c93d4949b2ec9ae9d3e2470",
+    "ryzova/compat/linux/jobs.c": "aa899f3c24f7bd01997887d16c0e6939f20633696d725acb30a4257eda2cb937",
+    "ryzova/compat/linux/jobs.h": "0e471f826d327222c6ef5bde7a6e2e8a91721afa7b9a92147a80a78b847b2d11",
+    "ryzova/compat/linux/jobs_probe.c": "18e15cad81103a14838cb2859fc250c77db97022064f289945a01104f75c8642",
+    "ryzova/compat/linux/jobs_signals.h": "2eafda1bccb1137e4eb9de1d45fbfcbd7ea20868b6f7a8ee0dd1e76179b31864",
+    "ryzova/compat/linux/jobs_threads.h": "b71618921f355e623515e23168af1e6a211767cdafa68b8e9ebc84a003ab6f12",
+    "ryzova/compat/linux/jobs_timers.h": "64d3ebbabbb2df49abb3e5c9c80aab004d5972a85e75b2552a4976e86fec059b",
+    "ryzova/compat/linux/memory.c": "c0b57f22fdcea94064e122e8e12fb2223dea122ffd1a2e66abc83b04b6da7786",
+    "ryzova/compat/linux/memory_files.h": "ff57a6e71f63212b972a4f79b6b001c0371ae9de800c72a589d32e50fbfa4752",
+    "ryzova/compat/linux/mkfile": "f79417ff5988e64bb0eab321d979b87e0d8bb62a3808241fd39277eb8173003f",
+    "ryzova/compat/linux/namespace.c": "41b06dcf3d7457773e9ed89ca547444b7ea193f7e19241c91a90a1d5e0a59966",
+    "ryzova/compat/linux/namespace.h": "b1099dac86b4533346fda0ba1ee86adb75f742042c1a90c713f750c7ab0a9d4c",
+    "ryzova/compat/linux/native_runner.c": "fb3377d2fc56422eb239cd074e4bcf93500165a03c5b1deb07972265d213878c",
+    "ryzova/compat/linux/network_cli.h": "e22bd6dc3f873b85c454fc0ca4785341578504514ff6b3b2b734587d0ebc7bee",
+    "ryzova/compat/linux/network_plan9.h": "37dbcc32163e098ad0c0c61fe89634684f87dfad5cd846403d545b1083727942",
+    "ryzova/compat/linux/network_posix.h": "396cc098a3b93ddffd0575a09b7a43e4106fb0cfbdbc973ab89a990ceac5ed17",
+    "ryzova/compat/linux/portable.h": "10d9b45eaa9afa11b461ec35859968042cc6bcc1570a57b7ef372780092f8756",
+    "ryzova/compat/linux/process.c": "a34b52dea87a9aebcc6e57ae52b2100850cc7278e24898160ccb2d61a6c8dabc",
+    "ryzova/compat/linux/process.h": "b472d4ade42d2367ca91d879c4e721fec58b62ba664a14a9ba02acc77d998a17",
+    "ryzova/compat/linux/process_probe.c": "948a5f429d06a62902a4677593d05148741ca1c13a237ee8b8b0b07563340230",
+    "ryzova/compat/linux/resource_cli.h": "5b42bade28180ea845e7ac4a1edf61d5a01a5a4950fc4fe19b51b72423a66c5d",
+    "ryzova/compat/linux/resource_fs.h": "d86c1affc2d79e752e060b3241475ad0a287a6bc2c36a68816350124a911b98a",
+    "ryzova/compat/linux/resource_plan9.h": "42087bf8408a4c06989f9c75f94aafc4c2d2d553cb339dd46c461afe40870cbf",
+    "ryzova/compat/linux/resource_posix.h": "62c911a535150a20a4b88b8c1a7612fab1be1b7774f92926206a9115d00f540b",
+    "ryzova/compat/linux/service/main.c": "3da994562fcd04d5e60988f6c05adda2fd54a1767cc9bc9d4174ac6a0f54af24",
+    "ryzova/compat/linux/service/mkfile": "912d36032b2a79a458178b34e6b5d1be0a74a2c5ef1c4495cb8dc0fd571d1152",
+    "ryzova/compat/linux/subset_vm.c": "f3097bc4f39b5dbc45d26ea8bbec4dab65de41fd2418646b0518328b8d4039fc",
+    "ryzova/compat/linux/subset_vm.h": "449ad6fc86c66d2b341ee62038378e8939c5b82da2217376b318037b9c23dc63",
+    "ryzova/compat/linux/subset_vm_probe.c": "45feb4b3d8bb8ccefb616f3aa46db6a06d19ce56d2bbc362ad7705ad681e8986",
+    "ryzova/compat/linux/syscall.c": "aac2fc7428ea2903f3be5c649fcf98228e1ef73f910601565339bd4c660fd42c",
+    "ryzova/compat/linux/syscall.h": "3041a6cfa0d393f4ce587d5b97ba69b2b50c83b0b344fbab391e85a2c2b466b7",
+    "ryzova/compat/linux/syscall_net.h": "ad22413b097147015ffecf15614e537b70a60d3ffb7792ae7cdc4a3d2c799399",
+    "ryzova/compat/linux/syscall_resources.h": "9c5a7a11079d0dde2192801f9e375cfce13ae05a0e982f438d0052c267443a58",
+    "ryzova/compat/linux/syscall_vfs.h": "1b3cadbb0f46ce0a86b75d54a31e4b7487eceadf15828f548078eb403068de39"
+  }
+}

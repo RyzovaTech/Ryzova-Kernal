@@ -1,9 +1,9 @@
 # Full Compact Linux status
 
-**Incomplete.** The bounded AMD64 application environment is implemented in
-cumulative draft branches. Passing its tests does not establish compatibility
-with arbitrary Linux applications. No automatic merge or full Linux release is
-authorized by these changes.
+**Incomplete.** The bounded AMD64 application environment has reviewed source
+integration, including the qualified CLX-02 filesystem profiles. Passing its
+tests does not establish compatibility with arbitrary Linux applications. Full
+Linux and public-binary release gates remain separate.
 
 | Area | Implemented scope | Remaining for a general environment |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ authorized by these changes.
 | Processes | Fork/vfork/exec/wait, pipes, bounded process groups | Broader process/session/resource APIs |
 | Threads | Cooperative shared-memory clone, musl pthreads, TLS, selected futex/robust operations | More clone profiles, priority inheritance, broader concurrency workloads |
 | Signals/time | Guest frames, masks, pending queues, selected logical timers | More timer APIs and synchronous exception coverage |
-| Files | Bounded writable tree, explicit immutable filesystem persistence and input/output/library snapshots; guest symlinks, hardlinks and shared file maps | General live persistent mounts, broader metadata and filesystem operations |
+| Files | Managed root, explicit live directory capabilities, per-app views/revocation, FLEXFS4 persistence; guest symlinks, hardlinks and shared file maps | Broader POSIX semantics on native mounts, metadata, durability and measured developer budgets |
 | Networking | Local streams and explicit mapped outbound TCP resources | Guest DNS, UDP, IPv6 socket ABI, external listeners and wider socket APIs |
 | Applications | Selected unmodified BusyBox/musl workloads; freestanding TinyCC compilation; musl pthread HTTP | Full Python, Git, compiler/SDK and interactive workloads |
 | Terminal/graphics | Bounded output callbacks and isolated input snapshots | Interactive terminal, PTY, graphics/audio/device APIs |
@@ -19,9 +19,9 @@ authorized by these changes.
 
 Application breadth must be proven with named, versioned workloads, reproducible
 fixtures and explicit resource grants. Unsupported operations must fail rather
-than returning a fabricated application result. General live mounts and
-broader network APIs require implementation and native tests; those gaps cannot be
-closed merely by relabeling existing passing tests.
+than returning a fabricated application result. The declared live-mount profile
+is native-qualified. Broader filesystem/network APIs still require implementation
+and native tests; relabeling existing passing tests does not supply them.
 
 The socket extension is described in
 [COMPACT-LINUX-SOCKETS.md](COMPACT-LINUX-SOCKETS.md); explicit file persistence is in
@@ -43,6 +43,10 @@ The finite developer V1 completion contract and CLX-01–CLX-08 phase plan are i
 [linux-v1-plan.json](../ryzova/compact/linux-v1-plan.json). Regression counts do not
 close those application acceptance gates.
 
-CLX-02 has started: see [root filesystem progress](COMPACT-LINUX-V1-PHASE2.md).
-The opt-in root profile is an increment; live mounts and per-application views
-remain pending and Linux V1 remains incomplete.
+
+CLX-02 is now qualified for the declared bounded filesystem profiles: managed
+root, explicit live directory capabilities, narrower application views,
+revocation of open fds and independent restart/recovery. FS-ROOT, FS-ISOLATION
+and FS-PERSIST have evidence in [the acceptance record](validation/compact-linux-v1-phase2-acceptance.json).
+Linux V1 is still incomplete; CLX-03 memory/process/budget work is next. Native
+live mounts retain the documented POSIX and durability limitations.

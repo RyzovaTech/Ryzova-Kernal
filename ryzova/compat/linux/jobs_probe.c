@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include "network_posix.h"
+#include "resource_posix.h"
+#include "resource_cli.h"
 static int64_t sink(void *context,int fd,const unsigned char *bytes,size_t size)
 {
     ssize_t n;(void)context;n=write(fd==2?2:1,bytes,size);return n<0?-1:(int64_t)n;
@@ -20,6 +22,7 @@ static int64_t entropy(void *context,unsigned char *bytes,size_t size)
 }
 int main(int argc,char **argv)
 {
+    ResourceCLI resources;
     RyzFilesystemResources fs;char *stateinpath=NULL,*stateoutpath=NULL;unsigned char *statein=NULL,*stateout=NULL;
     RyzNetworkResources network;RyzNetworkGrant network_grants[RYZ_NETWORK_GRANTS];NetworkHost network_hosts[RYZ_NETWORK_GRANTS];
     RyzProcessArgs args;RyzJobConfig config;RyzLinuxFiles files;RyzVmResult result;
@@ -27,10 +30,14 @@ int main(int argc,char **argv)
     const char *env[]={"FLEX_MODE=test","PATH=/bin"};
     unsigned char *image,*arena,*input=NULL,*out=NULL;FILE *file;long n;int first=1,status;
     memset(&network,0,sizeof network);memset(network_grants,0,sizeof network_grants);network.grants=network_grants;network.now_ns=network_now;network.wait=network_wait;
+    memset(&resources,0,sizeof resources);
     umask(077);memset(&fs,0,sizeof fs);
     memset(&files,0,sizeof(files));memset(&config,0,sizeof(config));config.random=entropy;
     while(first<argc){
-        if(strcmp(argv[first],"-r")==0){config.root_tree=1;first++;}
+        if(strcmp(argv[first],"-M")==0 && first+1<argc && resources.resources.count<RYZ_FS_MOUNTS){resources.mounts_text[resources.resources.count++]=argv[first+1];first+=2;}
+        else if(strcmp(argv[first],"-A")==0 && first+1<argc && resources.resources.view_count<16){resources.views_text[resources.resources.view_count++]=argv[first+1];first+=2;}
+        else if(strcmp(argv[first],"-K")==0 && first+1<argc && !resources.control){resources.control=argv[first+1];first+=2;}
+        else if(strcmp(argv[first],"-r")==0){config.root_tree=1;first++;}
         else if(strcmp(argv[first],"-b")==0 && first+1<argc){
             char *end;unsigned long n=strtoul(argv[first+1],&end,10);if(!n || n>16777216 || *end)return 64;config.max_steps=(uint32_t)n;first+=2;
         }else if(strcmp(argv[first],"-n")==0 && first+1<argc && network.count<RYZ_NETWORK_GRANTS){
@@ -73,6 +80,9 @@ int main(int argc,char **argv)
             fclose(file);grants[gi].image=bytes;grants[gi].size=(size_t)length;
         }else{grants[gi].image=image;grants[gi].size=(size_t)n;}
     }
+    if(resources.resources.count && !config.root_tree)return 64;
+    if(resources.resources.count){if(!resource_cli_prepare(&resources)){resource_cli_close(&resources);return 65;}config.resources=&resources.resources;}
+    else if(resources.resources.view_count || resources.control)return 64;
     status=ryz_vm_run_jobs_elf(image,(size_t)n,arena,RYZ_PROCESS_MAX_SPAN,input?&files:NULL,&args,&config,sink,NULL,&result);
     fprintf(stderr,"COMPACT_JOBS_RESULT status=%d exited=%d exit=%u steps=%u syscalls=%u forks=%u execs=%u peak=%u blocked=%u pipebytes=%llu rip=%llx\n",status,result.exited,(unsigned)result.exit_status,(unsigned)result.executed_steps,(unsigned)result.syscall_count,(unsigned)result.forks,(unsigned)result.execs,(unsigned)result.peak_tasks,(unsigned)result.blocked_syscalls,(unsigned long long)result.pipe_bytes,(unsigned long long)result.last_rip);
     if(status==RYZ_VM_OK && result.exited && result.exit_status==0 && files.output_size)fwrite(out,1,files.output_size,stdout);
@@ -81,6 +91,7 @@ int main(int argc,char **argv)
         if(fwrite(fs.output,1,fs.output_size,file)!=fs.output_size){fclose(file);remove(stateoutpath);return 65;}
         if(fclose(file)){remove(stateoutpath);return 65;}
     }
+    resource_cli_close(&resources);
     free(statein);free(stateout);
     for(gi=0;gi<config.exec_count;gi++)if(grants[gi].image!=image)free((void *)grants[gi].image);
     free(image);free(arena);free(input);free(out);return status==RYZ_VM_OK && result.exited && result.exit_status==0?0:2;

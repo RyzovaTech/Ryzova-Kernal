@@ -5,7 +5,7 @@ application environment එකයි. මෙහි V1 completion එක නම�
 workflows සහ acceptance gates මඟින් තීරණය වේ. Test ගණන හෝ අනුමාන
 ප්‍රතිශතයක් completion ලෙස භාවිත නොකරයි.
 
-Status: **CLX-01 complete; CLX-02 in progress; V1 is incomplete.** The machine
+Status: **CLX-01 and CLX-02 complete; CLX-03 is next; V1 is incomplete.** The machine
 source of truth is [linux-v1-plan.json](../ryzova/compact/linux-v1-plan.json).
 New CLX phase numbers are distinct from historical Phase 9.1–9.16 PR numbering.
 
@@ -31,7 +31,7 @@ and remain historical evidence, rather than being rewritten as current claims.
 The user subsequently authorized integration on 2026-10-30. PR #76 was merged
 as `bd609ee7c0796ae56f74150553bbd82a05efbf7c`; the bullets above retain the
 original audit snapshot. [Phase 2 progress](COMPACT-LINUX-V1-PHASE2.md) records
-the root-profile increment and remaining live mounts, views and recovery work.
+the qualified root, live mounts, views/revocation and recovery profiles.
 
 ## What V1 means
 
@@ -125,15 +125,17 @@ Upstream references: [CPython](https://www.python.org/downloads/release/python-3
 | INSTALL-RECOVERY | CLX-08 | Fresh boot/install/launch/export/recovery reproduces the acceptance suite |
 | INTEGRATION | CLX-08 | Inherited checks, cumulative review, authorization and release-policy boundary |
 
-Existing bounded implementations are partial inputs to these gates. None is
-marked complete solely because the earlier 172 regression methods are green.
+FS-ROOT, FS-ISOLATION and FS-PERSIST are now passed with the dedicated
+[CLX-02 acceptance record](validation/compact-linux-v1-phase2-acceptance.json).
+The other fourteen gates remain open. A green regression baseline alone still
+does not qualify application workflows or complete V1.
 
 ## Known blockers mapped to work
 
 | Current boundary | Source/evidence | Owner |
 | --- | --- | --- |
-| Writable tree is /tmp; 32 slots and 64-KiB file data | syscall_vfs.h, filesystem_state.h | CLX-02 |
-| Immutable image grants, snapshots; no general live root mounts | native_runner.c, jobs.h | CLX-02 |
+| Root/live filesystem profile qualified; 32 slots and 64-KiB files still need measured developer budgets | syscall_vfs.h, filesystem_state.h | CLX-03 |
+| Native live directory profile has explicit POSIX/durability limits; new filesystem requirements reopen its gate | COMPACT-LINUX-V1-PHASE2.md | CLX-02 if required by a target |
 | Mutable-file private maps/shared anonymous memory/file futex keys unsupported | memory.c, jobs_threads.h | CLX-03 |
 | 4-MiB images, 16-MiB address span, bounded steps/fds/tasks | process.h, jobs.h, namespace.h | CLX-03/04 |
 | Integer/selected vector interpreter; unsupported instructions fail closed | cpu.c | CLX-04 |
