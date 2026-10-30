@@ -12,7 +12,7 @@
 typedef struct SignalEvent {
     unsigned int sig,pid,uid;
     int code,status;
-    uint64_t sequence;
+    uint64_t sequence,address;
 } SignalEvent;
 typedef struct FutexRestart {uint64_t frame,ip,address,deadline;int active;} FutexRestart;
 typedef struct Task {
@@ -86,7 +86,8 @@ static void mm_release(Jobs *jobs,Task *task)
     MemorySlot *slot;
     if(!task->mm_held)return;
     slot=&jobs->memories[task->mm];task->mm_held=0;
-    if(--slot->refs==0){jobs->world.memory_barriers[task->mm]=0;if(slot->owned)free(slot->memory.bytes);memset(slot,0,sizeof(*slot));}
+    ryz_memory_commit(&slot->memory,1);
+    if(--slot->refs==0){ryz_memory_drop(&slot->memory);jobs->world.memory_barriers[task->mm]=0;if(slot->owned)free(slot->memory.bytes);memset(slot,0,sizeof(*slot));}
 }
 static int mm_free(Jobs *jobs)
 {
@@ -156,7 +157,8 @@ static int64_t fork_task(Jobs *jobs,Task *parent,int vfork)
     for(i=1;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state==FREE)break;
     if(i==RYZ_JOB_TASKS)return -11;
     memory_slot=vfork?(int)parent->mm:mm_free(jobs);if(memory_slot<0)return -12;
-    if(!vfork){bytes=malloc((size_t)parent->cpu.m->size);if(!bytes)return -12;memcpy(bytes,parent->cpu.m->bytes,(size_t)parent->cpu.m->size);}
+    if(!vfork){ryz_memory_commit(parent->cpu.m,1);bytes=malloc((size_t)parent->cpu.m->size);if(!bytes)return -12;memcpy(bytes,parent->cpu.m->bytes,(size_t)parent->cpu.m->size);}
+    if(!vfork && !ryz_memory_fork(&jobs->memories[memory_slot].memory,parent->cpu.m,bytes)){free(bytes);return -12;}
     child=&jobs->tasks[i];memset(child,0,sizeof(*child));child->vfork_parent=-1;
     child->process=parent->process;
     memcpy(child->process.signal_actions,RYZ_ACTION(&parent->process,0),sizeof child->process.signal_actions);
@@ -170,7 +172,7 @@ static int64_t fork_task(Jobs *jobs,Task *parent,int vfork)
     if(vfork){child->vfork_parent=(int)(parent-jobs->tasks);child->vfork_parent_pid=parent->process.ns.pid;child->vfork_token=++parent->vfork_wait_token;parent->state=VFORK_WAIT;jobs->memories[child->mm].refs++;}
     else{
         MemorySlot *slot=&jobs->memories[child->mm];slot->used=slot->owned=1;slot->refs=1;
-        slot->memory=*parent->cpu.m;slot->memory.bytes=bytes;slot->memory.process=&child->process;
+        slot->memory.process=&child->process;
         child->cpu.m=&slot->memory;child->process.guest_bytes=bytes;child->process.memory_context=&slot->memory;
     }
     child->state=RUN;jobs->forks++;parent->cpu.result->forks++;
@@ -379,6 +381,12 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
                 if(jobs->world.clock<UINT64_MAX)jobs->world.clock++;
                 if(status==RYZ_CPU_MOVED){status=RYZ_VM_OK;progress=1;break;}
                 if(status==RYZ_CPU_BLOCKED){task->blocked=1;result->blocked_syscalls++;status=RYZ_VM_OK;break;}
+                if(status==RYZ_VM_MAP_ERROR && task->cpu.m->bus_valid){
+                    SignalEvent event;uint64_t handler=little(RYZ_ACTION(&task->process,6),8);
+                    memset(&event,0,sizeof(event));event.sig=7;event.code=2;event.address=task->cpu.m->bus_address;task->cpu.m->bus_valid=0;task->cpu.fault=0;
+                    if(handler<=1 || (task->process.signal_mask & 64) || !signal_frame(task,&event))signal_fatal(jobs,task,7);
+                    status=RYZ_VM_OK;
+                }
                 if(status!=RYZ_VM_OK)goto done;
                 task->blocked=0;progress=1;
                 if(task->process.exited){exited(jobs,task);break;}

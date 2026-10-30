@@ -33,6 +33,7 @@ static char runtime[] = "linux-amd64-runtime-v1\n"
     "signal-depth=8 realtime-queue=33 per-task-standard-signals=coalesced\n"
     "dynamic=explicit-interpreter-and-library-grants pie=true tls=guest-linker\n"
     "time=logical-microsecond-per-instruction timers=alarm,setitimer,nanosleep,sigtimedwait\n"
+    "memory=shared-guest-files shared-file-pages=64 sync=instruction-and-syscall-boundaries bus=guest-SIGBUS\n"
     "entropy=native-OS-capability,1MiB-group-limit threads=cooperative sockets=local-streams,explicit-TCP-resources general-linux=false\n";
 static char network[] = "linux-amd64-tcp-resources-v1\n"
     "grant=guest-IP:port=tcp!native-host!port routing=exact-explicit-grant\n"

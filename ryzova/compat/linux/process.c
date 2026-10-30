@@ -113,7 +113,7 @@ int ryz_prepare_job(const unsigned char *image,size_t length,unsigned char *aren
     uint64_t bias,low=UINT64_MAX,high=0,main_high=0,phoff,phnum,phdr=0,interp_base=0,cap,top,stack,at;
     uint64_t av[RYZ_PROCESS_ARGS],ev[RYZ_PROCESS_ARGS],aux[28],random;
     const RyzLinuxExec *interpreter=NULL;const char *path=NULL;unsigned int found=0;
-    if(ryz_elf64_plan(image,length,&strict)==RYZ_ELF_OK)return ryz_prepare_process(image,length,arena,capacity,args,m,entry,initial_stack);
+    if(ryz_elf64_plan(image,length,&strict)==RYZ_ELF_OK){int status=ryz_prepare_process(image,length,arena,capacity,args,m,entry,initial_stack);if(status==RYZ_VM_OK)m->world=world;return status;}
     if(!image || length<64 || length>RYZ_PROCESS_IMAGE_MAX || !arena || !args || !m || !world || !world->random ||
        !args->argc || args->argc>RYZ_PROCESS_ARGS || args->envc>RYZ_PROCESS_ARGS || !args->argv || (args->envc && !args->envp))return RYZ_VM_BAD_INPUT;
     bias=le(image+16,2)==3?UINT64_C(0x400000):0;
@@ -142,7 +142,7 @@ int ryz_prepare_job(const unsigned char *image,size_t length,unsigned char *aren
     }
     cap=(capacity<RYZ_PROCESS_MAX_SPAN?capacity:RYZ_PROCESS_MAX_SPAN)&~UINT64_C(4095);
     if(cap<RYZ_PROCESS_STACK+2*RYZ_PAGE || high-low>cap-RYZ_PROCESS_STACK-RYZ_PAGE || low>UINT64_C(0x0000800000000000)-cap)return RYZ_VM_MAP_ERROR;
-    memset(m,0,sizeof(*m));memset(arena,0,(size_t)cap);m->bytes=arena;m->base=low;m->size=cap;m->dynamic=1;
+    memset(m,0,sizeof(*m));memset(arena,0,(size_t)cap);m->bytes=arena;m->base=low;m->size=cap;m->dynamic=1;m->world=world;
     m->heap=m->brk=main_high;m->stack=low+cap-RYZ_PROCESS_STACK;
     for(k=0;k<count;k++)for(i=0;i<plans[k].load_count;i++){
         RyzElf64Segment *s=&plans[k].loads[i];

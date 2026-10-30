@@ -146,7 +146,7 @@ static int vfs_slot(RyzLinuxWorld *w)
         if(!w->nodes[i].used)return (int)i;
         if(w->nodes[i].linked || w->nodes[i].directory)continue;
         if(w->nodes[i].backing)return (int)i;
-        if(vfs_nlink(w,i))continue;
+        if(vfs_nlink(w,i) || w->mapped_nodes[i])continue;
         held=0;
         for(j=0;j<RYZ_WORLD_DESCRIPTIONS;j++)if(w->descriptions[j].used && w->descriptions[j].refs &&
             w->descriptions[j].fd.node==RYZ_NS_VFS && w->descriptions[j].fd.vnode==i)held=1;
@@ -315,6 +315,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
             if(f->mode==0)return -22;
             if(r->rsi>RYZ_LINUX_FILE_MAX)return -27;
             if(r->rsi>node->size)memset(node->bytes+node->size,0,(size_t)r->rsi-node->size);
+            if(r->rsi<node->size)memset(node->bytes+(size_t)r->rsi,0,RYZ_LINUX_FILE_MAX-(size_t)r->rsi);
             node->size=(size_t)r->rsi;vfs_stamp(p,node,1);return 0;
         }
         if(nr==8){
@@ -387,7 +388,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
         if(index<0){index=vfs_create(p,path,0,(unsigned int)mode);if(index<0){p->world->descriptions[id-1].used=0;return index;}}
         f=&p->fds[i];memset(f,0,sizeof(*f));f->description=id;f->open=1;f->node=RYZ_NS_VFS;f->vnode=RYZ_VFS_INDEX(p->world,index);
         f->mode=(int)(flags & 3);f->cloexec=(flags & 02000000)!=0;f->append=(flags & 02000)!=0;f->nonblock=(flags & 04000)!=0;
-        if(flags & 01000){RYZ_VFS_NODE(p->world,index)->size=0;vfs_stamp(p,RYZ_VFS_NODE(p->world,index),1);}
+        if(flags & 01000){memset(RYZ_VFS_NODE(p->world,index)->bytes,0,RYZ_LINUX_FILE_MAX);RYZ_VFS_NODE(p->world,index)->size=0;vfs_stamp(p,RYZ_VFS_NODE(p->world,index),1);}
         return i;
     }
     if(nr==88 || nr==266){
@@ -423,6 +424,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
         if(node->directory)return -21;
         if(r->rsi>RYZ_LINUX_FILE_MAX)return -27;
         if(r->rsi>node->size)memset(node->bytes+node->size,0,(size_t)r->rsi-node->size);
+        if(r->rsi<node->size)memset(node->bytes+(size_t)r->rsi,0,RYZ_LINUX_FILE_MAX-(size_t)r->rsi);
         node->size=(size_t)r->rsi;vfs_stamp(p,node,1);return 0;
     }
     if(nr==82){

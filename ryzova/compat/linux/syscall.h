@@ -97,6 +97,7 @@ typedef struct RyzLinuxWorld {
     void *random_context;
     RyzVnode nodes[RYZ_VFS_NODES];
     uint64_t next_inode, clock,random_bytes;
+    unsigned int mapped_nodes[RYZ_VFS_NODES];
     unsigned int memory_barriers[8];
     RyzLinuxDescription descriptions[RYZ_WORLD_DESCRIPTIONS];
     RyzLinuxPipe pipes[RYZ_WORLD_PIPES];

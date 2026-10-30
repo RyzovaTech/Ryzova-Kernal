@@ -573,7 +573,7 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
         if(handled)return answer;
     }
     switch (nr) {
-    case 9: case 10: case 11: case 12:
+    case 9: case 10: case 11: case 12: case 26:
         return p->memory_call == NULL ? -L_ENOSYS :
                p->memory_call(p->memory_context, regs);
     case 13: case 14:return signal_state(p,regs);

@@ -23,7 +23,7 @@ and destination write permissions still apply.
 
 This is a bounded guest filesystem, not a host mount. Explicit immutable image
 and library grants cannot be hardlinked or replaced. Crossing into protected
-resource paths is denied. `AT_EMPTY_PATH`, shared file mappings, O_PATH descriptors and linking
+resource paths is denied. `AT_EMPTY_PATH`, O_PATH descriptors and linking
 unlinked inodes through procfs are not implemented; unsupported linkat flag bits
 return EINVAL. The fixed 32-entry namespace limit remains; aliases consume entries
 but do not copy file data or allocate a new inode number.
@@ -62,3 +62,6 @@ source challenges, fixture hashes, shared-data reload, single-alias legacy outpu
 relative symlink reload and the BusyBox workflow. Passing this extension does not
 establish arbitrary Linux application compatibility, operational ARM64 or physical
 hardware qualification. Exact qualification results belong to the PR/source head.
+
+Shared file mappings and their inode ownership are implemented in
+[COMPACT-LINUX-SHARED-MAPPINGS.md](COMPACT-LINUX-SHARED-MAPPINGS.md).

@@ -13,10 +13,21 @@
 #define RYZ_READ 4U
 #define RYZ_WRITE 2U
 #define RYZ_EXEC 1U
+#define RYZ_FILEMAP_PAGES 64U
+/* Sparse file-page bindings; dirty baselines are allocated only on first map. */
+typedef struct RyzFilePage {
+    uint64_t page, offset;
+    unsigned int vnode, maywrite, borrowed,dirty_start,dirty_end;
+} RyzFilePage;
 typedef struct RyzLinuxMemory {
     unsigned char *bytes;
     uint64_t base, size, heap, brk, stack;
     int dynamic;
+    RyzLinuxWorld *world;
+    RyzFilePage filepages[RYZ_FILEMAP_PAGES];
+    unsigned int file_count, bus_valid;
+    uint64_t file_dirty, bus_address;
+    unsigned char *file_baseline;
     RyzLinuxProcess *process;
     unsigned char pages[RYZ_PROCESS_MAX_SPAN / RYZ_PAGE];
 } RyzLinuxMemory;
@@ -46,6 +57,9 @@ int ryz_prepare_process(const unsigned char *,size_t,unsigned char *,size_t,
     const RyzProcessArgs *,RyzLinuxMemory *,uint64_t *,uint64_t *);
 int ryz_memory_access(RyzLinuxMemory *, uint64_t, uint64_t, unsigned int);
 int64_t ryz_memory_call(void *, const RyzLinuxRegs *);
+void ryz_memory_commit(RyzLinuxMemory *,int);
+void ryz_memory_drop(RyzLinuxMemory *);
+int ryz_memory_fork(RyzLinuxMemory *,RyzLinuxMemory *,unsigned char *);
 int ryz_memory_read(void *, uint64_t, uint64_t);
 int ryz_memory_write(void *, uint64_t, uint64_t);
 int ryz_cpu_run(RyzLinuxProcess *, RyzLinuxMemory *, uint64_t entry,

@@ -120,6 +120,7 @@ static int signal_frame(Task *task,SignalEvent *event)
     encode(sc+128,c->ip,8);encode(sc+136,c->flags,8);encode(sc+144,0x33,2);encode(sc+150,0x2b,2);
     encode(sc+168,save_mask,8);encode(sc+184,fp,8);encode(b+304,save_mask,8);
     info=b+312;encode(info,event->sig,4);encode(info+8,(uint32_t)event->code,4);encode(info+16,event->pid,4);encode(info+20,event->uid,4);
+    if(event->sig==7 && event->code==2)encode(info+16,event->address,8);
     if(event->sig==17)encode(info+24,(uint32_t)event->status,4);
     fpbytes=c->m->bytes+(size_t)(fp-c->m->base);encode(fpbytes,0x37f,2);encode(fpbytes+24,0x1f80,4);encode(fpbytes+28,0xffff,4);
     memcpy(fpbytes+160,c->xmm,sizeof c->xmm);
