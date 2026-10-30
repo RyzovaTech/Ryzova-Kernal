@@ -1,8 +1,9 @@
 # CLX-02: root filesystem and resource views
 
-Status: **in progress**. This first increment implements the isolated guest root
-profile. It does not complete FS-ROOT, FS-ISOLATION or FS-PERSIST, and does not
-qualify the Linux V1 application targets.
+Status: **implementation candidate complete; exact-head qualification pending**.
+The root, live mount, view/revocation and recovery implementations are present.
+FS-ROOT, FS-ISOLATION and FS-PERSIST remain partial until CI/native evidence is
+collected. Linux V1 application targets are not qualified.
 
 ## Integration and scope
 
@@ -16,9 +17,9 @@ checks or publishing kernel binaries. Historical audit records remain unchanged.
 | Increment | Result | Remaining acceptance |
 | --- | --- | --- |
 | 2A | Opt-in guest root, metadata/links, snapshot/restart, early BusyBox file probe | Implemented; exact-head CI/native evidence recorded in the PR |
-| 2B | Live filesystem resource mounts with explicit guest destinations, rights, finite quotas and host callbacks | Pending |
-| 2C | Shared environment views and narrower per-application grants, inheritance and revocation | Pending |
-| 2D | Mount restart/recovery, failure atomicity, complete root/isolation/persistence native acceptance and target blocker report | Pending |
+| 2B | Live filesystem resource mounts with explicit guest destinations, rights, finite quotas and host callbacks | Implemented; qualification pending |
+| 2C | Shared environment views and narrower per-application grants, inheritance and revocation | Implemented; qualification pending |
+| 2D | Mount restart/recovery, failure atomicity, complete root/isolation/persistence native acceptance and target blocker report | Implemented; qualification pending |
 
 Do not promote a phase because one increment passes. The three phase gates remain
 open until 2B–2D pass as well. Continue the frozen application probes throughout;
@@ -46,8 +47,8 @@ bounded development primitives, not sufficient budgets for the V1 toolchain.
 paths. A guest pathname never becomes a host pathname; symbolic links cannot
 acquire host access. Exact executable/image grants remain immutable and explicit.
 Guest-created `/etc/settings` is guest state, not the host's `/etc/settings`.
-This root profile has no live mount callback and no per-application narrowing or
-revocation yet. Those are separate, necessary 2B/2C work.
+The completion candidate below adds explicit live mount callbacks and narrower
+application views/revocation; the first increment alone did not supply them.
 
 ## Snapshot boundary
 
@@ -84,3 +85,117 @@ runtime invocations, the unmodified BusyBox probe and two pre-execution negative
 imports. Missing cases, incorrect results, digests or challenges fail qualification.
 Native JSON explicitly retains `phase_complete=false` with remaining work. The
 inherited kernel and compatibility gates remain required alongside this increment.
+
+## Completion candidate: 2B–2D
+
+The remaining implementation is now present; **exact-head CI/native qualification
+is pending**. Acceptance IDs remain partial until that evidence is collected.
+
+Live directory capabilities use the following launcher interface:
+
+```sh
+compact-linux -r -M 'rw:/home/share=/trusted/directory' ELF args...
+compact-linux -r -M 'r:/home/share=/trusted/directory' \
+  -A '@entry:1:0' -A '/worker:1:0' -x '/worker=/trusted/worker.elf' ELF args...
+```
+
+`-M` installs one explicitly selected host/Plan 9 directory at a canonical guest
+path. `r` permits lookup/read; `rw` also permits mutation. The core passes only
+validated relative paths and guest-buffer slices to trusted, bounded backend
+callbacks. POSIX traversal walks open directory descriptors with NOFOLLOW on
+every component. Native Plan 9 uses the launcher's private namespace, where
+native filesystem walks have no host symbolic-link mechanism. A backend is
+trusted code; this API is not a sandbox for arbitrary C callbacks or a promise of
+time-bounded access to arbitrary malfunctioning remote filesystem servers.
+
+The mount root and its guest ancestors cannot be renamed/unlinked to bypass the
+grant. Host symlinks, special POSIX files, cross-boundary links/renames, mounted
+executable loading and mmap are denied. Managed-root symlinks may refer into a
+mount, but lookup still checks the current view and revocation state. Virtual
+root operations and exact immutable ELF grants retain their previous behavior.
+
+Views use mount-index bitmasks, starting at bit 0 in `-M` order. `-A` associates
+read/write masks with a canonical executable grant; `@entry` selects the initial
+application. Write bits must be a subset of read bits. Fork/threads inherit the
+caller's view. Successful exec intersects the existing view with its declared
+policy; re-exec through a more privileged alias cannot restore removed rights.
+The optional Flex extension `prctl(0x46534e53, read_mask, write_mask, 0, 0)` only
+narrows the calling task's view. This is a documented Flex extension, not an
+upstream Linux prctl option. Threads within one application share memory and may
+intentionally cooperate; narrower views do not isolate mutually hostile threads.
+The managed environment root remains shared; views narrow external filesystem
+capabilities. Network grants receive their separate acceptance in CLX-05.
+
+`-K /trusted/control` opens an administrator-selected control file. A first byte
+`1` permits the configured grants. Any other content/read failure revokes a mount
+on its next access, permanently for that invocation. Checks include already-open
+fds, readv/writev, positioned I/O, stat, seek, cwd, dirfd and enumeration. Close
+still releases the backend handle after revocation. The control descriptor is
+never implicitly mapped into the guest. The qualification fixture explicitly
+grants a separate admin capability solely to exercise the real revoke path.
+
+### Bounded filesystem profiles
+
+| Behavior | Managed guest root | Linux-host directory reference | Native Plan 9 directory |
+| --- | --- | --- | --- |
+| Directory/file operations, metadata, bounded I/O | Existing guest model | Live host operations | Live native/9P operations |
+| Rename within/across guest directories | Existing atomic guest operation | Host renameat | Same-directory, absent destination only |
+| Existing-destination rename | Existing replacement rules | Host atomic replacement | EEXIST; existing data preserved |
+| Cross-directory native rename | Guest model | Supported | EXDEV; existing data preserved |
+| Hard/symbolic links | Existing guest model | Deliberately denied across resource interface | Denied |
+| File-backed mmap | Existing bounded guest-file support | Denied for resource fds | Denied for resource fds |
+| fsync durability | Snapshot boundary, not power-loss proof | Real host fsync | EOPNOTSUPP; no false durability acknowledgement |
+
+A native 9P directory is not advertised as a general POSIX filesystem. Projects
+requiring guest hardlinks or replacement rename use the managed root. A future
+application requirement that needs additional filesystem semantics reopens the
+owning filesystem gate; it must not silently be relabeled as a CPU/network fix.
+Directory fds/cwd cache their canonical guest name; a concurrent external rename
+of that directory can invalidate relative operations, which fail closed. This
+profile does not claim Linux's renamed-directory-handle semantics or concurrent
+multiwriter append atomicity. These limitations do not change the V1 target
+versions or promote any application workflow to passed.
+
+Limits: four mount capabilities, sixteen per-executable policies, the existing
+sixteen guest fds/sixty-four descriptions, 64-KiB regular files, 32 enumerated
+children per directory, 32 successful resource creations per invocation, 4-MiB
+aggregate file data transfer and 65,536 backend calls. Existing instruction/task
+limits remain enforced. Metadata enumeration is separately bounded by the call
+and directory-entry limits. Backend handles close once on last-description
+release, including fork/dup/exec, fault and revocation paths.
+
+### Persistence and recovery
+
+Writes are live: a second capability/node sees the same backend data, and a new
+runtime invocation reads it without a snapshot import. A guest step-limit fault
+retains completed backend writes; it cannot roll back or claim uncompleted writes.
+Callback failures and impossible reply lengths return errno without advancing
+file offsets or reported transfer counts. Rejected oversized truncating opens,
+creation quota exhaustion and native rename failures preserve existing files.
+
+FLEXFS4 exports only managed guest state and inert mount-point directories. It
+contains no external file contents, host path, native handle, view or revocation
+credential. Reload without an explicit mount grants no backend access. Recovery
+requires explicit reattachment to the same selected directory; a readonly
+reattachment remains readonly. This proves restart/completed-operation recovery,
+not filesystem journaling or physical power-loss durability. Existing exclusive
+snapshot-output creation and corruption/topology checks remain required.
+
+### Target probes and remaining owners
+
+| Frozen target | CLX-02 result | Remaining owner |
+| --- | --- | --- |
+| BusyBox 1.35.0 | Unmodified ash/mkdir/printf/cp/mv/cat on managed root and live mount; actual source file persists | Full applets, PTY/jobs and locks: CLX-06/07 |
+| musl 1.2.6 | Inherited dynamic-loader/thread regressions remain required | Developer footprint/API and final workload budgets: CLX-03/04/07 |
+| CPython 3.12.10 | Named target has no locked runnable fixture; not qualified | Build locks and actual binary/ISA/process probes: CLX-03/04/07 |
+| Git 2.49.0 | Named target has no locked runnable fixture; native live-mount rename limitations explicit | Managed-root workflow/locks: CLX-07; HTTPS: CLX-05 |
+| GCC 14.2.0, binutils 2.43.1, make 4.4.1 | Named targets have no locked runnable fixtures; TinyCC is not substituted | Memory/ISA: CLX-03/04; actual toolchain/locks: CLX-07 |
+
+`tests/test_phase9_mounts.py` and its C fixtures exercise real backend changes,
+restart without export, separate-node aliases, view inheritance/re-exec,
+revocation of open fds, hidden enumeration, host traversal/link denial, finite
+quotas, low-fd-limit handle lifetimes, sanitizers and callback fault injection.
+`scripts/phase9_mounts.py` adds mandatory source-built QEMU challenges, host-data
+comparison, independent restart/reattach, negative rights/revocation, guest-fault
+recovery and the pinned BusyBox probe. Its evidence must pass alongside the prior
+root-tree gate and all inherited native checks. Linux V1 remains incomplete.

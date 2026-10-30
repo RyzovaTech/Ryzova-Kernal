@@ -72,6 +72,7 @@ int ryz_linux_process_init(RyzLinuxProcess *p, uint32_t namespace_id,
     p->guest_size = guest_size;
     p->write_output = write_output;
     p->write_context = write_context;
+    p->fs_read_mask=p->fs_write_mask=(1U<<RYZ_FS_MOUNTS)-1;
     p->next_description=4;p->file_umask=0022;
     p->fds[0].description=1;p->fds[1].description=2;p->fds[2].description=3;
     p->fds[0].node=RYZ_NS_STDIN;p->fds[1].node=RYZ_NS_STDOUT;p->fds[2].node=RYZ_NS_STDERR;
@@ -86,7 +87,7 @@ static void world_pull(RyzLinuxProcess *p)
     unsigned int i;int cloexec;
     if(!p->world || p->fd_detached)return;
     if(p->fd_owner)memcpy(p->fds,p->fd_owner->fds,sizeof p->fds);
-    if(p->fs_owner){p->cwd=p->fs_owner->cwd;p->vfs_cwd=p->fs_owner->vfs_cwd;p->file_umask=p->fs_owner->file_umask;}
+    if(p->fs_owner){memcpy(p->resource_cwd,p->fs_owner->resource_cwd,sizeof p->resource_cwd);p->cwd=p->fs_owner->cwd;p->vfs_cwd=p->fs_owner->vfs_cwd;p->file_umask=p->fs_owner->file_umask;}
     p->output_bytes=p->world->output_bytes;
     for(i=0;i<RYZ_LINUX_FD_MAX;i++)if(p->fds[i].open){
         cloexec=p->fds[i].cloexec;
@@ -95,6 +96,8 @@ static void world_pull(RyzLinuxProcess *p)
     }
 }
 static void net_cleanup(RyzLinuxWorld *);
+static void resource_cleanup(RyzLinuxWorld *);
+static int64_t resource_io(RyzLinuxProcess *,uint64_t,uint64_t,uint64_t,int);
 static void world_finish(RyzLinuxProcess *p,const unsigned int *old)
 {
     RyzLinuxWorld *w=p->world;
@@ -117,9 +120,10 @@ static void world_finish(RyzLinuxProcess *p,const unsigned int *old)
             if(w->descriptions[j].used && w->descriptions[j].fd.node==RYZ_NS_PIPE && w->descriptions[j].fd.pipe==i)active=1;
         if(!active)memset(&w->pipes[i],0,sizeof(w->pipes[i]));
     }
+    resource_cleanup(w);
     net_cleanup(w);
     if(p->fd_owner)memcpy(owner->fds,p->fds,sizeof p->fds);
-    if(p->fs_owner){p->fs_owner->cwd=p->cwd;p->fs_owner->vfs_cwd=p->vfs_cwd;p->fs_owner->file_umask=p->file_umask;}
+    if(p->fs_owner){memcpy(p->fs_owner->resource_cwd,p->resource_cwd,sizeof p->resource_cwd);p->fs_owner->cwd=p->cwd;p->fs_owner->vfs_cwd=p->vfs_cwd;p->fs_owner->file_umask=p->file_umask;}
     w->output_bytes=p->output_bytes;
 }
 void ryz_world_attach(RyzLinuxProcess *p,RyzLinuxWorld *w)
@@ -134,6 +138,7 @@ void ryz_world_attach(RyzLinuxProcess *p,RyzLinuxWorld *w)
 void ryz_world_fork(RyzLinuxProcess *parent,RyzLinuxProcess *child)
 {
     unsigned int i;world_pull(parent);child->cwd=parent->cwd;child->vfs_cwd=parent->vfs_cwd;child->file_umask=parent->file_umask;memcpy(child->fds,parent->fds,sizeof(child->fds));
+    memcpy(child->resource_cwd,parent->resource_cwd,sizeof child->resource_cwd);
     for(i=0;i<RYZ_LINUX_FD_MAX;i++)if(child->fds[i].open)child->world->descriptions[child->fds[i].description-1].refs++;
 }
 void ryz_world_close(RyzLinuxProcess *p,int cloexec_only)
@@ -210,6 +215,7 @@ static int64_t do_write(RyzLinuxProcess *p, uint64_t fd,
     if (count != 0 && p->memory_read != NULL &&
         !p->memory_read(p->memory_context, address, count))
         return -L_EFAULT;
+    if(p->fds[fd].node==RYZ_NS_RESOURCE)return resource_io(p,fd,address,count,1);
     if(p->fds[fd].node==RYZ_NS_VFS)return vfs_write(p,fd,address,count);
     if (p->fds[fd].node == RYZ_NS_STDIN)
         return -L_EBADF;
@@ -261,6 +267,7 @@ static int64_t do_read(RyzLinuxProcess *p, uint64_t fd,
         return -L_EBADF;
     if (count > RYZ_LINUX_IO_MAX)
         return -L_EINVAL;
+    if(p->fds[fd].node==RYZ_NS_RESOURCE)return resource_io(p,fd,address,count,0);
     if(p->fds[fd].node==RYZ_NS_SOCKET && p->world)return net_io(p,fd,address,count,0,0);
     if(count==0)return p->fds[fd].mode==1?-L_EBADF:0;
     if (!guest_range(p, address, count, &buf))
@@ -534,6 +541,7 @@ static int64_t signal_state(RyzLinuxProcess *p, const RyzLinuxRegs *r)
 }
 #include "syscall_net.h"
 #include "syscall_vfs.h"
+#include "syscall_resources.h"
 
 static int64_t do_readv(RyzLinuxProcess *p,const RyzLinuxRegs *r)
 {
@@ -569,7 +577,9 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
         return -L_EPERM;
     nr = regs->rax;
     if(p->world){
-        int handled;int64_t answer=vfs_dispatch(p,regs,&handled);
+        int handled;int64_t answer=resource_dispatch(p,regs,&handled);
+        if(handled)return answer;
+        answer=vfs_dispatch(p,regs,&handled);
         if(handled)return answer;
     }
     switch (nr) {
@@ -668,6 +678,7 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
             if(!(fd & UINT64_C(0x80000000))){
                 if(fd>=RYZ_LINUX_FD_MAX || !p->fds[fd].open)revents=32;
                 else if(p->fds[fd].node==RYZ_NS_SOCKET && p->world)revents=net_poll(p,fd,(unsigned int)events);
+                else if(p->fds[fd].node==RYZ_NS_RESOURCE && p->world && resource_rights(p,p->world->resource_open[p->fds[fd].description-1].mount,1))revents=8;
                 else if(p->fds[fd].node==RYZ_NS_PIPE && p->world){
                     RyzLinuxPipe *pipe=&p->world->pipes[p->fds[fd].pipe];
                     if(p->fds[fd].mode==0){

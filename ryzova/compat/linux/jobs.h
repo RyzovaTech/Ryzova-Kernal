@@ -22,6 +22,7 @@ typedef struct RyzJobConfig {
     void *random_context;
     RyzFilesystemResources *filesystem;
     const RyzNetworkResources *network;
+    const RyzFsResources *resources;
     unsigned int root_tree; /* 0: historical /tmp, 1: isolated guest root. */
 } RyzJobConfig;
 int ryz_vm_run_jobs_elf(const unsigned char *,size_t,unsigned char *,size_t,

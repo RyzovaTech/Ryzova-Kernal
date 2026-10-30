@@ -282,7 +282,7 @@
       "acceptance": "Mount a declared root with /etc,/home,/usr,/var and /tmp; create, edit, rename, enumerate and reload a project tree.",
       "state": "partial",
       "evidence": null,
-      "progress": "CLX-02 increment 2A: opt-in guest root and explicit-profile snapshots; live mounts/recovery still pending",
+      "progress": "2A-2D implementation candidate: managed root, explicit live directory capabilities, monotonic application views/revocation, restart and failure recovery; exact-head CI/native qualification pending",
       "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md"
     },
     {
@@ -290,8 +290,10 @@
       "phase": "CLX-02",
       "targets": [],
       "acceptance": "Application and environment namespace views enforce grants; traversal, symlink and hardlink attempts cannot reach an ungranted host resource.",
-      "state": "pending",
-      "evidence": null
+      "state": "partial",
+      "evidence": null,
+      "progress": "2A-2D implementation candidate: managed root, explicit live directory capabilities, monotonic application views/revocation, restart and failure recovery; exact-head CI/native qualification pending",
+      "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md"
     },
     {
       "id": "FS-PERSIST",
@@ -300,7 +302,7 @@
       "acceptance": "Changes survive an independent environment restart; denied writes and failed imports do not overwrite existing output; recovery behavior is documented.",
       "state": "partial",
       "evidence": null,
-      "progress": "CLX-02 increment 2A: opt-in guest root and explicit-profile snapshots; live mounts/recovery still pending",
+      "progress": "2A-2D implementation candidate: managed root, explicit live directory capabilities, monotonic application views/revocation, restart and failure recovery; exact-head CI/native qualification pending",
       "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md"
     },
     {

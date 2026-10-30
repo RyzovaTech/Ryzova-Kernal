@@ -40,32 +40,41 @@ static int vfs_lookup(RyzLinuxWorld *w,const char *path)
     }
     return (int)node;
 }
+static int resource_directory(RyzLinuxProcess *,const char *,int *);
+static int resource_cwd(RyzLinuxProcess *,char *);
+static int resource_dirfd(RyzLinuxProcess *,uint64_t,char *);
+static int resource_visible(RyzLinuxProcess *,unsigned int);
+static int vfs_node_path(RyzLinuxWorld *w,unsigned int node,char *out)
+{
+    unsigned int chain[RYZ_VFS_NODES],count=0;size_t n,k;
+    while(node){
+        if(count>=RYZ_VFS_NODES || !w->nodes[node].linked)return -2;
+        chain[count++]=node;node=w->nodes[node].parent;
+    }
+    if(w->root_tree){memcpy(out,"/",2);n=1;}else{memcpy(out,"/tmp",5);n=4;}
+    while(count){
+        node=chain[--count];k=strlen(w->nodes[node].name);
+        if(n+k+(n>1?1:0)+1>RYZ_NS_PATH_MAX)return -36;
+        if(n>1)out[n++]='/';
+        memcpy(out+n,w->nodes[node].name,k+1);n+=k;
+    }
+    return 0;
+}
 static int vfs_cwd(RyzLinuxProcess *p,char *out)
 {
-    unsigned int node,chain[RYZ_VFS_NODES],count=0;size_t n=0,k;
+    if(p->resource_cwd[0])return resource_cwd(p,out);
     if(!p->vfs_cwd){
         const char *cwd=p->cwd==RYZ_NS_TMP?"/tmp":(p->cwd==RYZ_NS_PROC_SELF?"/proc/self":"/");
         memcpy(out,cwd,strlen(cwd)+1);return 0;
     }
-    node=p->vfs_cwd-1;
-    while(node){
-        if(count>=RYZ_VFS_NODES || !p->world->nodes[node].linked)return -2;
-        chain[count++]=node;node=p->world->nodes[node].parent;
-    }
-    if(p->world->root_tree){memcpy(out,"/",2);n=1;}else{memcpy(out,"/tmp",5);n=4;}
-    while(count){
-        node=chain[--count];k=strlen(p->world->nodes[node].name);
-        if(n+k+(n>1?1:0)+1>RYZ_NS_PATH_MAX)return -36;
-        if(n>1)out[n++]='/';
-        memcpy(out+n,p->world->nodes[node].name,k+1);n+=k;
-    }
-    return 0;
+    return vfs_node_path(p->world,p->vfs_cwd-1,out);
 }
 /* Only guest namespace directories are traversed. A link is a path string,
  * never authority to resolve a host path or acquire a new resource grant. */
 static int vfs_directory(RyzLinuxProcess *p,const char *path)
 {
     int node=vfs_lookup(p->world,path);size_t i,n=strlen(path);
+    {int handled,answer=resource_directory(p,path,&handled);if(handled)return answer;}
     for(i=0;i<p->world->exec_count;i++)if(!strcmp(path,p->world->execs[i].path))return -20;
     if(node>=0){
         if(!p->world->nodes[node].directory)return -20;
@@ -85,11 +94,12 @@ static int vfs_normalize(RyzLinuxProcess *p,uint64_t dirfd,const char *source,ch
     if(source[0]=='/'){out[0]='/';out[1]=0;}
     else if(dirfd==L_AT_FDCWD){code=vfs_cwd(p,out);if(code)return code;}
     else{
-        RyzLinuxProcess copy;
+        if(dirfd<RYZ_LINUX_FD_MAX && p->fds[dirfd].open && p->fds[dirfd].node==RYZ_NS_RESOURCE){code=resource_dirfd(p,dirfd,out);if(code)return code;goto relative_ready;}
         if(dirfd>=RYZ_LINUX_FD_MAX || !p->fds[dirfd].open)return -9;
         if(p->fds[dirfd].node!=RYZ_NS_VFS || !p->world->nodes[p->fds[dirfd].vnode].directory)return -20;
-        copy=*p;copy.vfs_cwd=copy.fds[dirfd].vnode+1;code=vfs_cwd(&copy,out);if(code)return code;
+        code=vfs_node_path(p->world,p->fds[dirfd].vnode,out);if(code)return code;
     }
+ relative_ready:
     n=strlen(out);
     while(pending[i]){
         while(pending[i]=='/')i++;
@@ -211,6 +221,7 @@ static int64_t vfs_getdents(RyzLinuxProcess *p,uint64_t fd,uint64_t address,uint
         else{
             entry=&p->world->nodes[cursor-2];
             if(cursor==2 || !entry->used || !entry->linked || entry->parent!=f->vnode){cursor++;continue;}
+            if(!resource_visible(p,(unsigned int)(cursor-2))){cursor++;continue;}
             name=entry->name;entry=RYZ_VFS_NODE(p->world,cursor-2);ino=entry->inode;
         }
         n=strlen(name)+1;record=(19+n+7)&~(size_t)7;
@@ -312,7 +323,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
         if(nr==5)return vfs_stat(p,f->vnode,r->rsi);
         if(nr==217)return vfs_getdents(p,fd,r->rsi,r->rdx);
         if(nr==74 || nr==75)return 0;
-        if(nr==81){if(!node->directory)return -20;if(!(node->permissions & 0100))return -13;p->vfs_cwd=f->vnode+1;return 0;}
+        if(nr==81){if(!node->directory)return -20;if(!(node->permissions & 0100))return -13;p->resource_cwd[0]=0;p->vfs_cwd=f->vnode+1;return 0;}
         if(nr==91){node->permissions=(unsigned int)r->rsi & 0777;vfs_stamp(p,node,0);return 0;}
         if(nr==77){
             if(node->directory)return -21;
@@ -365,7 +376,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
     }
     if(index==-10000){
         if((nr==83 || nr==258) && (strcmp(path,"/")==0 || strcmp(path,"/proc/self")==0))return -17;
-        if(nr==80 && strcmp(path,"/")==0){p->vfs_cwd=0;p->cwd=RYZ_NS_ROOT;return 0;}
+        if(nr==80 && strcmp(path,"/")==0){p->resource_cwd[0]=0;p->vfs_cwd=0;p->cwd=RYZ_NS_ROOT;return 0;}
         /* Protected resources use the same canonical guest path resolver. */
         if(nr==82 || nr==83 || nr==84 || nr==87 || nr==88 || nr==258 || nr==263 || nr==266 || nr==76 || nr==90)return -13;
         if(nr==89 || nr==267)return -22;
@@ -421,7 +432,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
     }
     if(nr==4 || nr==6 || nr==262)return vfs_stat(p,(unsigned int)index,nr==262?r->rdx:r->rsi);
     if(nr==21){if(r->rsi & ~UINT64_C(7))return -22;return (r->rsi & ~(uint64_t)(node->permissions>>6))?-13:0;}
-    if(nr==80){if(!node->directory)return -20;if(!(node->permissions & 0100))return -13;p->vfs_cwd=(unsigned int)index+1;return 0;}
+    if(nr==80){if(!node->directory)return -20;if(!(node->permissions & 0100))return -13;p->resource_cwd[0]=0;p->vfs_cwd=(unsigned int)index+1;return 0;}
     if(nr==90){node->permissions=(unsigned int)r->rsi & 0777;vfs_stamp(p,node,0);return 0;}
     if(nr==76){
         if(!(node->permissions & 0200))return -13;

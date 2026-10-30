@@ -253,6 +253,7 @@ static int exec_task(Jobs *jobs,Task *task,const RyzLinuxRegs *r,int64_t *answer
     replacement->process.ns.pid=replacement->process.tgid;
     replacement->process.fd_owner=replacement->process.fs_owner=replacement->process.action_owner=NULL;
     replacement->process.fd_shares=1;replacement->process.fd_detached=0;
+    ryz_resource_exec_view(&replacement->process,path);
     replacement->thread=replacement->notified=0;replacement->leader=NULL;replacement->state=RUN;
     release_vfork(jobs,task);replacement->vfork_parent=-1;
     mm_release(jobs,task);
@@ -349,6 +350,8 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     jobs->next_pid=1001;jobs->world.execs=config->execs;jobs->world.exec_count=config->exec_count;jobs->world.random=config->random;jobs->world.random_context=config->random_context;
     jobs->world.root_tree=config->root_tree;
     if(config->filesystem && config->filesystem->input && !fs_import(&jobs->world,config->filesystem->input,config->filesystem->input_size)){free(jobs);return RYZ_VM_BAD_INPUT;}
+    jobs->world.resources=config->resources;
+    if(!ryz_resources_install(&jobs->world)){free(jobs);return RYZ_VM_BAD_INPUT;}
     jobs->world.network=config->network;
     if(config->network)jobs->world.network_start=jobs->world.network_last=config->network->now_ns(config->network->context);
     root=&jobs->tasks[0];root->mm_held=1;jobs->memories[0].used=1;jobs->memories[0].refs=1;root->cpu.m=&jobs->memories[0].memory;status=ryz_prepare_job(image,length,arena,capacity,args,&jobs->world,root->cpu.m,&entry,&stack);
@@ -357,7 +360,7 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     root->process.parent_pid=1;root->process.files=files;
     root->cpu.m->process=&root->process;root->process.memory_context=root->cpu.m;root->process.memory_read=ryz_memory_read;root->process.memory_write=ryz_memory_write;root->process.memory_call=ryz_memory_call;
     root->process.job_call=job_call;root->process.job_context=jobs;
-    ryz_world_attach(&root->process,&jobs->world);root->state=RUN;result->peak_tasks=1;
+    ryz_world_attach(&root->process,&jobs->world);ryz_resource_exec_view(&root->process,"@entry");root->state=RUN;result->peak_tasks=1;
     ryz_cpu_init(&root->cpu,&root->process,&jobs->memories[0].memory,entry,stack,result);
     status=RYZ_VM_OK;
     while(group_live(jobs,root->process.tgid)){

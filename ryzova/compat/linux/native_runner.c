@@ -3,6 +3,8 @@
 #include "jobs.h"
 #include <libsec.h>
 #include "network_plan9.h"
+#include "resource_plan9.h"
+#include "resource_cli.h"
 #define IMAGE_LIMIT (1024U * 1024U)
 
 static unsigned char *
@@ -36,6 +38,7 @@ main(int argc, char **argv)
     char *grant_text[RYZ_PROCESS_ARGS],*eq;
     RyzLinuxExec grants[RYZ_PROCESS_ARGS];
     size_t gi;
+    ResourceCLI *resources;
     RyzJobConfig config;RyzFilesystemResources filesystem;char *stateinpath=nil,*stateoutpath=nil;unsigned char *statein=nil,*stateout=nil;
     RyzNetworkResources network;RyzNetworkGrant network_grants[RYZ_NETWORK_GRANTS];NetworkHost network_hosts[RYZ_NETWORK_GRANTS];
     RyzProcessArgs args;
@@ -47,12 +50,16 @@ main(int argc, char **argv)
     RyzVmResult result;
 
     memset(&network,0,sizeof network);memset(network_grants,0,sizeof network_grants);network.grants=network_grants;network.now_ns=network_now;network.wait=network_wait;
+    resources=malloc(sizeof(*resources));if(!resources)sysfatal("allocate resource configuration");memset(resources,0,sizeof(*resources));
     memset(&filesystem,0,sizeof filesystem);
     filemode=processmode=jobsmode=0;
     memset(&config,0,sizeof(config));config.random=entropy;config.execs=grants;memset(grants,0,sizeof(grants)); inputpath=nil; argi=1;
     memset(&args,0,sizeof args);
     while(argi<argc){
-        if(strcmp(argv[argi],"-r")==0){config.root_tree=1;jobsmode=processmode=1;argi++;}
+        if(strcmp(argv[argi],"-M")==0 && argi+1<argc && resources->resources.count<RYZ_FS_MOUNTS){resources->mounts_text[resources->resources.count++]=argv[argi+1];argi+=2;}
+        else if(strcmp(argv[argi],"-A")==0 && argi+1<argc && resources->resources.view_count<16){resources->views_text[resources->resources.view_count++]=argv[argi+1];argi+=2;}
+        else if(strcmp(argv[argi],"-K")==0 && argi+1<argc && !resources->control){resources->control=argv[argi+1];argi+=2;}
+        else if(strcmp(argv[argi],"-r")==0){config.root_tree=1;jobsmode=processmode=1;argi++;}
         else if(strcmp(argv[argi],"-j")==0){jobsmode=processmode=1;argi++;}
         else if(strcmp(argv[argi],"-b")==0 && argi+1<argc){
             char *end;ulong n=strtoul(argv[argi+1],&end,10);if(!n || n>16777216 || *end)sysfatal("invalid instruction budget");config.max_steps=(uint32_t)n;argi+=2;
@@ -72,7 +79,7 @@ main(int argc, char **argv)
         else break;
     }
     if(argi>=argc || (network.wall_milliseconds && !network.count) || ((config.exec_count || config.max_steps || stateinpath || stateoutpath || network.count || network.wall_milliseconds) && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
-        fprint(2, "usage: compact-linux [-r] [-p | -j [-x guest-path[=host-ELF]]] [-n guest-IP:port=tcp!host!port] [-t network-ms] [-R snapshot-in] [-W new-snapshot-out] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
+        fprint(2, "usage: compact-linux [-r [-M rights:guest=host-dir] [-A guest-exec:read-mask:write-mask] [-K revoke-control]] [-p | -j [-x guest-path[=host-ELF]]] [-n guest-IP:port=tcp!host!port] [-t network-ms] [-R snapshot-in] [-W new-snapshot-out] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
         exits("usage");
     }
     if(rfork(RFNAMEG|RFENVG) < 0)
@@ -97,6 +104,9 @@ main(int argc, char **argv)
             grants[gi].image=readimage(eq+1,RYZ_PROCESS_IMAGE_MAX,&grants[gi].size);
         }else{grants[gi].image=image;grants[gi].size=used;}
     }
+    if(resources->resources.count && !config.root_tree)sysfatal("mounts require -r");
+    if(resources->resources.count){if(!resource_cli_prepare(resources)){resource_cli_close(resources);sysfatal("invalid filesystem resource grant");}config.resources=&resources->resources;}
+    else if(resources->resources.view_count || resources->control)sysfatal("filesystem options require a mount");
     if(filemode){
         input = malloc(RYZ_LINUX_FILE_MAX + 1);
         fileout = malloc(RYZ_LINUX_FILE_MAX);
@@ -150,6 +160,7 @@ main(int argc, char **argv)
     if(jobsmode)fprint(2,"COMPACT_JOBS_STATS forks=%ud execs=%ud peak=%ud blocked=%ud pipebytes=%llud\n",(uint)result.forks,(uint)result.execs,(uint)result.peak_tasks,(uint)result.blocked_syscalls,(uvlong)result.pipe_bytes);
     if(processmode && status != RYZ_VM_OK)
         fprint(2,"COMPACT_PROCESS_FAULT rip=%llux\n",result.last_rip);
+    resource_cli_close(resources);free(resources);
     if(stateoutpath && filesystem.output_size){
         fd=create(stateoutpath,OWRITE|OEXCL,0600);if(fd<0)sysfatal("create new filesystem snapshot (never overwrite): %r");
         used=0;while(used<filesystem.output_size){
