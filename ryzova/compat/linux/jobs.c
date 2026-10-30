@@ -326,7 +326,7 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
            files->output_capacity==0 || files->output_capacity>RYZ_LINUX_FILE_MAX)return RYZ_VM_BAD_INPUT;
         files->output_size=0;memset(files->output,0,files->output_capacity);
     }
-    if(!result || !config || config->max_steps>16777216U || config->exec_count>RYZ_PROCESS_ARGS || (config->exec_count && !config->execs))return RYZ_VM_BAD_INPUT;
+    if(!result || !config || config->root_tree>1 || config->max_steps>16777216U || config->exec_count>RYZ_PROCESS_ARGS || (config->exec_count && !config->execs))return RYZ_VM_BAD_INPUT;
     if(config->network){
         const RyzNetworkResources *net=config->network;
         if(!net->count || net->count>RYZ_NETWORK_GRANTS || !net->grants || !net->now_ns || !net->wait || net->wall_milliseconds>10000)return RYZ_VM_BAD_INPUT;
@@ -347,6 +347,7 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     for(i=0;i<RYZ_JOB_TASKS;i++)jobs->tasks[i].vfork_parent=-1;
     jobs->capacity=capacity<RYZ_PROCESS_MAX_SPAN?capacity:RYZ_PROCESS_MAX_SPAN;
     jobs->next_pid=1001;jobs->world.execs=config->execs;jobs->world.exec_count=config->exec_count;jobs->world.random=config->random;jobs->world.random_context=config->random_context;
+    jobs->world.root_tree=config->root_tree;
     if(config->filesystem && config->filesystem->input && !fs_import(&jobs->world,config->filesystem->input,config->filesystem->input_size)){free(jobs);return RYZ_VM_BAD_INPUT;}
     jobs->world.network=config->network;
     if(config->network)jobs->world.network_start=jobs->world.network_last=config->network->now_ns(config->network->context);

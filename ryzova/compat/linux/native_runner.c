@@ -52,7 +52,8 @@ main(int argc, char **argv)
     memset(&config,0,sizeof(config));config.random=entropy;config.execs=grants;memset(grants,0,sizeof(grants)); inputpath=nil; argi=1;
     memset(&args,0,sizeof args);
     while(argi<argc){
-        if(strcmp(argv[argi],"-j")==0){jobsmode=processmode=1;argi++;}
+        if(strcmp(argv[argi],"-r")==0){config.root_tree=1;jobsmode=processmode=1;argi++;}
+        else if(strcmp(argv[argi],"-j")==0){jobsmode=processmode=1;argi++;}
         else if(strcmp(argv[argi],"-b")==0 && argi+1<argc){
             char *end;ulong n=strtoul(argv[argi+1],&end,10);if(!n || n>16777216 || *end)sysfatal("invalid instruction budget");config.max_steps=(uint32_t)n;argi+=2;
         }else if(strcmp(argv[argi],"-n")==0 && argi+1<argc && network.count<RYZ_NETWORK_GRANTS){
@@ -71,7 +72,7 @@ main(int argc, char **argv)
         else break;
     }
     if(argi>=argc || (network.wall_milliseconds && !network.count) || ((config.exec_count || config.max_steps || stateinpath || stateoutpath || network.count || network.wall_milliseconds) && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
-        fprint(2, "usage: compact-linux [-p | -j [-x guest-path[=host-ELF]]] [-n guest-IP:port=tcp!host!port] [-t network-ms] [-R snapshot-in] [-W new-snapshot-out] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
+        fprint(2, "usage: compact-linux [-r] [-p | -j [-x guest-path[=host-ELF]]] [-n guest-IP:port=tcp!host!port] [-t network-ms] [-R snapshot-in] [-W new-snapshot-out] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
         exits("usage");
     }
     if(rfork(RFNAMEG|RFENVG) < 0)

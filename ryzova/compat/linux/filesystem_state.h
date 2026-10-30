@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-/* Validated portable snapshots of the bounded guest /tmp tree. */
+/* Validated portable snapshots of the bounded guest tree (legacy /tmp or opt-in root). */
+#include "filesystem_tree.h"
 static uint64_t fs_checksum(const unsigned char *bytes,size_t size)
 {
     uint64_t hash=UINT64_C(0xcbf29ce484222325);size_t i;
@@ -9,7 +10,8 @@ static int fs_import(RyzLinuxWorld *w,const unsigned char *bytes,size_t size)
 {
     unsigned int count,i,j,index,parent,length,n,type;uint64_t inode;size_t at=40;
     RyzVnode *node;int version;
-    version=size>=8 && !memcmp(bytes,"FLEXFS3\n",8)?3:(size>=8 && !memcmp(bytes,"FLEXFS2\n",8)?2:1);
+    version=size>=8 && !memcmp(bytes,"FLEXFS4\n",8)?4:(size>=8 && !memcmp(bytes,"FLEXFS3\n",8)?3:(size>=8 && !memcmp(bytes,"FLEXFS2\n",8)?2:1));
+    if((version==4)!=(w->root_tree!=0))return 0;
     if(size<48 || size>RYZ_FS_SNAPSHOT_MAX || (version==1 && memcmp(bytes,"FLEXFS1\n",8)) || little(bytes+8,8)!=size || little(bytes+20,4) || little(bytes+size-8,8)!=fs_checksum(bytes,size-8))return 0;
     count=(unsigned int)little(bytes+16,4);if(!count || count>RYZ_VFS_NODES)return 0;
     w->next_inode=little(bytes+24,8);w->clock=little(bytes+32,8);
@@ -18,7 +20,7 @@ static int fs_import(RyzLinuxWorld *w,const unsigned char *bytes,size_t size)
         if(at>size-8 || size-8-at<80)return 0;
         index=(unsigned int)little(bytes+at,4);parent=(unsigned int)little(bytes+at+4,4);
         length=(unsigned int)little(bytes+at+28,4);n=(unsigned int)little(bytes+at+24,4);inode=little(bytes+at+16,8);
-        if(index>=RYZ_VFS_NODES || parent>=RYZ_VFS_NODES || w->nodes[index].used || !length || length>=RYZ_NS_PATH_MAX || n>RYZ_LINUX_FILE_MAX || length>size-8-at-80 || n>size-8-at-80-length || little(bytes+at+8,4)>0777 || little(bytes+at+12,4)>(unsigned int)version || inode<2000 || inode>=w->next_inode)return 0;
+        if(index>=RYZ_VFS_NODES || parent>=RYZ_VFS_NODES || w->nodes[index].used || !length || length>=RYZ_NS_PATH_MAX || n>RYZ_LINUX_FILE_MAX || length>size-8-at-80 || n>size-8-at-80-length || little(bytes+at+8,4)>0777 || little(bytes+at+12,4)>(unsigned int)(version==4?3:version) || inode<2000 || inode>=w->next_inode)return 0;
         type=(unsigned int)little(bytes+at+12,4);
         node=&w->nodes[index];node->used=node->linked=1;node->parent=parent;node->permissions=(unsigned int)little(bytes+at+8,4);node->directory=little(bytes+at+12,4)==1;node->symlink=little(bytes+at+12,4)==2;node->inode=inode;node->size=n;
         if(node->directory && n)return 0;
@@ -37,13 +39,17 @@ static int fs_import(RyzLinuxWorld *w,const unsigned char *bytes,size_t size)
         }
         at+=n;
     }
-    if(at!=size-8 || !w->nodes[0].used || !w->nodes[0].directory || w->nodes[0].parent || strcmp(w->nodes[0].name,"tmp") || w->nodes[0].inode!=2000)return 0;
+    if(at!=size-8 || !w->nodes[0].used || !w->nodes[0].directory || w->nodes[0].parent || strcmp(w->nodes[0].name,w->root_tree?"root":"tmp") || w->nodes[0].inode!=2000)return 0;
     for(i=1;i<RYZ_VFS_NODES;i++)if(w->nodes[i].used && w->nodes[i].backing){
         RyzVnode *entry=&w->nodes[i],*data=RYZ_VFS_NODE(w,i);
         if(!data->used || data==entry || data->backing || data->directory || entry->inode!=data->inode || entry->permissions!=data->permissions || entry->atime!=data->atime || entry->atime_ns!=data->atime_ns || entry->mtime!=data->mtime || entry->mtime_ns!=data->mtime_ns || entry->ctime!=data->ctime || entry->ctime_ns!=data->ctime_ns)return 0;
     }
     for(i=1;i<RYZ_VFS_NODES;i++)if(w->nodes[i].used){
-        size_t path=4;unsigned int cursor=i,depth=0;
+        size_t path=w->root_tree?0:4;unsigned int cursor=i,depth=0;
+        if(w->root_tree && !w->nodes[i].parent){
+            char absolute[RYZ_NS_PATH_MAX+1];absolute[0]='/';memcpy(absolute+1,w->nodes[i].name,strlen(w->nodes[i].name)+1);
+            if(vfs_reserved(absolute))return 0;
+        }
         if(!w->nodes[w->nodes[i].parent].used || !w->nodes[w->nodes[i].parent].directory)return 0;
         for(j=0;j<RYZ_VFS_NODES;j++)if(j!=i && w->nodes[j].used && ((w->nodes[i].inode==w->nodes[j].inode && RYZ_VFS_INDEX(w,i)!=RYZ_VFS_INDEX(w,j)) || (w->nodes[i].parent==w->nodes[j].parent && !strcmp(w->nodes[i].name,w->nodes[j].name))))return 0;
         while(cursor){
@@ -57,10 +63,10 @@ static int fs_import(RyzLinuxWorld *w,const unsigned char *bytes,size_t size)
 static void fs_export(RyzLinuxWorld *w,RyzFilesystemResources *resource)
 {
     unsigned char *bytes=resource->output;unsigned int i,count=0,owner[RYZ_VFS_NODES],index,type,version=2;size_t at=40,length,size;RyzVnode *entry,*node;
-    if(!w->nodes[0].used){w->nodes[0].used=w->nodes[0].linked=w->nodes[0].directory=1;w->nodes[0].permissions=0700;w->nodes[0].inode=2000;memcpy(w->nodes[0].name,"tmp",4);w->next_inode=2001;}
+    vfs_init(w);
     for(i=0;i<RYZ_VFS_NODES;i++)owner[i]=RYZ_VFS_NODES;
     for(i=0;i<RYZ_VFS_NODES;i++)if(w->nodes[i].used && w->nodes[i].linked){index=RYZ_VFS_INDEX(w,i);if(owner[index]==RYZ_VFS_NODES)owner[index]=i;else version=3;}
-    memset(bytes,0,40);memcpy(bytes,version==3?"FLEXFS3\n":"FLEXFS2\n",8);encode(bytes+24,w->next_inode,8);encode(bytes+32,w->clock,8);
+    memset(bytes,0,40);memcpy(bytes,w->root_tree?"FLEXFS4\n":(version==3?"FLEXFS3\n":"FLEXFS2\n"),8);encode(bytes+24,w->next_inode,8);encode(bytes+32,w->clock,8);
     for(i=0;i<RYZ_VFS_NODES;i++)if(w->nodes[i].used && w->nodes[i].linked){
         entry=&w->nodes[i];index=RYZ_VFS_INDEX(w,i);node=&w->nodes[index];length=strlen(entry->name);count++;
         type=owner[index]==i?(node->symlink?2U:(unsigned int)node->directory):3U;size=type==3?4:node->size;

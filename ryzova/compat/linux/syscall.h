@@ -96,6 +96,7 @@ typedef struct RyzLinuxWorld {
     RyzLinuxRandom random;
     void *random_context;
     RyzVnode nodes[RYZ_VFS_NODES];
+    unsigned int root_tree; /* Explicit guest root profile; never host authority. */
     uint64_t next_inode, clock,random_bytes;
     unsigned int mapped_nodes[RYZ_VFS_NODES];
     unsigned int memory_barriers[8];
