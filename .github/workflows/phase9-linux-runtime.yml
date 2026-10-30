@@ -22,9 +22,21 @@ jobs:
         run: |
           python scripts/phase9_shell.py --fetch artifacts/jobs-fixtures
           python scripts/phase9_busybox.py --fetch artifacts/jobs-fixtures
-      - name: Full portable execution, signal frames, timers and dynamic linker tests
+      - name: Validate Compact Linux V1 scope and baseline qualification guards
+        run: |
+          python scripts/compact_linux_baseline.py --check-plan
+          python -m unittest discover -s tests -p 'test_compact_linux_plan.py' -v
+      - name: Record complete Phase 5 and Phase 9 regression baseline
         env:
           COMPACT_MUSL_DIR: artifacts/musl-fixtures
           COMPACT_SHELL_DIR: artifacts/jobs-fixtures
           COMPACT_BUSYBOX_DIR: artifacts/jobs-fixtures
-        run: python -m unittest discover -s tests -p 'test_phase9*.py' -v
+        run: python scripts/compact_linux_baseline.py --output artifacts/compact-linux-v1/baseline.json
+      - name: Archive Compact Linux baseline evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-linux-v1-baseline
+          path: artifacts/compact-linux-v1/*.json
+          if-no-files-found: warn
+          retention-days: 30

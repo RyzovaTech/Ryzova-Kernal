@@ -1,0 +1,363 @@
+{
+  "schema": "compact-linux-v1-phase1-audit/v1",
+  "observed_date": "2026-10-30",
+  "main_head": "0a09a9833c895172e359a1d89216fc0a81e4eaf2",
+  "reference_head": "4b2eb6b96fb54067754eef825271331f045cabdc",
+  "reference_pr": 75,
+  "reference_commits_ahead_of_main": 48,
+  "all_pr_heads_in_reference_history": true,
+  "pull_requests": [
+    {
+      "number": 60,
+      "title": "Phase 9.1: versioned Compact environment contract (contract-only) and regression gate",
+      "head": "4ad3b7cc32219374ee0c5943fd0f3ec0957ee31f",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 61,
+      "title": "Phase 9.2: native Compact Linux subset application and QEMU execution gate",
+      "head": "d1d8a214f0b40fc220f0511710c9a7d4104b81ae",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 62,
+      "title": "Phase 9.3: native Linux file environment and Compact namespace discovery",
+      "head": "ad1e31d6ff27d116fc41570678dc1d35b1074677",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 63,
+      "title": "Phase 9.4: Linux process startup, virtual memory and GCC-produced ELF execution",
+      "head": "54d1d6d4a1ed2ca8db510c41a08fead6f8a40feb",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 64,
+      "title": "Phase 9.5: run unmodified BusyBox applets through native Compact Linux",
+      "head": "1f4de0dce8aa3bcfb33f601c83e55e13e1800906",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 65,
+      "title": "Phase 9.6: execute unmodified BusyBox ash scripts and virtual file workloads",
+      "head": "c341b313ffb39ad4b0155400032373821a3b92c5",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 66,
+      "title": "Phase 9.7: Linux guest fork/vfork, granted exec, wait4 and blocking pipes",
+      "head": "39712044703bba47d47e51c2fe87702e5163613d",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 67,
+      "title": "Phase 9.8: isolated writable /tmp filesystem for Linux guest applications",
+      "head": "361b146fcd3dd6c7f393abf3425c3472d8ff7bf2",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 68,
+      "title": "Phase 9.9: Linux guest signals, dynamic linker, timers and in-guest C compilation",
+      "head": "cf5a6a8331298a682f1310154954256304bf3b8b",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 69,
+      "title": "Phase 9.10: guest pthreads, shared resource lifetimes and worker exec",
+      "head": "d87c151e589860fe9653c4a64b4666ba80a41f15",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 70,
+      "title": "Phase 9.11: isolated guest stream sockets and pthread HTTP execution",
+      "head": "dbd1025ab1f9b0fd2d7b2c1959a230c7236ee116",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 71,
+      "title": "Phase 9.12: validated filesystem persistence grants across guest invocations",
+      "head": "981c31e78d224893131c5dfaf028afacbe3610ff",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 72,
+      "title": "Phase 9.13: native TCP resource grants and unmodified wget workflows",
+      "head": "51b43d99bfca47c01a47a08e42fad77c33b04dcb",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 73,
+      "title": "Compact Linux: guest symlink paths and persistent namespace links",
+      "head": "2bb3273f1e27f4b9a8a7d760fd6c7721a7733835",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 74,
+      "title": "Compact Linux: hardlinks, shared inode lifetime and saved aliases",
+      "head": "22c1fbc528689a41b15fac06e6285724f4cc3d7f",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    },
+    {
+      "number": 75,
+      "title": "Compact Linux: shared file maps, guest SIGBUS and mapping lifetime",
+      "head": "4b2eb6b96fb54067754eef825271331f045cabdc",
+      "base": "main",
+      "draft": true,
+      "state": "open",
+      "head_in_reference_history": true
+    }
+  ],
+  "baseline_workflows": [
+    {
+      "id": 41000789518,
+      "name": "Phase 5.7 macOS Mach-O structural feasibility",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789505,
+      "name": "Phase 5.2-5.3 Linux syscall and namespace virtual-runtime tests",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789552,
+      "name": "Phase 4.6-4.9 release evidence and variant checks",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789576,
+      "name": "M2 Chipset Families and PCI Source Audit",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789531,
+      "name": "Phase 5.5 Windows PE32+ structural feasibility",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789542,
+      "name": "Phase 5.8 cross-platform compatibility acceptance inventory",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789560,
+      "name": "Phase 9.1 Compact contract",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789475,
+      "name": "License and project-policy inventory",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789658,
+      "name": "Phase 6 native guest TCP 9P protocol and evidence tests",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789547,
+      "name": "Phase 5.4 real Linux ELF subset interpreter PoC",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789472,
+      "name": "Phase 6.0-6.3 optional remote resources local PoC",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789538,
+      "name": "Phase 4.2-4.4 integration and SDK checks",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789489,
+      "name": "Phase 7 native 9P evidence acceptance unit tests",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789615,
+      "name": "Phase 9.2 Compact native adapter regressions",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789646,
+      "name": "Phase 4 closeout and Phase 5 experimental entry",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789619,
+      "name": "Ryzova source foundation checks",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789492,
+      "name": "M4 Legacy AMD64 Preservation and Controller Safety",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789532,
+      "name": "Phase 9.6 unmodified BusyBox ash and file resources",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789508,
+      "name": "Phase 9.5 unmodified BusyBox applet qualification",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789471,
+      "name": "Phase 9.7 bounded Linux process groups and pipes",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789777,
+      "name": "Phase 7 mutually authenticated 9P bridge security regression",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789574,
+      "name": "Phase 8.1 authenticated 9P host socket regression",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789638,
+      "name": "Phase 3 AMD64 native source build (experimental)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789539,
+      "name": "Phase 9.4 Linux compiled process and memory regressions",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789481,
+      "name": "Phase 4 baseline and rollback safety",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789524,
+      "name": "Phase 5.6 compatibility security regression",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789467,
+      "name": "Phase 9.3 Linux file environment regressions",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789648,
+      "name": "Phase 9.9 Linux signals and dynamic application runtime",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789434,
+      "name": "Phase 5.9 experimental source acceptance and Phase 6 entry",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789414,
+      "name": "Phase 6.0-6.5 final research source acceptance",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41000789448,
+      "name": "Phase 5.0-5.1 ELF64 security and load-plan foundation",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "main_linux_sources": [
+    "elf64.c",
+    "elf64.h",
+    "elf64_probe.c",
+    "foundation-policy.json",
+    "namespace.c",
+    "namespace.h",
+    "subset_vm.c",
+    "subset_vm.h",
+    "subset_vm_probe.c",
+    "syscall.c",
+    "syscall.h"
+  ],
+  "conclusions": [
+    "Main contains the earlier Linux foundation PoC; staged runtime is unmerged.",
+    "PR75 includes all PR60-74 heads; review one cumulative integration rather than reapplying every PR.",
+    "31 existing workflows passed for the frozen reference head; this is historical baseline evidence, not V1 acceptance.",
+    "No compatibility implementation changes are part of CLX-01.",
+    "Merge protection administration visibility was not established by this audit; do not infer it from green CI."
+  ]
+}

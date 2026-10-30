@@ -37,3 +37,8 @@ Shared inode names and version 3 snapshots are described in
 
 Shared mappings and guest EOF faults are described in
 [COMPACT-LINUX-SHARED-MAPPINGS.md](COMPACT-LINUX-SHARED-MAPPINGS.md).
+
+The finite developer V1 completion contract and CLX-01–CLX-08 phase plan are in
+[COMPACT-LINUX-V1-PLAN.md](COMPACT-LINUX-V1-PLAN.md); machine acceptance IDs are in
+[linux-v1-plan.json](../ryzova/compact/linux-v1-plan.json). Regression counts do not
+close those application acceptance gates.
