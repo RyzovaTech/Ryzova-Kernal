@@ -2,7 +2,6 @@
 /* Linux x86_64 static-ELF proof, not a native Ryzova kernel executable loader. */
 #include "subset_vm.h"
 #include "elf64.h"
-#include <string.h>
 #define PF_X 1U
 
 static uint32_t little32(const unsigned char *p)
@@ -36,9 +35,34 @@ static int displacement(uint64_t base, int64_t delta, uint64_t *out)
     }
     return 1;
 }
-int ryz_vm_run_static_elf(const unsigned char *elf, size_t elf_size,
+static int writable(void *context, uint64_t address, uint64_t size)
+{
+    RyzElf64Plan *plan = context;
+    unsigned int i;
+    for (i = 0; i < plan->load_count; ++i) {
+        RyzElf64Segment *s = &plan->loads[i];
+        if ((s->flags & 2U) != 0 && address >= s->address &&
+            address - s->address <= s->memory_bytes &&
+            size <= s->memory_bytes - (address - s->address))
+            return 1;
+    }
+    return 0;
+}
+static int condition(unsigned int code, int zero, int sign, int overflow)
+{
+    switch (code & 15U) {
+    case 4: return zero;
+    case 5: return !zero;
+    case 8: return sign;
+    case 9: return !sign;
+    case 14: return zero || sign != overflow;
+    case 15: return !zero && sign == overflow;
+    }
+    return 0;
+}
+static int run_elf(const unsigned char *elf, size_t elf_size,
     unsigned char *arena, size_t arena_size,
-    RyzLinuxWrite output, void *opaque, RyzVmResult *result)
+    RyzLinuxWrite output, void *opaque, RyzVmResult *result, RyzLinuxFiles *files)
 {
     RyzElf64Plan plan;
     RyzLinuxProcess process;
@@ -46,7 +70,8 @@ int ryz_vm_run_static_elf(const unsigned char *elf, size_t elf_size,
     uint64_t lowest=UINT64_MAX, highest=0, ip, next;
     uint32_t step, syscall_count=0;
     unsigned int i;
-    int rv;
+    int rv, zero = 0, sign = 0, overflow = 0;
+    uint32_t budget = files == NULL ? RYZ_VM_MAX_STEPS : RYZ_VM_FILE_STEPS;
     if (result!=NULL)
         memset(result,0,sizeof(*result));
     if (elf==NULL || arena==NULL || result==NULL || arena_size==0)
@@ -74,8 +99,13 @@ int ryz_vm_run_static_elf(const unsigned char *elf, size_t elf_size,
     if (ryz_linux_process_init(&process,1,1000,1000,1000,lowest,arena,
              (size_t)(highest-lowest),output,opaque)!=0)
         return RYZ_VM_MAP_ERROR;
+    process.files = files;
+    if (files != NULL) {
+        process.memory_write = writable;
+        process.memory_context = &plan;
+    }
     ip=plan.entry;
-    for (step=0;step<RYZ_VM_MAX_STEPS;++step) {
+    for (step=0;step<budget;++step) {
         const unsigned char *code;
         unsigned char op;
         result->last_rip=ip;
@@ -90,18 +120,55 @@ int ryz_vm_run_static_elf(const unsigned char *elf, size_t elf_size,
                 return RYZ_VM_MAP_ERROR;
             regs[reg]=little32(code+1); /* x86_64 32-bit register zero extends */
             ip+=5;
+        } else if (files != NULL && op == 0x48 && instruction(&plan,ip,10) &&
+                   code[1] >= 0xb8 && code[1] <= 0xbf) {
+            regs[code[1] - 0xb8] = (uint64_t)little32(code + 2) |
+                                  (uint64_t)little32(code + 6) << 32;
+            ip += 10;
+        } else if (files != NULL && op == 0x48 && instruction(&plan,ip,3) &&
+                   (code[1] == 0x89 || code[1] == 0x85 || code[1] == 0x39) &&
+                   code[2] >= 0xc0) {
+            unsigned int src = (code[2] >> 3) & 7U, dst = code[2] & 7U;
+            uint64_t value, a = regs[dst], b = regs[src];
+            if (code[1] == 0x89) {
+                regs[dst] = b;
+            } else {
+                value = code[1] == 0x85 ? a & b : a - b;
+                zero = value == 0;
+                sign = (value >> 63) != 0;
+                overflow = code[1] == 0x39 && (((a ^ b) & (a ^ value)) >> 63) != 0;
+            }
+            ip += 3;
         } else if (op==0x48 && instruction(&plan,ip,7) &&
-                   code[1]==0x8d && code[2]==0x35) {
+                   code[1]==0x8d && (code[2]==0x35 ||
+                   (files != NULL && (code[2] & 0xc7) == 5))) {
             uint64_t destination;
             int64_t rel=(int32_t)little32(code+3);
             if (!displacement(ip+7,rel,&destination))
                 return RYZ_VM_MAP_ERROR;
-            regs[6]=destination; /* lea disp32(%rip),%rsi */
+            regs[(code[2] >> 3) & 7U]=destination; /* RIP-relative lea */
             ip+=7;
         } else if (op==0x31 && instruction(&plan,ip,2) &&
-                   code[1]==0xff) {
-            regs[7]=0; /* xor %edi,%edi */
+                   (code[1]==0xff || (files != NULL && code[1] >= 0xc0))) {
+            unsigned int src = (code[1] >> 3) & 7U, dst = code[1] & 7U;
+            regs[dst] = (uint32_t)regs[dst] ^ (uint32_t)regs[src];
+            zero = regs[dst] == 0;
+            sign = ((regs[dst] >> 31) & 1U) != 0;
+            overflow = 0;
             ip+=2;
+        } else if (files != NULL && op == 0x89 && instruction(&plan,ip,2) && code[1] >= 0xc0) {
+            regs[code[1] & 7U] = (uint32_t)regs[(code[1] >> 3) & 7U];
+            ip += 2;
+        } else if (files != NULL && op == 0xe9 && instruction(&plan,ip,5)) {
+            if (!displacement(ip + 5, (int32_t)little32(code + 1), &next))
+                return RYZ_VM_MAP_ERROR;
+            ip = next;
+        } else if (files != NULL && op == 0x0f && instruction(&plan,ip,6) &&
+                   (code[1] == 0x84 || code[1] == 0x85 || code[1] == 0x88 ||
+                    code[1] == 0x89 || code[1] == 0x8e || code[1] == 0x8f)) {
+            if (!displacement(ip + 6, (int32_t)little32(code + 2), &next))
+                return RYZ_VM_MAP_ERROR;
+            ip = condition(code[1], zero, sign, overflow) ? next : ip + 6;
         } else if (op==0x90) {
             ip++;
         } else if (op==0xeb && instruction(&plan,ip,2)) {
@@ -114,14 +181,17 @@ int ryz_vm_run_static_elf(const unsigned char *elf, size_t elf_size,
             int64_t returned;
             r.rax=regs[0];r.rdi=regs[7];r.rsi=regs[6];r.rdx=regs[2];
             r.r10=0;r.r8=0;r.r9=0;
-            if (r.rax!=1 && r.rax!=60 && r.rax!=231)
+            if (r.rax!=1 && r.rax!=60 && r.rax!=231 &&
+                (files == NULL || (r.rax!=0 && r.rax!=3 && r.rax!=257 &&
+                 r.rax!=39 && r.rax!=102 && r.rax!=104 && r.rax!=186)))
                 return RYZ_VM_SYSCALL_UNSUPPORTED;
             returned=ryz_linux_syscall(&process,&r);
             ++syscall_count;
             result->syscall_count=syscall_count;
             regs[0]=(uint64_t)returned;
+            regs[1]=ip+2; /* x86 SYSCALL clobbers RCX with return RIP. */
             ip+=2;
-            if (returned<0)
+            if (returned<0 && files == NULL)
                 return RYZ_VM_SYSCALL_UNSUPPORTED;
             if (process.exited) {
                 result->exited=1;
@@ -134,4 +204,25 @@ int ryz_vm_run_static_elf(const unsigned char *elf, size_t elf_size,
     }
     rv=RYZ_VM_STEP_LIMIT;
     return rv;
+}
+
+int ryz_vm_run_static_elf(const unsigned char *elf, size_t elf_size,
+    unsigned char *arena, size_t arena_size,
+    RyzLinuxWrite output, void *opaque, RyzVmResult *result)
+{
+    return run_elf(elf, elf_size, arena, arena_size, output, opaque, result, NULL);
+}
+int ryz_vm_run_file_elf(const unsigned char *elf, size_t elf_size,
+    unsigned char *arena, size_t arena_size, RyzLinuxFiles *files,
+    RyzLinuxWrite output, void *opaque, RyzVmResult *result)
+{
+    if (result != NULL)
+        memset(result, 0, sizeof(*result));
+    if (files == NULL || files->input == NULL || files->output == NULL ||
+        files->input_size > RYZ_LINUX_FILE_MAX || files->output_capacity == 0 ||
+        files->output_capacity > RYZ_LINUX_FILE_MAX)
+        return RYZ_VM_BAD_INPUT;
+    files->output_size = 0;
+    memset(files->output, 0, files->output_capacity);
+    return run_elf(elf, elf_size, arena, arena_size, output, opaque, result, files);
 }

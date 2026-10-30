@@ -1,0 +1,238 @@
+{
+  "schema": "flex-phase9-9-local-native-validation/v1",
+  "remote_runtime_commit": "ce2b53a3f6c780b28281a66fe29a1b37f0965022",
+  "local_validation_commit": "2e4d8933b2ec35c6dabb51fe12b9c034f0141299",
+  "verified_git_subtrees": {
+    "amd64": "0901cffd3fab687b739f69e245e311a473a558c7",
+    "arm64": "42c17d14bb19dd84568e1294a3a6212cc0c4f0f0",
+    "ryzova": "dd2aac44a799dc73169b335ce1df83eb05a45c95",
+    "scripts": "d04eb4171b1d4ad8342fbc27f325bf18361ce6dc",
+    "sys": "a9dbd07152885f337f83c5de403ed303779573db",
+    "tests": "c4a4527ef5c58acaa05a4f5cd9cf2984731cb6bb"
+  },
+  "method": "All six source/helper/test Git subtree hashes matched the remote runtime commit. Local snapshot omits unrelated repository subtrees; this is not a GitHub PR merge checkout.",
+  "upstream_guest_image_sha256": "3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c",
+  "execution": "Local QEMU 8.2.2 TCG; native Plan 9 compiler built runtime and kernel; fresh overlay; freshly source-built AMD64 kernel",
+  "kernel_provenance": {
+    "source_commit": "2e4d8933b2ec35c6dabb51fe12b9c034f0141299",
+    "compiled_kernel_path_in_guest": "/sys/src/9/pc64/9pc64",
+    "bootfile_path_in_guest": "/n/9fat/9pc64",
+    "guest_compiled_sha256": "f1c2f8b49de2392e755ebb1bda7b2a5bd97e7168d7a39a768ceffdd372c352cf",
+    "guest_installed_sha256": "f1c2f8b49de2392e755ebb1bda7b2a5bd97e7168d7a39a768ceffdd372c352cf",
+    "independently_extracted_host_sha256": "f1c2f8b49de2392e755ebb1bda7b2a5bd97e7168d7a39a768ceffdd372c352cf",
+    "binary_size_bytes": 5423753,
+    "verification": "three SHA256 digests equal; QEMU boot separately verified",
+    "distribution_status": "BLOCKED pending reviewed scoped redistribution rights"
+  },
+  "native_reports_passed": {
+    "phase4-1-stability": true,
+    "phase4-5-stress": true,
+    "phase6-native-9p": true,
+    "phase7-native-guest-tls": true,
+    "phase8-guest-identity": true,
+    "phase9-compact-native": true,
+    "phase9-linux-environment": true,
+    "phase9-linux-process": true,
+    "phase9-linux-busybox": true,
+    "phase9-linux-shell": true,
+    "phase9-linux-jobs": true,
+    "phase9-linux-vfs": true,
+    "phase9-linux-runtime": true
+  },
+  "runtime_evidence": {
+    "schema": "flex-linux-runtime/v1",
+    "source_commit": "2e4d8933b2ec35c6dabb51fe12b9c034f0141299",
+    "fixture_sha256": {
+      "signals.elf": "d4fc1af5ff2e3c6748a4d280199ed36201f1f322d9b704bfa8791a7b7f89f55d",
+      "runtime-script": "2644c1e0319ba152fa51089b67ee830efdde3916ead1867f8e4e7c7bdafe058d",
+      "musl-libc.so": "62eed36e775bbbedff41bed916ac9ad5fe600fb57b7898b99f15ee9f7cceccb1",
+      "libflex.so": "2ca7cae3a99a70a81a3d7a38e5bf7ec9e8326404129abd412cba1e6e5b6b5dc2",
+      "dynamic-hello": "2dca522f1025f91d55daa534f94cc9a7e9a7a38d373085a80725e51d25f913c8",
+      "dynamic-dlopen": "0133a484877fbef33f5597051613090d71453d201f4434157167920779cd094e",
+      "dynamic-needed": "2bd19bb2ad0effd35b1b6cab9b2d29402a55b60b0c1464905c200a0b65eb15e2",
+      "dynamic-memory": "b20bc310007fab13350041a78eac0cc8a4d4e8d941d0a1449083311a7d7470f3",
+      "tcc-fixture": "54e12796a91707231f93da254e8d57855f4cbe3802876308cd0100767b4caa0b",
+      "compiler-source": "5fb69bf9573c0d870e768073f0a90af8428acb33625e389058c8105cd2a8db01"
+    },
+    "checks": {
+      "section": true,
+      "metadata": true,
+      "done": true,
+      "background": true,
+      "stages": true,
+      "no_panic": true,
+      "hash_s-elf": true,
+      "hash_r-script": true,
+      "hash_l-lib": true,
+      "hash_l-so": true,
+      "hash_l-hello": true,
+      "hash_l-open": true,
+      "hash_l-need": true,
+      "hash_l-mem": true,
+      "hash_tcc": true,
+      "hash_c-src": true,
+      "signal_handler": true,
+      "signal_mask": true,
+      "signal_nested": true,
+      "signal_restart": true,
+      "signal_eintr": true,
+      "signal_alternate": true,
+      "signal_stop": true,
+      "signal_fatal": true,
+      "signal_bad-frame": true,
+      "signal_realtime": true,
+      "signal_no-zombie": true,
+      "signal_vector": true,
+      "signal_nodefer": true,
+      "signal_reset": true,
+      "signal_tkill": true,
+      "signal_rt-quota": true,
+      "signal_sleep": true,
+      "signal_timer": true,
+      "signal_alarm": true,
+      "signal_sigwait": true,
+      "hello": true,
+      "dlopen": true,
+      "needed": true,
+      "memory": true,
+      "compiler": true,
+      "clean_results": true
+    },
+    "passed": true
+  },
+  "runtime_successful_invocations": [
+    {
+      "steps": 121976,
+      "syscalls": 59
+    },
+    {
+      "steps": 689,
+      "syscalls": 13
+    },
+    {
+      "steps": 677,
+      "syscalls": 16
+    },
+    {
+      "steps": 699,
+      "syscalls": 14
+    },
+    {
+      "steps": 891,
+      "syscalls": 19
+    },
+    {
+      "steps": 847,
+      "syscalls": 19
+    },
+    {
+      "steps": 762,
+      "syscalls": 12
+    },
+    {
+      "steps": 709,
+      "syscalls": 13
+    },
+    {
+      "steps": 743,
+      "syscalls": 9
+    },
+    {
+      "steps": 862,
+      "syscalls": 11
+    },
+    {
+      "steps": 978,
+      "syscalls": 21
+    },
+    {
+      "steps": 812,
+      "syscalls": 9
+    },
+    {
+      "steps": 539,
+      "syscalls": 8
+    },
+    {
+      "steps": 604,
+      "syscalls": 13
+    },
+    {
+      "steps": 593,
+      "syscalls": 11
+    },
+    {
+      "steps": 673,
+      "syscalls": 16
+    },
+    {
+      "steps": 2636,
+      "syscalls": 141
+    },
+    {
+      "steps": 474,
+      "syscalls": 10
+    },
+    {
+      "steps": 561,
+      "syscalls": 12
+    },
+    {
+      "steps": 539,
+      "syscalls": 11
+    },
+    {
+      "steps": 528,
+      "syscalls": 9
+    },
+    {
+      "steps": 40161,
+      "syscalls": 18
+    },
+    {
+      "steps": 46074,
+      "syscalls": 28
+    },
+    {
+      "steps": 48292,
+      "syscalls": 20
+    },
+    {
+      "steps": 327,
+      "syscalls": 24
+    },
+    {
+      "steps": 554467,
+      "syscalls": 33
+    },
+    {
+      "steps": 11,
+      "syscalls": 2
+    }
+  ],
+  "qualification": {
+    "signal_and_timer_cases": 20,
+    "background_shell_and_trap": true,
+    "musl_dynamic_hello": true,
+    "dlopen_tls_constructor": true,
+    "needed_tls_constructor": true,
+    "memory_mapping_denials_entropy_barriers": true,
+    "in_guest_tinycc_compile": true,
+    "generated_elf_run": true,
+    "compiled_elf_bytes": 884
+  },
+  "local_tests": {
+    "phase9_methods": 57,
+    "phase5_methods": 63,
+    "total_passed": 120,
+    "ASan_UBSan": "passed",
+    "local_LSan": "disabled explicitly because /proc scanning is unavailable; GitHub CI retains it"
+  },
+  "fixture_source_sha256": {
+    "musl_1_2_6": "d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a",
+    "tinycc_0_9_27": "de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c"
+  },
+  "credentials": "ephemeral guest key/certificate removed by driver",
+  "kernel_binary_distributed": false,
+  "limitations": "No full Linux compatibility claim. Clone/threads/futex, general sockets/network grants, persistent/general mounts, broader ISA/terminal support and complete SDK/Python/Git qualification remain unfinished; physical hardware and operational ARM64 are unqualified."
+}

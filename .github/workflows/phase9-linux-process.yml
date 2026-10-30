@@ -1,0 +1,22 @@
+name: Phase 9.4 Linux compiled process and memory regressions
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compiled-process:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compare GCC-produced Linux ELF and validate process/memory protections
+        run: python -m unittest discover -s tests -p 'test_phase9*.py' -v
+      - name: Preserve Phase 5 baseline
+        run: python -m unittest discover -s tests -p 'test_phase5*.py' -v

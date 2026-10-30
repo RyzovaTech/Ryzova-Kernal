@@ -1,0 +1,42 @@
+name: Phase 9.9 Linux signals and dynamic application runtime
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build checksum-pinned unmodified musl fixtures
+        run: python scripts/phase9_compiler.py --build artifacts/musl-fixtures
+      - name: Fetch pinned unmodified BusyBox
+        run: |
+          python scripts/phase9_shell.py --fetch artifacts/jobs-fixtures
+          python scripts/phase9_busybox.py --fetch artifacts/jobs-fixtures
+      - name: Validate Compact Linux V1 scope and baseline qualification guards
+        run: |
+          python scripts/compact_linux_baseline.py --check-plan
+          python -m unittest discover -s tests -p 'test_compact_linux_plan.py' -v
+      - name: Record complete Phase 5 and Phase 9 regression baseline
+        env:
+          COMPACT_MUSL_DIR: artifacts/musl-fixtures
+          COMPACT_SHELL_DIR: artifacts/jobs-fixtures
+          COMPACT_BUSYBOX_DIR: artifacts/jobs-fixtures
+        run: python scripts/compact_linux_baseline.py --output artifacts/compact-linux-v1/baseline.json
+      - name: Archive Compact Linux baseline evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-linux-v1-baseline
+          path: artifacts/compact-linux-v1/*.json
+          if-no-files-found: warn
+          retention-days: 30

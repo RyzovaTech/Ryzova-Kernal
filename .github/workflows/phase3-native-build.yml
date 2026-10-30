@@ -18,6 +18,10 @@ on:
       - 'scripts/phase7_secure_closeout.py'
       - 'scripts/phase7_native_guest_tls.py'
       - 'scripts/phase8_guest_identity.py'
+      - 'scripts/phase9_compact_native.py'
+      - 'scripts/phase9_linux_environment.py'
+      - 'scripts/phase9_process.py'
+      - 'tests/fixtures/compact_process*'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -39,6 +43,10 @@ on:
       - 'scripts/phase7_secure_closeout.py'
       - 'scripts/phase7_native_guest_tls.py'
       - 'scripts/phase8_guest_identity.py'
+      - 'scripts/phase9_compact_native.py'
+      - 'scripts/phase9_linux_environment.py'
+      - 'scripts/phase9_process.py'
+      - 'tests/fixtures/compact_process*'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -50,7 +58,7 @@ permissions:
 
 jobs:
   native-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -58,9 +66,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Install isolated QEMU dependencies
+        timeout-minutes: 8
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils file mtools
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends qemu-system-x86 qemu-utils file mtools
       - name: Verify upstream source provenance
         run: bash scripts/verify-foundation.sh
       - name: Fetch and verify 9front native build guest image
@@ -111,6 +120,21 @@ jobs:
             artifacts/phase3/phase7-secure-bridge.json
             artifacts/phase3/phase7-native-guest-tls.json
             artifacts/phase3/phase8-guest-identity.json
+            artifacts/phase3/phase9-compact-native.json
+            artifacts/phase3/phase9-linux-environment.json
+            artifacts/phase3/phase9-linux-process.json
+            artifacts/phase3/phase9-linux-busybox.json
+            artifacts/phase3/phase9-linux-shell.json
+            artifacts/phase3/phase9-linux-jobs.json
+            artifacts/phase3/phase9-linux-vfs.json
+            artifacts/phase3/phase9-linux-runtime.json
+            artifacts/phase3/phase9-linux-threads.json
+            artifacts/phase3/phase9-linux-sockets.json
+            artifacts/phase3/phase9-linux-persistence.json
+            artifacts/phase3/phase9-linux-external.json
+            artifacts/phase3/phase9-linux-symlinks.json
+            artifacts/phase3/phase9-linux-hardlinks.json
+            artifacts/phase3/phase9-linux-shared-maps.json
             artifacts/phase3/phase7-secure-closeout.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn

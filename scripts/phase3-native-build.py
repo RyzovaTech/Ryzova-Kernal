@@ -21,6 +21,7 @@ import threading
 import time
 
 from m2_qemu_probe import run_probe
+from qemu_control import control_socket, control_address, serial_option, monitor_option
 from phase4_1_stability import STAGES as PHASE41_STAGES, check_stability_serial
 from phase4_5_stress import STAGES as PHASE45_STAGES, check_extended_serial
 from phase6_native_9p import guest_commands, inspect_native_9p_serial, payload_for_commit
@@ -31,6 +32,21 @@ from ryzova.remote.phase7_fixture import Ephemeral9PTLSFixture
 from phase7_secure_closeout import gateway_metrics_report
 from phase7_native_guest_tls import commands as native_tls_commands, inspect as inspect_native_tls
 from phase8_guest_identity import commands as guest_identity_commands, inspect as inspect_guest_identity
+from phase9_compact_native import commands as compact_commands, fixtures as compact_fixtures, inspect as inspect_compact
+from phase9_linux_environment import commands as environment_commands, fixtures as environment_fixtures, payload as environment_payload, inspect as inspect_environment
+from phase9_process import build as build_process, commands as process_commands, inspect as inspect_process
+from phase9_busybox import fetch as fetch_busybox, commands as busybox_commands, inspect as inspect_busybox
+from phase9_shell import fetch as fetch_shell, commands as shell_commands, inspect as inspect_shell
+from phase9_jobs import fixtures as jobs_fixtures, commands as jobs_commands, inspect as inspect_jobs
+from phase9_vfs import fixtures as vfs_fixtures, commands as vfs_commands, inspect as inspect_vfs
+from phase9_runtime import fixtures as runtime_fixtures, commands as application_commands, inspect as inspect_application
+from phase9_threads import fixtures as thread_fixtures, commands as thread_commands, inspect as inspect_threads
+from phase9_sockets import fixtures as socket_fixtures, commands as socket_commands, inspect as inspect_sockets
+from phase9_persistence import fixtures as persistence_fixtures, commands as persistence_commands, inspect as inspect_persistence
+from phase9_external import fixtures as external_fixtures, commands as external_commands, inspect as inspect_external
+from phase9_symlinks import fixtures as symlink_fixtures, commands as symlink_commands, inspect as inspect_symlinks, start as symlink_start
+from phase9_hardlinks import fixtures as hardlink_fixtures, commands as hardlink_commands, inspect as inspect_hardlinks, start as hardlink_start
+from phase9_shared_maps import fixtures as map_fixtures, commands as map_commands, inspect as inspect_maps, start as map_start
 OUT = ROOT / "artifacts" / "phase3"
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "network-probe.txt").write_text("RYZOVA_NETWORK_DATA\n")
@@ -40,17 +56,43 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb"], check=True)
+subprocess.run(["tar", "--format=ustar", "--transform=s,^ryzova/compat/linux,sys/src/cmd/compact-linux,", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
     "Archive includes kernel, nusb user-space source, sys/include and amd64/include from exact commit.\n"
 )
 print("SOURCE_SHA", SOURCE_SHA, "ARCHIVE_SHA256", archive_hash, flush=True)
+fetch_busybox(OUT)
+fetch_shell(OUT)
+jobs_fixture_sha256=jobs_fixtures(OUT)
+vfs_fixture_sha256=vfs_fixtures(OUT)
+runtime_fixture_sha256=runtime_fixtures(OUT,SOURCE_SHA)
+thread_fixture_sha256=thread_fixtures(OUT,SOURCE_SHA)
+socket_fixture_sha256=socket_fixtures(OUT,SOURCE_SHA)
+persistence_fixture_sha256=persistence_fixtures(OUT,SOURCE_SHA)
+external_fixture_sha256=external_fixtures(OUT,SOURCE_SHA)
+symlink_fixture_sha256=symlink_fixtures(OUT,SOURCE_SHA)
+hardlink_fixture_sha256=hardlink_fixtures(OUT,SOURCE_SHA)
+map_fixture_sha256=map_fixtures(OUT,SOURCE_SHA)
+process_elf_sha256 = build_process(OUT / "process-compiled.elf")
+(OUT / "flex-input.bin").write_bytes(environment_payload(SOURCE_SHA))
+for name, data in environment_fixtures().items():
+    (OUT / f"flex-{name}.elf").write_bytes(data)
+for name, data in compact_fixtures(SOURCE_SHA).items():
+    (OUT / f"compact-{name}.elf").write_bytes(data)
 
+external_http_requests=[]
+external_stall_requests=[]
 class LocalHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(OUT), **kwargs)
+    def do_GET(self):
+        if self.path=="/external-probe.txt":external_http_requests.append(self.path)
+        if self.path=="/external-stall.txt":
+            external_stall_requests.append(self.path);time.sleep(8)
+        try:super().do_GET()
+        except (BrokenPipeError,ConnectionResetError):pass
     def log_message(self, fmt, *args):
         print("HTTP:", fmt % args, flush=True)
 
@@ -65,9 +107,9 @@ cmd = [
     "-device", "scsi-hd,drive=vd0",
     "-device", "virtio-net-pci,netdev=n0", "-netdev", "user,id=n0",
     "-vga", "std", "-display", "none",
-    "-chardev", f"socket,id=uart,path={SER},server=on,wait=off",
+    "-chardev", serial_option(SER),
     "-serial", "chardev:uart",
-    "-monitor", f"unix:{MON},server=on,wait=off",
+    "-monitor", monitor_option(MON),
     "-no-reboot", "-no-shutdown",
 ]
 # M1 QEMU regression exposes generic emulated xHCI keyboard/mouse devices.
@@ -85,7 +127,7 @@ stages = [
      "hget http://10.0.2.2:8000/kernel-source.tar.gz > /tmp/kernel-source.tar.gz; "
      "ls -l /tmp/kernel-source.tar.gz; echo PHASE3_END_1"),
     ("install-exact-kernel-source",
-     "cd /; tar xzf /tmp/kernel-source.tar.gz; "
+     "cd /; mkdir -p /sys/src/cmd/compact-linux; tar xzf /tmp/kernel-source.tar.gz; "
      "cd /sys/src/9/pc64; ls -l main.c mkfile; echo PHASE3_END_2"),
     ("native-amd64-mk",
      "cd /sys/src/9/pc64; mk > /tmp/ryzova-native-build.log >[2=1]; "
@@ -114,6 +156,13 @@ for component in m1_native_components:
         component + ".log; echo PHASE3_END_" + str(stageindex)
     ))
 
+index = len(stages)
+stages.append(("compact-linux-native",
+    "cd /sys/src/cmd/compact-linux && mk install > /tmp/compact-build.log >[2=1] "
+    "&& test -s /amd64/bin/compact-linux && echo COMPACT_NATIVE_BUILD_OK; "
+    "tail -n 30 /tmp/compact-build.log; "
+    "echo PHASE3_END_" + str(index)))
+
 # M5.1 native ARM64 cross-build in an *actual* 9front AMD64 guest.
 # Reuse 7c/7l and installed cross-architecture libraries only if available.
 # Unlike a GCC helper test, this checks the real ARM64 Plan 9 kernel target.
@@ -127,16 +176,28 @@ if m5_arm64_native:
         "echo M5_ARM64_MK_STATUS_$status; tail -n 20 /tmp/m5-arm64-native.log; "
         "ls -l 9qemu; echo PHASE3_END_" + str(index)))
 
+index = len(stages)
+stages.append(("compact-linux-service",
+    "cd /sys/src/cmd/compact-linux/service && mk install > /tmp/compact-fs.log >[2=1] "
+    "&& echo COMPACT_SERVICE_BUILD_OK; tail -n 30 /tmp/compact-fs.log; echo PHASE3_END_" + str(index)))
+
+# The source-built kernel is copied through FAT, but user-space binaries are
+# installed on hjfs. Flush that filesystem before terminating this QEMU process.
+index = len(stages)
+stages.append(("flush-native-filesystem",
+    "echo sync >> /srv/hjfs.cmd && sleep 3 && echo COMPACT_FS_SYNC_OK; "
+    "echo PHASE3_END_" + str(index)))
+
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
 marks = {}
 with (OUT/"host.log").open("wb") as host:
     proc=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
-    client=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    client=control_socket(SER)
     try:
         for _ in range(300):
             try:
-                client.connect(str(SER))
+                client.connect(control_address(SER))
                 break
             except (FileNotFoundError,ConnectionRefusedError):
                 time.sleep(.1)
@@ -191,9 +252,9 @@ with (OUT/"host.log").open("wb") as host:
     finally:
         (OUT/"serial.log").write_bytes(raw)
         try:
-            ctl=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+            ctl=control_socket(MON)
             ctl.settimeout(3)
-            ctl.connect(str(MON))
+            ctl.connect(control_address(MON))
             ctl.recv(4096)
             ctl.sendall(f"screendump {OUT/'screen.ppm'}\n".encode())
             ctl.close()
@@ -223,6 +284,19 @@ if not re.search(r"(?:^|\r?\n)PHASE3_MK_STATUS_\s*(?:\r?\n)",text):
 if re.search(r"(?:^|\r?\n)ls:.*9pc64",text):
     print("FAIL: expected AMD64 kernel not found",file=sys.stderr)
     sys.exit(1)
+if not re.search(rb"(?:^|\r?\n)COMPACT_SERVICE_BUILD_OK(?:\r?\n|$)", bytes(raw)):
+    print("FAIL: native Compact discovery service did not compile/install", file=sys.stderr)
+    sys.exit(1)
+
+if not marks.get("flush-native-filesystem"):
+    print("FAIL: native filesystem sync stage did not complete", file=sys.stderr)
+    sys.exit(1)
+
+if not re.search(rb"(?:^|\r?\n)COMPACT_NATIVE_BUILD_OK(?:\r?\n|$)", bytes(raw)):
+    print("FAIL: native Compact application did not compile/install", file=sys.stderr)
+    print(bytes(raw[-16000:]).decode("utf-8", errors="replace"), flush=True)
+    sys.exit(1)
+
 if not marks.get("install-fresh-bootfile") or not re.search(
     r"(?:^|\r?\n)PHASE3_COPY_STATUS_\s*(?:\r?\n)", text
 ):
@@ -292,15 +366,15 @@ runtime_commands=[
     "9fs 9fat; grep 'bootfile=9pc64' /n/9fat/plan9.ini > /dev/null && echo RYZOVA_STORAGE_OK; echo RYZOVA_RUNTIME_STAGE_2",
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
-] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)] + list(guest_identity_commands())
+] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)] + list(guest_identity_commands()) + compact_commands() + environment_commands() + process_commands(SOURCE_SHA) + busybox_commands(SOURCE_SHA) + shell_commands(SOURCE_SHA) + jobs_commands(SOURCE_SHA) + vfs_commands(SOURCE_SHA) + application_commands(SOURCE_SHA)[:-1] + [application_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))}"] + thread_commands(SOURCE_SHA)[:-1] + [thread_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))+len(thread_commands(SOURCE_SHA))}"] + socket_commands(SOURCE_SHA)[:-1] + [socket_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))+len(thread_commands(SOURCE_SHA))+len(socket_commands(SOURCE_SHA))}"] + persistence_commands(SOURCE_SHA)[:-1] + [persistence_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))+len(thread_commands(SOURCE_SHA))+len(socket_commands(SOURCE_SHA))+len(persistence_commands(SOURCE_SHA))}"] + external_commands(SOURCE_SHA)[:-1] + [external_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{symlink_start(SOURCE_SHA)-1}"] + symlink_commands(SOURCE_SHA)[:-1] + [symlink_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{hardlink_start(SOURCE_SHA)-1}"] + hardlink_commands(SOURCE_SHA)[:-1] + [hardlink_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{map_start(SOURCE_SHA)-1}"] + map_commands(SOURCE_SHA)
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(fresh_cmd,stdout=host,stderr=subprocess.STDOUT)
-    guest=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    guest=control_socket(SER)
     try:
         for _ in range(300):
             try:
-                guest.connect(str(SER))
+                guest.connect(control_address(SER))
                 break
             except (FileNotFoundError,ConnectionRefusedError):
                 time.sleep(.1)
@@ -377,7 +451,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                     bootstate["runtime_stage"]=i+1
                     guest.sendall((runtime_commands[i+1]+"\r").encode())
                     print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
-            if re.search(rb"(?:\r?\n)RYZOVA_GUEST_IDENTITY_DONE(?:\r?\n)",bytes(bootlog)):
+            if re.search(rb"(?:\r?\n)FLEX_MAP_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
@@ -425,6 +499,53 @@ m4_legacy_enabled=(ROOT / "ryzova/drivers/m4-legacy-qualification.json").is_file
 m2_pci_ok=(not m2_enabled or run_probe(
     cmd, SER, MON, OUT, memory_mib=384 if m4_legacy_enabled else None
 ))
+compact_evidence = inspect_compact(bytes(raw), bytes(bootlog), SOURCE_SHA)
+(OUT / "phase9-compact-native.json").write_text(json.dumps(compact_evidence, indent=2) + "\n")
+print("NATIVE COMPACT SUBSET", compact_evidence["passed"], flush=True)
+environment_evidence = inspect_environment(bytes(raw), bytes(bootlog), SOURCE_SHA)
+(OUT / "phase9-linux-environment.json").write_text(json.dumps(environment_evidence, indent=2) + "\n")
+print("NATIVE LINUX FILE ENVIRONMENT", environment_evidence["passed"], flush=True)
+application_evidence = inspect_application(bytes(bootlog), SOURCE_SHA, runtime_fixture_sha256)
+(OUT / "phase9-linux-runtime.json").write_text(json.dumps(application_evidence, indent=2) + "\n")
+print("NATIVE LINUX APPLICATION RUNTIME", application_evidence["passed"], flush=True)
+thread_evidence=inspect_threads(bytes(bootlog),SOURCE_SHA,thread_fixture_sha256)
+(OUT / "phase9-linux-threads.json").write_text(json.dumps(thread_evidence,indent=2)+"\n")
+print("NATIVE LINUX THREADS",thread_evidence["passed"],flush=True)
+socket_evidence=inspect_sockets(bytes(bootlog),SOURCE_SHA,socket_fixture_sha256)
+(OUT / "phase9-linux-sockets.json").write_text(json.dumps(socket_evidence,indent=2)+"\n")
+print("NATIVE LINUX SOCKETS",socket_evidence["passed"],flush=True)
+persistence_evidence=inspect_persistence(bytes(bootlog),SOURCE_SHA,persistence_fixture_sha256)
+(OUT / "phase9-linux-persistence.json").write_text(json.dumps(persistence_evidence,indent=2)+"\n")
+print("NATIVE LINUX PERSISTENCE",persistence_evidence["passed"],flush=True)
+external_evidence=inspect_external(bytes(bootlog),SOURCE_SHA,external_fixture_sha256,len(external_http_requests),len(external_stall_requests))
+(OUT / "phase9-linux-external.json").write_text(json.dumps(external_evidence,indent=2)+"\n")
+print("NATIVE LINUX EXTERNAL TCP",external_evidence["passed"],flush=True)
+symlink_evidence=inspect_symlinks(bytes(bootlog),SOURCE_SHA,symlink_fixture_sha256)
+(OUT / "phase9-linux-symlinks.json").write_text(json.dumps(symlink_evidence,indent=2)+"\n")
+print("NATIVE LINUX SYMLINKS",symlink_evidence["passed"],flush=True)
+hardlink_evidence=inspect_hardlinks(bytes(bootlog),SOURCE_SHA,hardlink_fixture_sha256)
+(OUT / "phase9-linux-hardlinks.json").write_text(json.dumps(hardlink_evidence,indent=2)+"\n")
+print("NATIVE LINUX HARDLINKS",hardlink_evidence["passed"],flush=True)
+map_evidence=inspect_maps(bytes(bootlog),SOURCE_SHA,map_fixture_sha256)
+(OUT / "phase9-linux-shared-maps.json").write_text(json.dumps(map_evidence,indent=2)+"\n")
+print("NATIVE LINUX SHARED MAPPINGS",map_evidence["passed"],flush=True)
+vfs_evidence = inspect_vfs(bytes(bootlog), SOURCE_SHA, vfs_fixture_sha256)
+(OUT / "phase9-linux-vfs.json").write_text(json.dumps(vfs_evidence, indent=2) + "\n")
+print("NATIVE LINUX VFS", vfs_evidence["passed"], flush=True)
+jobs_evidence = inspect_jobs(bytes(bootlog), SOURCE_SHA, jobs_fixture_sha256)
+(OUT / "phase9-linux-jobs.json").write_text(json.dumps(jobs_evidence, indent=2) + "\n")
+print("NATIVE LINUX JOBS", jobs_evidence["passed"], flush=True)
+shell_evidence = inspect_shell(bytes(bootlog), SOURCE_SHA)
+(OUT / "phase9-linux-shell.json").write_text(json.dumps(shell_evidence, indent=2) + "\n")
+print("NATIVE LINUX SHELL", shell_evidence["passed"], flush=True)
+busybox_evidence = inspect_busybox(bytes(bootlog), SOURCE_SHA)
+(OUT / "phase9-linux-busybox.json").write_text(json.dumps(busybox_evidence, indent=2) + "\n")
+print("NATIVE BUSYBOX APPLETS", busybox_evidence["passed"], flush=True)
+process_evidence = inspect_process(bytes(raw), bytes(bootlog), SOURCE_SHA, process_elf_sha256)
+(OUT / "phase9-linux-process.json").write_text(json.dumps(process_evidence, indent=2) + "\n")
+print("NATIVE COMPILED LINUX PROCESS", process_evidence["passed"], flush=True)
+if not process_evidence["passed"] and shutil.which("objdump"):
+    subprocess.run(["objdump", "-d", str(OUT / "process-compiled.elf")], check=False)
 runtime_ok=all(re.search(rb"(?:\r?\n)"+v+rb"(?:\r?\n)", bytes(bootlog)) for v in (b"RYZOVA_PROC_OK", b"RYZOVA_NET_OK")) and bytes(bootlog).count(b"Ryzova Kernel 0.1.0-dev") >= 2
 # A failed output redirection causes Plan 9 rc to abort the current
 # command line. Probe it independently, then ensure a fresh subsequent
@@ -477,7 +598,7 @@ for label,ok in native_9p_evidence["checks"].items():
     f"V7 native 9front tlsclient pinned TLS1.2 9P: {guest_tls_evidence['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"] and guest_identity_evidence["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"] and guest_identity_evidence["passed"] and compact_evidence["passed"] and environment_evidence["passed"] and process_evidence["passed"] and busybox_evidence["passed"] and shell_evidence["passed"] and jobs_evidence["passed"] and vfs_evidence["passed"] and application_evidence["passed"] and thread_evidence["passed"] and socket_evidence["passed"] and persistence_evidence["passed"] and external_evidence["passed"] and symlink_evidence["passed"] and hardlink_evidence["passed"] and map_evidence["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
 print("PASS native 9front tlsclient pinned TLS1.2 guest ingress and host mutual TLS1.3 peer; native 9P guest SHA, M2/M4 preserved.",flush=True)

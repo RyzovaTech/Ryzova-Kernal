@@ -1,0 +1,20 @@
+{
+  "schema": "flex-linux-hardlinks-ci-native/v1",
+  "historical_head": "22c1fbc528689a41b15fac06e6285724f4cc3d7f",
+  "source_checkout": "80b4abbe39be36e884acc22e37c2a551a8c5a37f",
+  "pull_request": 74,
+  "workflow_run": 40995905951,
+  "workflow_job": 123868850296,
+  "archive_sha256": "40605e133252cad9556ec85129f576994f5b3ec79b4abe424ae07f0f08e7a405",
+  "compiled_installed_and_extracted_kernel_sha256": "cb202f17e15b039e63dcb63fb89d6043bb803b5def7b70fb2c50993156761aca",
+  "ci_workflows_passed": 31,
+  "phase9_tests_passed": 100,
+  "phase5_tests_passed": 63,
+  "native_hardlink_invocations_passed": 20,
+  "main_merged": false,
+  "limitations": [
+    "not arbitrary Linux compatibility",
+    "not operational ARM64 qualification",
+    "not physical hardware qualification"
+  ]
+}

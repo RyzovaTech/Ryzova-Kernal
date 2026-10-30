@@ -1,0 +1,451 @@
+{
+  "schema": "compact-linux-v1-plan/v1",
+  "plan_revision": 1,
+  "scope": "AMD64/QEMU developer application environment on Flex; selected x86_64-linux-musl workloads",
+  "architecture": "amd64",
+  "environment": "compact/linux",
+  "api_boundary": "Runs as a Flex application, using native namespace/resource grants; Linux syscall ABI is implemented by the environment.",
+  "general_linux_compatibility_claim": false,
+  "automatic_merge": false,
+  "baseline": {
+    "main_head": "0a09a9833c895172e359a1d89216fc0a81e4eaf2",
+    "reference_head": "4b2eb6b96fb54067754eef825271331f045cabdc",
+    "reference_pr": 75,
+    "minimum_tests": {
+      "phase5": 63,
+      "phase9": 109
+    },
+    "core_sha256": {
+      "ryzova/compat/linux/cpu.c": "2fa508fa41d9346b84272ccbf540dd251391fcc9d50f3def3874216f80afc326",
+      "ryzova/compat/linux/elf64.c": "2225a5bd2fd628e2c46317d5fcf8bb4e5202e7c3db9bdfd1606197c508ceb0e9",
+      "ryzova/compat/linux/elf64.h": "02d2be68ea0021295ac714dc5b5e74a505a9eeded5572e26f8c157badf495cdd",
+      "ryzova/compat/linux/elf64_probe.c": "6a27db2a114e3c395ee8bd8eddfaf92f52cd29451981f9341ff1a1fcefc1c6d9",
+      "ryzova/compat/linux/filesystem_state.h": "b92cfed0c65d8b93fa53fe28d2fca95f44660cf13180288fc699b63f6072ec93",
+      "ryzova/compat/linux/jobs.c": "9ae5838ac8682312d4b0da272d22c257391649bc5da220d82cc3bf1e01edbe38",
+      "ryzova/compat/linux/jobs.h": "e4693f090657b812b447e485b404cd17b50cfa68ba2aba582d8f917deaf5ed2d",
+      "ryzova/compat/linux/jobs_probe.c": "5efc9b635c16877bfdd4826da730ec1ebc740ae75519495aa79f8e5877ea43ca",
+      "ryzova/compat/linux/jobs_signals.h": "2eafda1bccb1137e4eb9de1d45fbfcbd7ea20868b6f7a8ee0dd1e76179b31864",
+      "ryzova/compat/linux/jobs_threads.h": "b71618921f355e623515e23168af1e6a211767cdafa68b8e9ebc84a003ab6f12",
+      "ryzova/compat/linux/jobs_timers.h": "64d3ebbabbb2df49abb3e5c9c80aab004d5972a85e75b2552a4976e86fec059b",
+      "ryzova/compat/linux/memory.c": "c0b57f22fdcea94064e122e8e12fb2223dea122ffd1a2e66abc83b04b6da7786",
+      "ryzova/compat/linux/memory_files.h": "ff57a6e71f63212b972a4f79b6b001c0371ae9de800c72a589d32e50fbfa4752",
+      "ryzova/compat/linux/namespace.c": "41b06dcf3d7457773e9ed89ca547444b7ea193f7e19241c91a90a1d5e0a59966",
+      "ryzova/compat/linux/namespace.h": "d69a1738806df098f0cb82405318e778c946a0f0c0bab1852163218f4da3bd32",
+      "ryzova/compat/linux/native_runner.c": "eb9c0c8c5628200fcc5f80c818caaf1f93a6f63a6d4a5a1c103bfc9f8c154448",
+      "ryzova/compat/linux/network_cli.h": "e22bd6dc3f873b85c454fc0ca4785341578504514ff6b3b2b734587d0ebc7bee",
+      "ryzova/compat/linux/network_plan9.h": "37dbcc32163e098ad0c0c61fe89634684f87dfad5cd846403d545b1083727942",
+      "ryzova/compat/linux/network_posix.h": "396cc098a3b93ddffd0575a09b7a43e4106fb0cfbdbc973ab89a990ceac5ed17",
+      "ryzova/compat/linux/portable.h": "10d9b45eaa9afa11b461ec35859968042cc6bcc1570a57b7ef372780092f8756",
+      "ryzova/compat/linux/process.c": "a34b52dea87a9aebcc6e57ae52b2100850cc7278e24898160ccb2d61a6c8dabc",
+      "ryzova/compat/linux/process.h": "b472d4ade42d2367ca91d879c4e721fec58b62ba664a14a9ba02acc77d998a17",
+      "ryzova/compat/linux/process_probe.c": "948a5f429d06a62902a4677593d05148741ca1c13a237ee8b8b0b07563340230",
+      "ryzova/compat/linux/service/main.c": "3da994562fcd04d5e60988f6c05adda2fd54a1767cc9bc9d4174ac6a0f54af24",
+      "ryzova/compat/linux/subset_vm.c": "f3097bc4f39b5dbc45d26ea8bbec4dab65de41fd2418646b0518328b8d4039fc",
+      "ryzova/compat/linux/subset_vm.h": "449ad6fc86c66d2b341ee62038378e8939c5b82da2217376b318037b9c23dc63",
+      "ryzova/compat/linux/subset_vm_probe.c": "45feb4b3d8bb8ccefb616f3aa46db6a06d19ce56d2bbc362ad7705ad681e8986",
+      "ryzova/compat/linux/syscall.c": "df63ed4eca6ce797f3064535bb30806f4deabf5bcc8d66ba8637e1345d2803e4",
+      "ryzova/compat/linux/syscall.h": "847a9fc3f85767746774c5bd3aba1709272629c7251d50238b422b83ba1c8490",
+      "ryzova/compat/linux/syscall_net.h": "ad22413b097147015ffecf15614e537b70a60d3ffb7792ae7cdc4a3d2c799399",
+      "ryzova/compat/linux/syscall_vfs.h": "4672a47adc32209a1ba3b6565dea16cd439cd6f5288a8040078e09075d7a67de"
+    },
+    "native_run": "https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41000789638",
+    "source_checkout": "561edbbaff1c2d10f9437d1dbde7b1546d164f57",
+    "kernel_sha256": "e83f918d0e4f08c0705eaaac0340c0cc3e55906c91692817aa5f1479409b332d"
+  },
+  "phases": [
+    {
+      "id": "CLX-01",
+      "title": "Scope, audit and repeatable baseline",
+      "depends_on": [],
+      "exit_criteria": [
+        "Audited main and all cumulative PR heads",
+        "Versioned targets and finite acceptance gates committed",
+        "Existing baseline rerun with pinned fixtures in CI"
+      ]
+    },
+    {
+      "id": "CLX-02",
+      "title": "Filesystem environment and live resource mounts",
+      "depends_on": [
+        "CLX-01"
+      ],
+      "exit_criteria": [
+        "Root tree and explicit mount grants",
+        "POSIX path/metadata operations required by target apps",
+        "Persistent changes, revocation, limits and namespace isolation"
+      ]
+    },
+    {
+      "id": "CLX-03",
+      "title": "Memory, process and resource compatibility",
+      "depends_on": [
+        "CLX-02"
+      ],
+      "exit_criteria": [
+        "Mutable-file private COW and shared anonymous mappings",
+        "Required shared futex/process/session/resource APIs",
+        "Measured developer resource profile with aggregate quotas"
+      ]
+    },
+    {
+      "id": "CLX-04",
+      "title": "AMD64 instruction, loader and library coverage",
+      "depends_on": [
+        "CLX-01"
+      ],
+      "exit_criteria": [
+        "Named target executables and libraries load",
+        "Required integer, floating point and baseline SIMD semantics",
+        "Unsupported operations fail explicitly; differential failures resolved"
+      ]
+    },
+    {
+      "id": "CLX-05",
+      "title": "Networking and guest TLS applications",
+      "depends_on": [
+        "CLX-02",
+        "CLX-03",
+        "CLX-04"
+      ],
+      "exit_criteria": [
+        "DNS, UDP, IPv6 and target-required stream APIs",
+        "Exact resource grants, concurrent connections and deadlines",
+        "Guest HTTPS hostname/certificate checks with real separate peers"
+      ]
+    },
+    {
+      "id": "CLX-06",
+      "title": "Interactive terminal and job control",
+      "depends_on": [
+        "CLX-03",
+        "CLX-04"
+      ],
+      "exit_criteria": [
+        "PTY, termios and terminal input/output",
+        "Foreground/background groups, signals and terminal resize",
+        "Target-required proc/dev interfaces"
+      ]
+    },
+    {
+      "id": "CLX-07",
+      "title": "Unmodified application and developer workflow qualification",
+      "depends_on": [
+        "CLX-02",
+        "CLX-03",
+        "CLX-04",
+        "CLX-05",
+        "CLX-06"
+      ],
+      "exit_criteria": [
+        "Pinned BusyBox, CPython, Git and C toolchain workflows all pass",
+        "Source/dependency/build-config/binary locks complete",
+        "Finite measured budgets and native evidence for every gate"
+      ]
+    },
+    {
+      "id": "CLX-08",
+      "title": "Reviewed integration and developer release candidate",
+      "depends_on": [
+        "CLX-07"
+      ],
+      "exit_criteria": [
+        "Clean boot/install/recovery instructions reproduced",
+        "All baseline/native/security gates green at exact final source",
+        "Separate user authorization before merge; inherited publication gates retained"
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "id": "busybox",
+      "name": "BusyBox",
+      "version": "1.35.0",
+      "upstream_source": "https://busybox.net/downloads/busybox-1.35.0.tar.bz2",
+      "abi": "x86_64-linux-musl",
+      "workflows": [
+        "Shell script with pipelines, substitutions and file operations",
+        "find/grep/sed/tar and controlled-network wget",
+        "Interactive ash job control through a PTY"
+      ],
+      "qualification": "pending-v1-workflows",
+      "source_lock_status": "pending-source-and-transitive-build-lock",
+      "release_binary_sha256": null,
+      "baseline_binary_sha256": "6e123e7f3202a8c1e9b1f94d8941580a25135382b99e8d3e34fb858bba311348",
+      "build_configuration": "Version-identical unmodified source; explicit applet and ash job-control config. Existing published binary remains the regression fixture."
+    },
+    {
+      "id": "python",
+      "name": "CPython",
+      "version": "3.12.10",
+      "upstream_source": "https://www.python.org/ftp/python/3.12.10/Python-3.12.10.tar.xz",
+      "abi": "x86_64-linux-musl",
+      "workflows": [
+        "Run a multi-module stdlib project using json/pathlib/tempfile",
+        "Thread/process/subprocess round trips and module imports",
+        "Authorized DNS/socket/ssl exchange with positive and negative certificate tests"
+      ],
+      "qualification": "pending-v1-workflows",
+      "source_lock_status": "pending-source-and-transitive-build-lock",
+      "release_binary_sha256": null,
+      "required_modules": [
+        "json",
+        "pathlib",
+        "tempfile",
+        "threading",
+        "multiprocessing",
+        "subprocess",
+        "socket",
+        "ssl",
+        "hashlib",
+        "zlib"
+      ]
+    },
+    {
+      "id": "git",
+      "name": "Git",
+      "version": "2.49.0",
+      "upstream_source": "https://www.kernel.org/pub/software/scm/git/git-2.49.0.tar.xz",
+      "abi": "x86_64-linux-musl",
+      "workflows": [
+        "init/add/commit/log/diff/branch/checkout and persisted reload",
+        "Clone/fetch/push a disposable repository over granted HTTPS",
+        "Reject an untrusted certificate and an ungranted destination"
+      ],
+      "qualification": "pending-v1-workflows",
+      "source_lock_status": "pending-source-and-transitive-build-lock",
+      "release_binary_sha256": null,
+      "build_configuration": "C command-line tools with HTTPS remote helpers; GUI/Tcl/Perl integrations are outside v1."
+    },
+    {
+      "id": "gcc",
+      "name": "GNU GCC",
+      "version": "14.2.0",
+      "upstream_source": "https://gcc.gnu.org/pub/gcc/releases/gcc-14.2.0/gcc-14.2.0.tar.xz",
+      "abi": "x86_64-linux-musl",
+      "workflows": [
+        "Compile multi-file C with musl headers/libraries",
+        "Build pthread/file/socket examples and execute their produced ELF in the guest",
+        "Build and load a small shared library"
+      ],
+      "qualification": "pending-v1-workflows",
+      "source_lock_status": "pending-source-and-transitive-build-lock",
+      "release_binary_sha256": null,
+      "build_configuration": "C language, x86-64 baseline/SSE2, generic tuning, no AVX requirement; no C++/Fortran/Go claim."
+    },
+    {
+      "id": "binutils",
+      "name": "GNU Binutils",
+      "version": "2.43.1",
+      "upstream_source": "https://sourceware.org/pub/binutils/releases/binutils-2.43.1.tar.xz",
+      "abi": "x86_64-linux-musl",
+      "workflows": [
+        "Assemble/link C build outputs; inspect ELF/symbols with readelf/nm"
+      ],
+      "qualification": "pending-v1-workflows",
+      "source_lock_status": "pending-source-and-transitive-build-lock",
+      "release_binary_sha256": null
+    },
+    {
+      "id": "make",
+      "name": "GNU Make",
+      "version": "4.4.1",
+      "upstream_source": "https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz",
+      "abi": "x86_64-linux-musl",
+      "workflows": [
+        "Clean build and incremental rebuild of the C project using guest processes"
+      ],
+      "qualification": "pending-v1-workflows",
+      "source_lock_status": "pending-source-and-transitive-build-lock",
+      "release_binary_sha256": null
+    },
+    {
+      "id": "musl",
+      "name": "musl libc",
+      "version": "1.2.6",
+      "upstream_source": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+      "abi": "x86_64-linux-musl",
+      "workflows": [
+        "Dynamic/static target application startup, TLS, stdio, allocation and pthread behavior"
+      ],
+      "qualification": "pending-v1-workflows",
+      "source_lock_status": "pending-source-and-transitive-build-lock",
+      "release_binary_sha256": null,
+      "source_sha256": "d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "FS-ROOT",
+      "phase": "CLX-02",
+      "targets": [],
+      "acceptance": "Mount a declared root with /etc,/home,/usr,/var and /tmp; create, edit, rename, enumerate and reload a project tree.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "FS-ISOLATION",
+      "phase": "CLX-02",
+      "targets": [],
+      "acceptance": "Application and environment namespace views enforce grants; traversal, symlink and hardlink attempts cannot reach an ungranted host resource.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "FS-PERSIST",
+      "phase": "CLX-02",
+      "targets": [],
+      "acceptance": "Changes survive an independent environment restart; denied writes and failed imports do not overwrite existing output; recovery behavior is documented.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "MEM-PROC",
+      "phase": "CLX-03",
+      "targets": [],
+      "acceptance": "Private COW, shared anonymous maps, shared futex and required process/session calls pass Linux references, failure and lifetime tests.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "RESOURCE",
+      "phase": "CLX-03",
+      "targets": [],
+      "acceptance": "Every target has explicit measured image/memory/steps/time/fd/filesystem/network budgets and aggregate enforcement; no unlimited default.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "AMD64-ABI",
+      "phase": "CLX-04",
+      "targets": [
+        "musl"
+      ],
+      "acceptance": "Target-required instructions, floating point/SIMD, loader/TLS and libraries pass differential checks and native execution.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "NET-PEERS",
+      "phase": "CLX-05",
+      "targets": [],
+      "acceptance": "Real separate-node DNS, IPv4/IPv6 TCP and UDP exchanges pass; denial, disconnect, exhaustion and deadline tests pass.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "TLS-GUEST",
+      "phase": "CLX-05",
+      "targets": [
+        "python",
+        "git"
+      ],
+      "acceptance": "Unmodified guest TLS libraries validate certificates/hostnames; bad trust and ungranted routes fail without host-side application substitution.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "TTY-JOBS",
+      "phase": "CLX-06",
+      "targets": [
+        "busybox"
+      ],
+      "acceptance": "Interactive PTY shell handles input, Ctrl-C, resize, foreground/background jobs and cleanup.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "APP-BUSYBOX",
+      "phase": "CLX-07",
+      "targets": [
+        "busybox"
+      ],
+      "acceptance": "All declared BusyBox scripts/applets and interactive workflow complete with expected files, output and exit statuses.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "APP-PYTHON",
+      "phase": "CLX-07",
+      "targets": [
+        "python"
+      ],
+      "acceptance": "The declared stdlib project, process/thread/subprocess and TLS workflows run on the native Flex guest.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "APP-GIT",
+      "phase": "CLX-07",
+      "targets": [
+        "git"
+      ],
+      "acceptance": "Local and granted HTTPS clone/fetch/commit/push workflows persist and produce matching repository content.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "APP-C-SDK",
+      "phase": "CLX-07",
+      "targets": [
+        "gcc",
+        "binutils",
+        "make",
+        "musl"
+      ],
+      "acceptance": "Guest GCC/binutils/make build the C project and shared library; resulting ELF executes in the same environment with expected behavior.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "LOCKS",
+      "phase": "CLX-07",
+      "targets": [
+        "busybox",
+        "python",
+        "git",
+        "gcc",
+        "binutils",
+        "make",
+        "musl"
+      ],
+      "acceptance": "Source checksums, complete transitive dependencies, build configs/tool versions and final binary hashes are pinned and recorded.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "NATIVE-EVIDENCE",
+      "phase": "CLX-08",
+      "targets": [],
+      "acceptance": "Exact source, fixture hashes, source challenges, genuine results and independent compiled/installed/extracted kernel provenance are recorded with no skipped required workloads.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "INSTALL-RECOVERY",
+      "phase": "CLX-08",
+      "targets": [],
+      "acceptance": "A fresh AMD64 QEMU boot follows documented install/launch/export/recovery commands and reproduces all acceptance workflows.",
+      "state": "pending",
+      "evidence": null
+    },
+    {
+      "id": "INTEGRATION",
+      "phase": "CLX-08",
+      "targets": [],
+      "acceptance": "Final source passes inherited baseline/security/driver/native checks; cumulative history reviewed and merge separately authorized; publication remains subject to existing release policy.",
+      "state": "pending",
+      "evidence": null
+    }
+  ],
+  "excluded_from_v1": [
+    "Arbitrary/all Linux binary compatibility",
+    "glibc ABI qualification",
+    "GUI/desktop, GPU, audio and device application stacks",
+    "C++ and other GCC language frontends",
+    "Arbitrary pip packages and binary wheels",
+    "Operational ARM64 and physical hardware qualification",
+    "Windows/macOS environments",
+    "Automatic merge or public kernel binary publication"
+  ],
+  "change_control": "Target/version/scope changes require a reviewed plan revision and preserved evidence; no silent replacement of CPython/GCC with smaller substitutes. Published archive selection is a fixed compatibility reference, not a claim of latest upstream versions."
+}

@@ -1,0 +1,24 @@
+name: Phase 9.5 unmodified BusyBox applet qualification
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  busybox-applets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch SHA256 pinned historical compatibility fixtures
+        run: python scripts/phase9_busybox.py --fetch artifacts/busybox-fixtures
+      - name: Compare exact third party ELF output with Linux and check CPU bounds
+        env:
+          COMPACT_BUSYBOX_DIR: artifacts/busybox-fixtures
+        run: python -m unittest discover -s tests -p 'test_phase9_busybox.py' -v
