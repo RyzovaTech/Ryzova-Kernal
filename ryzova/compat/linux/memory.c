@@ -96,6 +96,7 @@ static int64_t dynamic_memory(RyzLinuxMemory *m,const RyzLinuxRegs *r)
         file_unbind(m,lo,hi);
         flags=RYZ_MAP|16|((prot&1)?RYZ_READ:0)|((prot&2)?RYZ_WRITE:0)|((prot&4)?RYZ_EXEC:0);
         if(file && !(prot&2))flags|=64;
+        if(node){flags|=RYZ_SHARED_FILE;if(prot&2)flags|=RYZ_READ;}
         memset(m->bytes+(size_t)(lo-m->base),0,(size_t)size);
         if(file && offset<file->size){uint64_t n=file->size-offset;if(n>size)n=size;memcpy(m->bytes+(size_t)(lo-m->base),file->image+(size_t)offset,(size_t)n);}
         mark(m,lo,hi,flags);
@@ -124,7 +125,7 @@ static int64_t dynamic_memory(RyzLinuxMemory *m,const RyzLinuxRegs *r)
     }
     if(prot&2)for(i=0;i<m->file_count;i++)if(m->filepages[i].page>=lo && m->filepages[i].page<hi && !m->filepages[i].maywrite)return -13;
     for(i=(lo-m->base)/RYZ_PAGE;i<(hi-m->base)/RYZ_PAGE;i++){
-        flags=m->pages[i] & (RYZ_MAP|16|64);if(prot&2)flags&=~64U;
+        flags=m->pages[i] & (RYZ_MAP|16|64|RYZ_SHARED_FILE);if(prot&2){flags&=~64U;if(flags&RYZ_SHARED_FILE)flags|=RYZ_READ;}
         m->pages[i]=(unsigned char)(flags|((prot&1)?RYZ_READ:0)|((prot&2)?RYZ_WRITE:0)|((prot&4)?RYZ_EXEC:0));
     }
     return 0;

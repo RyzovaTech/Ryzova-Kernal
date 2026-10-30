@@ -10,7 +10,7 @@ from phase9_process import FLAGS
 from phase9_dynamic import build
 from phase9_hardlinks import commands as hardlink_commands,start as hardlink_start
 ROOT=Path(__file__).resolve().parents[1]
-CASES=('basic','fork','unlink','tail','bus','bus-handler','bus-context','bus-flags','offset','fixed','io','exec','exec-cycle','syscall-fault','bus-blocked','errors','release','permissions','quota','output-alias','futex-policy')
+CASES=('basic','fork','unlink','tail','bus','bus-handler','bus-context','bus-flags','write-only','offset','fixed','io','exec','exec-cycle','syscall-fault','bus-blocked','errors','release','permissions','quota','output-alias','futex-policy')
 def fixtures(directory,commit):
  directory=Path(directory);cache=ROOT/'artifacts/musl-fixtures';build(cache);shutil.copy2(cache/'shared-map-app',directory/'shared-map-app')
  subprocess.run(['cc',*FLAGS,str(ROOT/'tests/fixtures/compact_process_start.S'),str(ROOT/'tests/fixtures/compact_shared_maps.c'),'-o',str(directory/'shared-maps.elf')],check=True,capture_output=True)

@@ -12,7 +12,7 @@ from phase9_process import FLAGS
 from phase9_shell import DIGEST
 import phase9_shared_maps as gate
 
-CASES=('basic','fork','unlink','tail','bus','bus-handler','bus-context','bus-flags','offset','fixed','io','exec','exec-cycle','syscall-fault','bus-blocked','errors','release')
+CASES=('basic','fork','unlink','tail','bus','bus-handler','bus-context','bus-flags','write-only','offset','fixed','io','exec','exec-cycle','syscall-fault','bus-blocked','errors','release')
 class SharedMapTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):

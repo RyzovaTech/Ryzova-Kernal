@@ -13,6 +13,7 @@
 #define RYZ_READ 4U
 #define RYZ_WRITE 2U
 #define RYZ_EXEC 1U
+#define RYZ_SHARED_FILE 32U
 #define RYZ_FILEMAP_PAGES 64U
 /* Sparse file-page bindings; dirty baselines are allocated only on first map. */
 typedef struct RyzFilePage {

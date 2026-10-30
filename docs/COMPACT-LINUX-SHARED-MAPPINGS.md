@@ -35,6 +35,8 @@ ordinary overlapping CPU copies; their instruction order determines the result.
 ## Protection, truncation and faults
 
 Mappings require readable descriptors; shared writable maps require O_RDWR.
+Writable shared pages are also readable, matching the AMD64 Linux reference,
+even when PROT_READ was not explicitly requested.
 Mprotect cannot add write permission to a map created from a read-only descriptor.
 Executable mappings of writable guest files and writable/executable pages remain
 outside this profile. MAP_FIXED can replace managed mappings after validation;
@@ -71,7 +73,7 @@ and CI leak checks cover the same paths.
 An application linked to checksum-pinned unmodified musl uses pthread atomics,
 fork, shared maps and msync. Its mapped file is exported and read in a separate
 invocation by unmodified pinned BusyBox. The source-built AMD64 QEMU workflow
-requires 26 successful new invocations and an expected step-limit invocation,
+requires 27 successful new invocations and an expected step-limit invocation,
 including export/reload, fixture SHA256 values and source challenges. Exact results are recorded in
 the corresponding PR. This does not establish general Linux application,
 operational ARM64 or physical hardware qualification.

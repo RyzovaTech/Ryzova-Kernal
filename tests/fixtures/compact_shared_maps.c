@@ -66,6 +66,9 @@ long app_main(long argc,char **argv,char **env)
   CHECK(!C(131,stack,0,0) && !call(13,7,(long)action,0,8,0,0));
   __asm__ volatile("stc; mov %%rsp,%%r15; mov %1,%%rsp; popfq; mov %%r15,%%rsp; pushfq; pop %0":"=r"(flags):"r"(expected_address):"r15","memory","cc");
   CHECK(hits==1 && !problem && !(flags&1));
+ }else if(eq(argv[2],"write-only")){
+  fd=make(4096);CHECK(fd>=0);a=mapping(fd,4096,0,2);CHECK((long)a>0);a[0]='W';CHECK(a[0]=='W');
+  CHECK(!C(10,a,4096,1) && !C(10,a,4096,2) && a[0]=='W');
  }else if(eq(argv[2],"permissions")){
   fd=make(4096);CHECK(fd>=0);ro=C(2,"file",0,0);CHECK(ro>=0 && (long)mapping(ro,4096,0,3)==-13);
   a=mapping(ro,4096,0,1);CHECK((long)a>0 && C(10,a,4096,3)==-13 && !C(10,a,4096,0) && !C(10,a,4096,1));
