@@ -50,7 +50,7 @@ def commands(commit):
             '$c -j -R /tmp/rf-state /tmp/rf-elf fresh no || echo FLEX_ROOTFS_PROFILE_DENIED',
             'echo bad > /tmp/rf-bad',
             '$c -r -R /tmp/rf-bad /tmp/rf-elf fresh no || echo FLEX_ROOTFS_CORRUPT_DENIED',
-            '$c -r -b 4194304 -x /busybox=/tmp/busybox -i /tmp/rf-script /tmp/busybox ash /input && echo FLEX_ROOTFS_SHELL_RUN_OK',
+            '$c -r -b 4194304 -x /busybox -i /tmp/rf-script /tmp/busybox ash /input && echo FLEX_ROOTFS_SHELL_RUN_OK',
             'echo FLEX_ROOTFS_END']
     first = start(commit)
     return [op + f'; echo RYZOVA_RUNTIME_STAGE_{first+i}' for i, op in enumerate(ops)] + ['echo FLEX_ROOTFS_DONE']
