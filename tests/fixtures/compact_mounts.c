@@ -67,11 +67,24 @@ long app_main(long argc,char **argv,char **env)
   n=C(82,"/home/share/first","/home/share/second",0);
   if(n==-17)CHECK(content("/home/share/first","first") && content("/home/share/second","second"));
   else CHECK(!n && content("/home/share/second","first"));
+ }else if(eq(argv[1],"symlink-routes")){
+  CHECK(!C(88,"/home/share/must-not-exist","/tmp/missing",0));
+  CHECK(C(83,"/tmp/missing",0700,0)==-17 && C(4,"/home/share/must-not-exist",st,0)==-2);
+  CHECK(!C(88,"/home/share/project","/tmp/directory-link",0));
+  CHECK(C(82,"/tmp/directory-link/","/tmp/new",0)==-20 && C(84,"/tmp/directory-link/",0,0)==-20);
+  CHECK(!C(4,"/home/share/project",st,0));
+ }else if(eq(argv[1],"dir-inodes")){
+  U dot,parent,actual;CHECK(!C(4,"/home/share",st,0));parent=st[1];
+  dir=C(2,"/home/share/project",0200000,0);CHECK(dir>=0 && !C(5,dir,st,0));actual=st[1];
+  n=C(217,dir,b,256);CHECK(n>=48);dot=*(U *)b;CHECK(dot==actual && *(U *)(b+24)==parent);
  }else if(eq(argv[1],"lifetime")){
   for(n=0;n<200;n++){fd=C(2,"/home/share/project/source.c",0,0);CHECK(fd>=0);other=C(32,fd,0,0);CHECK(other>=0 && !C(3,fd,0,0) && C(0,other,b,1)==1 && !C(3,other,0,0));}
  }else if(eq(argv[1],"sync")){
   fd=C(2,"/home/share/project/source.c",2,0);CHECK(fd>=0);
   n=C(74,fd,0,0);CHECK(n==0 || n==-95);CHECK(!C(3,fd,0,0));
+ }else if(eq(argv[1],"eof")){
+  fd=C(2,"/home/share/project/source.c",0,0);CHECK(fd>=0 && C(8,fd,65536,0)==65536 && C(0,fd,b,255)==0);
+  CHECK(call(17,fd,(long)b,255,65536,0,0)==0 && !C(3,fd,0,0));
  }else if(eq(argv[1],"positioned")){
   fd=C(2,"/home/share/project/source.c",2,0);CHECK(fd>=0);
   CHECK(call(17,fd,(long)b,1,1,0,0)==1 && b[0]==argv[2][1] && C(8,fd,0,1)==0);

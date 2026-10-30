@@ -93,6 +93,8 @@ class MountTests(unittest.TestCase):
     def test_traversal_links_root_rename_and_oversized_operations_are_denied(self):
         self.populate()
         self.check('denials')
+        self.check('symlink-routes')
+        self.check('dir-inodes')
         with tempfile.TemporaryDirectory() as outside:
             (Path(outside) / 'secret').write_text('host-only')
             (self.path / 'escape').symlink_to(outside, target_is_directory=True)
@@ -132,6 +134,7 @@ class MountTests(unittest.TestCase):
 
     def test_positioned_io_and_truncate_match_actual_backend_content(self):
         self.populate()
+        self.check('eof')
         self.check('positioned')
         self.assertEqual((self.path / 'project/source.c').read_bytes(), b'c')
 

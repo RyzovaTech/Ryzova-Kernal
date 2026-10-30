@@ -133,7 +133,8 @@ static int64_t resource_io_at(RyzLinuxProcess *p,uint64_t fd,uint64_t address,ui
     if(!buffer(p,address,(size_t)count,!write,&data))return -14;
     memset(&c,0,sizeof c);c.handle=o->handle;c.path=resource_relative(p->world,o->mount,o->path);
     if(write && f->append){c.operation=RYZ_FS_STAT;n=resource_call(p,o->mount,2,&c);if(n<0)return n;offset=c.stat.size;}
-    if(offset>RYZ_LINUX_FILE_MAX || count>RYZ_LINUX_FILE_MAX-offset)return -27;
+    if(write && (offset>RYZ_LINUX_FILE_MAX || count>RYZ_LINUX_FILE_MAX-offset))return -27;
+    if(!write && offset>(UINT64_MAX>>1))return -22;
     if(count>RYZ_FS_TRAFFIC-p->world->resource_bytes)return -28;
     c.operation=write?RYZ_FS_WRITE_OP:RYZ_FS_READ_OP;c.bytes=data;c.size=(size_t)count;c.offset=offset;
     n=resource_call(p,o->mount,write?2:1,&c);if(n<0)return n;if((uint64_t)n>count)return -5;
@@ -149,7 +150,17 @@ static int64_t resource_dents(RyzLinuxProcess *p,uint64_t fd,uint64_t address,ui
     if(!buffer(p,address,(size_t)count,1,&out))return -14;
     while(cursor<=RYZ_VFS_NODES+2){
         memset(&c,0,sizeof c);c.handle=o->handle;c.path=resource_relative(p->world,o->mount,o->path);
-        if(cursor<2){c.operation=RYZ_FS_STAT;result=resource_call(p,o->mount,1,&c);if(result<0)return result;memcpy(c.name,cursor?"..":".",cursor?3:2);}
+        if(cursor<2){
+            char parent[RYZ_NS_PATH_MAX];
+            c.operation=RYZ_FS_STAT;
+            if(cursor==1 && c.path[0]){
+                char *slash;memcpy(parent,c.path,strlen(c.path)+1);slash=strrchr(parent,'/');if(slash)*slash=0;else parent[0]=0;
+                c.path=parent;c.handle=-1;
+            }
+            result=resource_call(p,o->mount,1,&c);if(result<0)return result;
+            if(cursor==1 && !resource_relative(p->world,o->mount,o->path)[0])c.stat.inode=p->world->nodes[p->world->nodes[p->world->resource_anchors[o->mount]].parent].inode;
+            memcpy(c.name,cursor?"..":".",cursor?3:2);
+        }
         else{c.operation=RYZ_FS_LIST;c.offset=cursor-2;result=resource_call(p,o->mount,1,&c);if(result<0)return used?(int64_t)used:result;if(!result)break;if(cursor>=RYZ_VFS_NODES+2)return -75;}
         for(n=0;n<sizeof c.name && c.name[n];n++)if(c.name[n]=='/')return -5;
         if(!n || n==sizeof c.name)return -5;
@@ -199,10 +210,12 @@ static int64_t resource_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *h
     }
     if(nr==88)address=r->rsi;
     if(nr==6 || nr==82 || nr==84 || nr==86 || nr==87 || nr==88 || nr==89 || nr==263 || nr==266 || nr==267 || (nr==262 && (r->r10&256)) || (nr==265 && !(r->r8&1024)) || ((nr==2 || nr==257) && ((flags&0400000) || (flags&0300)==0300)))follow=0;
+    if(nr==82 || nr==84 || nr==87 || nr==263)follow=-1;
+    if(nr==83 || nr==258 || nr==88 || nr==266)follow=-2;
     error=ryz_linux_path(p,dirfd,address,path,follow,&trailing);if(error){*handled=1;return error;}
     i=resource_find(w,path);
     if(nr==82 || nr==86 || nr==265){
-        error=ryz_linux_path(p,nr==265?r->rdx:L_AT_FDCWD,nr==265?r->r10:r->rsi,other,0,&trailing);if(error){*handled=1;return error;}
+        error=ryz_linux_path(p,nr==265?r->rdx:L_AT_FDCWD,nr==265?r->r10:r->rsi,other,nr==82?-1:0,&trailing);if(error){*handled=1;return error;}
         j=resource_find(w,other);
         if(i<0 && j<0){if(nr==82 && (resource_ancestor(w,path) || resource_ancestor(w,other))){*handled=1;return -16;}return 0;}
         *handled=1;if(i<0 || i!=j)return -18;if(nr!=82)return -95;
