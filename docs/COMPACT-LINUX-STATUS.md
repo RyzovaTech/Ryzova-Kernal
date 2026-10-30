@@ -42,3 +42,7 @@ The finite developer V1 completion contract and CLX-01–CLX-08 phase plan are i
 [COMPACT-LINUX-V1-PLAN.md](COMPACT-LINUX-V1-PLAN.md); machine acceptance IDs are in
 [linux-v1-plan.json](../ryzova/compact/linux-v1-plan.json). Regression counts do not
 close those application acceptance gates.
+
+CLX-02 has started: see [root filesystem progress](COMPACT-LINUX-V1-PHASE2.md).
+The opt-in root profile is an increment; live mounts and per-application views
+remain pending and Linux V1 remains incomplete.

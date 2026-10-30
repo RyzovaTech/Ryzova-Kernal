@@ -5,7 +5,7 @@ application environment එකයි. මෙහි V1 completion එක නම�
 workflows සහ acceptance gates මඟින් තීරණය වේ. Test ගණන හෝ අනුමාන
 ප්‍රතිශතයක් completion ලෙස භාවිත නොකරයි.
 
-Status: **CLX-01 planning/baseline deliverable; V1 is incomplete.** The machine
+Status: **CLX-01 complete; CLX-02 in progress; V1 is incomplete.** The machine
 source of truth is [linux-v1-plan.json](../ryzova/compact/linux-v1-plan.json).
 New CLX phase numbers are distinct from historical Phase 9.1–9.16 PR numbering.
 
@@ -27,6 +27,11 @@ all sixteen overlapping PRs. Phase 8 may merge the reviewed descendant only afte
 separate user authorization; predecessor PR disposition is a review decision.
 Historical contract-only and source-only documents describe their original phases
 and remain historical evidence, rather than being rewritten as current claims.
+
+The user subsequently authorized integration on 2026-10-30. PR #76 was merged
+as `bd609ee7c0796ae56f74150553bbd82a05efbf7c`; the bullets above retain the
+original audit snapshot. [Phase 2 progress](COMPACT-LINUX-V1-PHASE2.md) records
+the root-profile increment and remaining live mounts, views and recovery work.
 
 ## What V1 means
 

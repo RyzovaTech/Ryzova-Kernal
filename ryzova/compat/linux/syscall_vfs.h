@@ -1,13 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-/* Internal syscall implementation: invocation-local /tmp, never host paths.
+/* Internal syscall implementation: invocation-local guest tree, never host paths.
  * Kept in this translation unit so all existing portable ABI consumers use it. */
-static void vfs_init(RyzLinuxWorld *w)
-{
-    if(w->nodes[0].used)return;
-    w->nodes[0].used=w->nodes[0].linked=w->nodes[0].directory=1;
-    w->nodes[0].permissions=0700;w->nodes[0].inode=2000;w->next_inode=2001;
-    memcpy(w->nodes[0].name,"tmp",4);
-}
+#include "filesystem_tree.h"
 static unsigned int vfs_nlink(RyzLinuxWorld *w,unsigned int index)
 {
     unsigned int i,count=0;index=RYZ_VFS_INDEX(w,index);
@@ -30,8 +24,15 @@ static int vfs_child(RyzLinuxWorld *w,unsigned int parent,const char *name)
 static int vfs_lookup(RyzLinuxWorld *w,const char *path)
 {
     unsigned int node=0;size_t at=4,n;char name[RYZ_NS_PATH_MAX];int next;
-    if(strcmp(path,"/tmp")==0)return 0;
-    if(strncmp(path,"/tmp/",5)!=0)return -10000;
+    if(w->root_tree){
+        if(vfs_reserved(path))return -10000;
+        if(!strcmp(path,"/"))return 0;
+        if(path[0]!='/')return -10000;
+        at=0;
+    }else{
+        if(strcmp(path,"/tmp")==0)return 0;
+        if(strncmp(path,"/tmp/",5)!=0)return -10000;
+    }
     while(path[at]){
         at++;n=0;while(path[at] && path[at]!='/')name[n++]=path[at++];name[n]=0;
         if(!w->nodes[node].directory)return -20;
@@ -51,11 +52,12 @@ static int vfs_cwd(RyzLinuxProcess *p,char *out)
         if(count>=RYZ_VFS_NODES || !p->world->nodes[node].linked)return -2;
         chain[count++]=node;node=p->world->nodes[node].parent;
     }
-    memcpy(out,"/tmp",5);n=4;
+    if(p->world->root_tree){memcpy(out,"/",2);n=1;}else{memcpy(out,"/tmp",5);n=4;}
     while(count){
         node=chain[--count];k=strlen(p->world->nodes[node].name);
-        if(n+k+2>RYZ_NS_PATH_MAX)return -36;
-        out[n++]='/';memcpy(out+n,p->world->nodes[node].name,k+1);n+=k;
+        if(n+k+(n>1?1:0)+1>RYZ_NS_PATH_MAX)return -36;
+        if(n>1)out[n++]='/';
+        memcpy(out+n,p->world->nodes[node].name,k+1);n+=k;
     }
     return 0;
 }
@@ -132,8 +134,10 @@ static int vfs_parent(RyzLinuxWorld *w,char *path,char **name)
 {
     size_t n=strlen(path);int parent;
     while(n && path[n-1]!='/')n--;
-    if(n<=1)return -13;
-    path[n-1]=0;*name=path+n;parent=vfs_lookup(w,path);
+    if(n<=1){
+        if(!w->root_tree || n!=1 || !path[1] || vfs_reserved(path))return -13;
+        *name=path+1;parent=0;
+    }else{path[n-1]=0;*name=path+n;parent=vfs_lookup(w,path);}
     if(parent<0)return parent==-10000?-13:parent;
     if(!w->nodes[parent].directory)return -20;
     if((w->nodes[parent].permissions & 0300)!=0300)return -13;
@@ -203,7 +207,7 @@ static int64_t vfs_getdents(RyzLinuxProcess *p,uint64_t fd,uint64_t address,uint
     while(cursor<RYZ_VFS_NODES+2){
         entry=node;
         if(cursor==0){name=".";ino=node->inode;}
-        else if(cursor==1){name="..";ino=f->vnode?p->world->nodes[node->parent].inode:RYZ_NS_ROOT+1;}
+        else if(cursor==1){name="..";ino=f->vnode?p->world->nodes[node->parent].inode:(p->world->root_tree?node->inode:RYZ_NS_ROOT+1);}
         else{
             entry=&p->world->nodes[cursor-2];
             if(cursor==2 || !entry->used || !entry->linked || entry->parent!=f->vnode){cursor++;continue;}

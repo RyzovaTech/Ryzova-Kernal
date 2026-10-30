@@ -30,7 +30,8 @@ int main(int argc,char **argv)
     umask(077);memset(&fs,0,sizeof fs);
     memset(&files,0,sizeof(files));memset(&config,0,sizeof(config));config.random=entropy;
     while(first<argc){
-        if(strcmp(argv[first],"-b")==0 && first+1<argc){
+        if(strcmp(argv[first],"-r")==0){config.root_tree=1;first++;}
+        else if(strcmp(argv[first],"-b")==0 && first+1<argc){
             char *end;unsigned long n=strtoul(argv[first+1],&end,10);if(!n || n>16777216 || *end)return 64;config.max_steps=(uint32_t)n;first+=2;
         }else if(strcmp(argv[first],"-n")==0 && first+1<argc && network.count<RYZ_NETWORK_GRANTS){
             if(!network_parse(argv[first+1],&network_grants[network.count],&network_hosts[network.count]))return 64;

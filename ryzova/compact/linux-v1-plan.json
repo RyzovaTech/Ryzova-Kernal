@@ -73,7 +73,8 @@
         "Root tree and explicit mount grants",
         "POSIX path/metadata operations required by target apps",
         "Persistent changes, revocation, limits and namespace isolation"
-      ]
+      ],
+      "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md"
     },
     {
       "id": "CLX-03",
@@ -279,8 +280,10 @@
       "phase": "CLX-02",
       "targets": [],
       "acceptance": "Mount a declared root with /etc,/home,/usr,/var and /tmp; create, edit, rename, enumerate and reload a project tree.",
-      "state": "pending",
-      "evidence": null
+      "state": "partial",
+      "evidence": null,
+      "progress": "CLX-02 increment 2A: opt-in guest root and explicit-profile snapshots; live mounts/recovery still pending",
+      "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md"
     },
     {
       "id": "FS-ISOLATION",
@@ -295,8 +298,10 @@
       "phase": "CLX-02",
       "targets": [],
       "acceptance": "Changes survive an independent environment restart; denied writes and failed imports do not overwrite existing output; recovery behavior is documented.",
-      "state": "pending",
-      "evidence": null
+      "state": "partial",
+      "evidence": null,
+      "progress": "CLX-02 increment 2A: opt-in guest root and explicit-profile snapshots; live mounts/recovery still pending",
+      "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md"
     },
     {
       "id": "MEM-PROC",
@@ -447,5 +452,15 @@
     "Windows/macOS environments",
     "Automatic merge or public kernel binary publication"
   ],
-  "change_control": "Target/version/scope changes require a reviewed plan revision and preserved evidence; no silent replacement of CPython/GCC with smaller substitutes. Published archive selection is a fixed compatibility reference, not a claim of latest upstream versions."
+  "change_control": "Target/version/scope changes require a reviewed plan revision and preserved evidence; no silent replacement of CPython/GCC with smaller substitutes. Published archive selection is a fixed compatibility reference, not a claim of latest upstream versions.",
+  "integration_events": [
+    {
+      "date": "2026-10-30",
+      "user_authorized": true,
+      "pull_request": 76,
+      "head": "ee45ba9ab466a42e4aecbf5fb6bdfaaf20ce8f3f",
+      "merge_commit": "bd609ee7c0796ae56f74150553bbd82a05efbf7c",
+      "purpose": "integrate audited CLX-01 cumulative baseline before CLX-02"
+    }
+  ]
 }
