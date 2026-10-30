@@ -1,9 +1,13 @@
 # CLX-02: root filesystem and resource views
 
-Status: **implementation candidate complete; exact-head qualification pending**.
-The root, live mount, view/revocation and recovery implementations are present.
-FS-ROOT, FS-ISOLATION and FS-PERSIST remain partial until CI/native evidence is
-collected. Linux V1 application targets are not qualified.
+Status: **CLX-02 complete for the declared bounded filesystem profiles**.
+FS-ROOT, FS-ISOLATION and FS-PERSIST passed on implementation head
+`92904fd4ea8309265cb26ad738fbb62ce72d0eae`: all 30 workflows, 63 Phase 5 +
+136 Phase 9 methods without skips, ten plan guards, and fresh source-built AMD64
+QEMU root/resource gates. The [acceptance record](validation/compact-linux-v1-phase2-acceptance.json)
+contains provenance, artifact IDs and runtime source fingerprints. The final
+record/plan revision must also pass CI before integration. Linux V1 and its
+application targets remain incomplete; fourteen V1 acceptance IDs remain open.
 
 ## Integration and scope
 
@@ -17,12 +21,12 @@ checks or publishing kernel binaries. Historical audit records remain unchanged.
 | Increment | Result | Remaining acceptance |
 | --- | --- | --- |
 | 2A | Opt-in guest root, metadata/links, snapshot/restart, early BusyBox file probe | Implemented; exact-head CI/native evidence recorded in the PR |
-| 2B | Live filesystem resource mounts with explicit guest destinations, rights, finite quotas and host callbacks | Implemented; qualification pending |
-| 2C | Shared environment views and narrower per-application grants, inheritance and revocation | Implemented; qualification pending |
-| 2D | Mount restart/recovery, failure atomicity, complete root/isolation/persistence native acceptance and target blocker report | Implemented; qualification pending |
+| 2B | Live filesystem resource mounts with explicit guest destinations, rights, finite quotas and host callbacks | Qualified; acceptance record linked above |
+| 2C | Shared environment views and narrower per-application grants, inheritance and revocation | Qualified; acceptance record linked above |
+| 2D | Mount restart/recovery, failure atomicity, complete root/isolation/persistence native acceptance and target blocker report | Qualified; acceptance record linked above |
 
-Do not promote a phase because one increment passes. The three phase gates remain
-open until 2B–2D pass as well. Continue the frozen application probes throughout;
+The three phase gates closed only after 2B–2D also passed. One increment or a
+green baseline alone is insufficient. Continue the frozen application probes; 
 classify missing filesystem, process, ISA, network and terminal behavior under
 the owning phase without substituting target applications.
 
@@ -86,10 +90,10 @@ imports. Missing cases, incorrect results, digests or challenges fail qualificat
 Native JSON explicitly retains `phase_complete=false` with remaining work. The
 inherited kernel and compatibility gates remain required alongside this increment.
 
-## Completion candidate: 2B–2D
+## Completion: 2B–2D
 
-The remaining implementation is now present; **exact-head CI/native qualification
-is pending**. Acceptance IDs remain partial until that evidence is collected.
+The live directory, view/revocation and recovery implementation is qualified
+under the profiles below. Future changes must retain the same acceptance gates.
 
 Live directory capabilities use the following launcher interface:
 
@@ -130,7 +134,8 @@ capabilities. Network grants receive their separate acceptance in CLX-05.
 `1` permits the configured grants. Any other content/read failure revokes a mount
 on its next access, permanently for that invocation. Checks include already-open
 fds, readv/writev, positioned I/O, stat, seek, cwd, dirfd and enumeration. Close
-still releases the backend handle after revocation. The control descriptor is
+still releases the backend handle after revocation. Revocation denies future I/O;
+it does not erase data already copied into guest memory. The control descriptor is
 never implicitly mapped into the guest. The qualification fixture explicitly
 grants a separate admin capability solely to exercise the real revoke path.
 
@@ -150,9 +155,9 @@ A native 9P directory is not advertised as a general POSIX filesystem. Projects
 requiring guest hardlinks or replacement rename use the managed root. A future
 application requirement that needs additional filesystem semantics reopens the
 owning filesystem gate; it must not silently be relabeled as a CPU/network fix.
-Directory fds/cwd cache their canonical guest name; a concurrent external rename
-of that directory can invalidate relative operations, which fail closed. This
-profile does not claim Linux's renamed-directory-handle semantics or concurrent
+Directory fds/cwd cache their canonical guest name. Relative operations follow
+the currently authorized name; a concurrent external rename can invalidate it.
+This profile does not claim Linux's renamed-directory-handle semantics or concurrent
 multiwriter append atomicity. These limitations do not change the V1 target
 versions or promote any application workflow to passed.
 

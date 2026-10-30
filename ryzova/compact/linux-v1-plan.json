@@ -74,7 +74,9 @@
         "POSIX path/metadata operations required by target apps",
         "Persistent changes, revocation, limits and namespace isolation"
       ],
-      "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md"
+      "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md",
+      "state": "complete",
+      "completion_evidence": "docs/validation/compact-linux-v1-phase2-acceptance.json"
     },
     {
       "id": "CLX-03",
@@ -280,9 +282,9 @@
       "phase": "CLX-02",
       "targets": [],
       "acceptance": "Mount a declared root with /etc,/home,/usr,/var and /tmp; create, edit, rename, enumerate and reload a project tree.",
-      "state": "partial",
-      "evidence": null,
-      "progress": "2A-2D implementation candidate: managed root, explicit live directory capabilities, monotonic application views/revocation, restart and failure recovery; exact-head CI/native qualification pending",
+      "state": "passed",
+      "evidence": "docs/validation/compact-linux-v1-phase2-acceptance.json",
+      "progress": "Qualified bounded managed-root/live-directory profile: root/project operations, view inheritance and monotonic revocation, traversal/link denial, restart and completed-write recovery. Native mount/POSIX limits remain explicit.",
       "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md"
     },
     {
@@ -290,9 +292,9 @@
       "phase": "CLX-02",
       "targets": [],
       "acceptance": "Application and environment namespace views enforce grants; traversal, symlink and hardlink attempts cannot reach an ungranted host resource.",
-      "state": "partial",
-      "evidence": null,
-      "progress": "2A-2D implementation candidate: managed root, explicit live directory capabilities, monotonic application views/revocation, restart and failure recovery; exact-head CI/native qualification pending",
+      "state": "passed",
+      "evidence": "docs/validation/compact-linux-v1-phase2-acceptance.json",
+      "progress": "Qualified bounded managed-root/live-directory profile: root/project operations, view inheritance and monotonic revocation, traversal/link denial, restart and completed-write recovery. Native mount/POSIX limits remain explicit.",
       "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md"
     },
     {
@@ -300,9 +302,9 @@
       "phase": "CLX-02",
       "targets": [],
       "acceptance": "Changes survive an independent environment restart; denied writes and failed imports do not overwrite existing output; recovery behavior is documented.",
-      "state": "partial",
-      "evidence": null,
-      "progress": "2A-2D implementation candidate: managed root, explicit live directory capabilities, monotonic application views/revocation, restart and failure recovery; exact-head CI/native qualification pending",
+      "state": "passed",
+      "evidence": "docs/validation/compact-linux-v1-phase2-acceptance.json",
+      "progress": "Qualified bounded managed-root/live-directory profile: root/project operations, view inheritance and monotonic revocation, traversal/link denial, restart and completed-write recovery. Native mount/POSIX limits remain explicit.",
       "progress_document": "docs/COMPACT-LINUX-V1-PHASE2.md"
     },
     {

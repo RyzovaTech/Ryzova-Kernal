@@ -16,7 +16,7 @@ class CompletionPlanTests(unittest.TestCase):
  def test_frozen_plan_is_valid_and_has_explicit_exclusions(self):
   self.assertEqual(validate(self.plan),[]);self.assertEqual(len(self.plan['phases']),8);self.assertIn('Operational ARM64 and physical hardware qualification',self.plan['excluded_from_v1']);p=copy.deepcopy(self.plan);p['baseline']['minimum_tests']['phase9']=1;self.assertTrue(validate(p))
  def test_green_baseline_does_not_complete_application_acceptance(self):
-  report=assess(self.plan,self.suites(),[]);self.assertTrue(report['regression_qualified']);self.assertFalse(report['v1_complete']);self.assertFalse(report['merge_performed']);self.assertEqual(len(report['pending_acceptance']),17)
+  report=assess(self.plan,self.suites(),[]);self.assertTrue(report['regression_qualified']);self.assertFalse(report['v1_complete']);self.assertFalse(report['merge_performed']);self.assertEqual(len(report['pending_acceptance']),sum(r['state']!='passed' for r in self.plan['requirements']));self.assertIn('APP-PYTHON',report['pending_acceptance'])
  def test_incomplete_discovery_cannot_pass(self):
   suites=self.suites();suites['phase9']['run']-=1;self.assertFalse(assess(self.plan,suites,[])['regression_qualified'])
  def test_skipped_tests_are_not_full_qualification(self):
@@ -30,7 +30,7 @@ class CompletionPlanTests(unittest.TestCase):
  def test_invalid_dependencies_and_unsupported_claims_are_rejected(self):
   p=copy.deepcopy(self.plan);p['phases'][1]['depends_on']=['CLX-08'];self.assertTrue(validate(p));p=copy.deepcopy(self.plan);p['automatic_merge']=True;self.assertTrue(validate(p))
  def test_requirement_cannot_be_marked_passed_without_evidence(self):
-  p=copy.deepcopy(self.plan);p['requirements'][0]['state']='passed';self.assertTrue(validate(p))
+  p=copy.deepcopy(self.plan);p['requirements'][0]['state']='passed';p['requirements'][0]['evidence']=None;self.assertTrue(validate(p))
  def test_strict_cli_fails_before_running_without_pinned_fixtures(self):
   import os
   env={k:v for k,v in os.environ.items() if k not in ('COMPACT_MUSL_DIR','COMPACT_SHELL_DIR','COMPACT_BUSYBOX_DIR')}

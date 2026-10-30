@@ -79,7 +79,7 @@ def main():
  if args.suite:return suite(args.suite,args.output)
  plan=json.loads(PLAN.read_text());errors=validate(plan)
  if args.check_plan:
-  print(json.dumps({'plan_valid':not errors,'errors':errors,'v1_complete':False,'pending_requirements':len(plan['requirements'])},indent=2));return bool(errors)
+  print(json.dumps({'plan_valid':not errors,'errors':errors,'v1_complete':False,'pending_requirements':sum(r['state']!='passed' for r in plan['requirements'])},indent=2));return bool(errors)
  output=args.output.resolve();output.parent.mkdir(parents=True,exist_ok=True);checks,fixture_errors=fixtures()
  overrides={k:os.environ.get(k) for k in ('COMPACT_DISABLE_LSAN','COMPACT_DISABLE_NATIVE_UNIX_BIND','ASAN_OPTIONS','LSAN_OPTIONS','UBSAN_OPTIONS') if os.environ.get(k)}
  if overrides:fixture_errors.append('qualification environment has disabled checks: '+','.join(overrides))
