@@ -11,12 +11,12 @@ from phase9_shared_maps import commands as map_commands, start as map_start
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ('cwd', 'deny', 'fork', 'fresh')
 SCRIPT = b'''set -e
-mkdir -p /home/project /var/build /usr/local
+/busybox mkdir -p /home/project /var/build /usr/local
 printf 'int main(void){return 0;}\\n' > /home/project/main.c
-cp /home/project/main.c /var/build/source
-mv /var/build/source /usr/local/source
-ln /usr/local/source /var/build/alias
-cat /var/build/alias
+/busybox cp /home/project/main.c /var/build/source
+/busybox mv /var/build/source /usr/local/source
+/busybox ln /usr/local/source /var/build/alias
+/busybox cat /var/build/alias
 echo FLEX_ROOTFS_BUSYBOX_OK
 '''
 
