@@ -47,13 +47,16 @@ typedef struct RyzLinuxExec {
 #define RYZ_VFS_NODES 32U
 typedef struct RyzVnode {
     int used, linked, directory, symlink;
-    unsigned int parent, permissions;
+    unsigned int parent, permissions, backing;
     uint64_t inode;
     uint64_t atime, atime_ns, mtime, mtime_ns, ctime, ctime_ns;
     size_t size;
     char name[RYZ_NS_PATH_MAX];
     unsigned char bytes[RYZ_LINUX_FILE_MAX];
 } RyzVnode;
+/* Hardlink entries refer directly to an owned inode slot, never a chain. */
+#define RYZ_VFS_INDEX(w,i) ((w)->nodes[(i)].backing?(w)->nodes[(i)].backing-1:(unsigned int)(i))
+#define RYZ_VFS_NODE(w,i) (&(w)->nodes[RYZ_VFS_INDEX(w,i)])
 #define RYZ_NET_SOCKETS 32U
 #define RYZ_NET_BUFFER 4096U
 #define RYZ_NET_BACKLOG 8U

@@ -30,7 +30,7 @@ still requires the resolved image to have an explicit execution grant. Shared
 filesystem state is refreshed before resolution, including a worker exec after
 another thread changes the shared cwd. Guest
 paths absent from the namespace fail even when an identically named host file
-exists. Hardlinks, O_PATH, procfs magic links, ownership changes, live mounts and
+exists. O_PATH, procfs magic links, ownership changes, live mounts and
 arbitrary Linux applications remain unsupported.
 
 ## Saved namespaces
@@ -57,3 +57,6 @@ VM completion counts. The source-built AMD64 QEMU workflow must pass this gate;
 portable host tests alone do not establish native kernel qualification. Exact
 source/run evidence belongs to the corresponding PR, not a generic completion
 claim. Physical hardware and operational ARM64 remain unqualified.
+
+Hardlinks of symbolic links and optional version 3 snapshots are described in
+[COMPACT-LINUX-HARDLINKS.md](COMPACT-LINUX-HARDLINKS.md).

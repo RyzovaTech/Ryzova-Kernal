@@ -61,3 +61,10 @@ New output now uses `FLEXFS2`; validated version 1 snapshots remain importable.
 Record offset 12 encodes regular file (0), directory (1), or symbolic link (2).
 See [COMPACT-LINUX-SYMLINKS.md](COMPACT-LINUX-SYMLINKS.md) for target validation
 and path resolution. Earlier version 1-only readers reject version 2 output.
+
+## Shared inode snapshots
+
+Files with multiple names use the validated `FLEXFS3` alias-record extension;
+filesystems without shared names still export version 2. See
+[COMPACT-LINUX-HARDLINKS.md](COMPACT-LINUX-HARDLINKS.md) for record semantics
+and original-name removal without data loss.

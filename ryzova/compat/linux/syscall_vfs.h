@@ -8,6 +8,12 @@ static void vfs_init(RyzLinuxWorld *w)
     w->nodes[0].permissions=0700;w->nodes[0].inode=2000;w->next_inode=2001;
     memcpy(w->nodes[0].name,"tmp",4);
 }
+static unsigned int vfs_nlink(RyzLinuxWorld *w,unsigned int index)
+{
+    unsigned int i,count=0;index=RYZ_VFS_INDEX(w,index);
+    for(i=0;i<RYZ_VFS_NODES;i++)if(w->nodes[i].used && w->nodes[i].linked && RYZ_VFS_INDEX(w,i)==index)count++;
+    return count;
+}
 static void vfs_stamp(RyzLinuxProcess *p,RyzVnode *node,int data)
 {
     uint64_t now=RYZ_TICK(p->world);
@@ -96,8 +102,8 @@ static int vfs_normalize(RyzLinuxProcess *p,uint64_t dirfd,const char *source,ch
         memcpy(out+n,part,k+1);n+=k;
         node=vfs_lookup(p->world,out);
         {size_t grant;for(grant=0;grant<p->world->exec_count;grant++)if(!strcmp(out,p->world->execs[grant].path)){node=-10000;break;}}
-        if(node>=0 && p->world->nodes[node].symlink && (follow>0 || pending[i] || *trailing)){
-            RyzVnode *link=&p->world->nodes[node];
+        if(node>=0 && RYZ_VFS_NODE(p->world,node)->symlink && (follow>0 || pending[i] || *trailing)){
+            RyzVnode *link=RYZ_VFS_NODE(p->world,node);
             rest=i;while(pending[rest]=='/')rest++;
             if(follow<0 && !pending[rest])return follow==-2?-17:-20;
             if(++links>40)return -40;
@@ -139,6 +145,8 @@ static int vfs_slot(RyzLinuxWorld *w)
     for(i=1;i<RYZ_VFS_NODES;i++){
         if(!w->nodes[i].used)return (int)i;
         if(w->nodes[i].linked || w->nodes[i].directory)continue;
+        if(w->nodes[i].backing)return (int)i;
+        if(vfs_nlink(w,i))continue;
         held=0;
         for(j=0;j<RYZ_WORLD_DESCRIPTIONS;j++)if(w->descriptions[j].used && w->descriptions[j].refs &&
             w->descriptions[j].fd.node==RYZ_NS_VFS && w->descriptions[j].fd.vnode==i)held=1;
@@ -159,7 +167,7 @@ static int vfs_create(RyzLinuxProcess *p,char *path,int directory,unsigned int m
 }
 static int64_t vfs_write(RyzLinuxProcess *p,uint64_t fd,uint64_t address,uint64_t count)
 {
-    RyzLinuxFD *f=&p->fds[fd];RyzVnode *node=&p->world->nodes[f->vnode];
+    RyzLinuxFD *f=&p->fds[fd];RyzVnode *node=RYZ_VFS_NODE(p->world,f->vnode);
     unsigned char *bytes;size_t at=f->append?node->size:f->offset;
     if(node->directory)return -21;
     if(f->mode==0)return -9;
@@ -176,10 +184,10 @@ static int64_t vfs_write(RyzLinuxProcess *p,uint64_t fd,uint64_t address,uint64_
 }
 static int64_t vfs_stat(RyzLinuxProcess *p,unsigned int index,uint64_t destination)
 {
-    unsigned char *out;RyzVnode *node=&p->world->nodes[index];
+    unsigned char *out;RyzVnode *node=RYZ_VFS_NODE(p->world,index);
     if(!buffer(p,destination,144,1,&out))return -14;
     memset(out,0,144);encode(out,p->ns.namespace_id,8);encode(out+8,node->inode,8);
-    encode(out+16,node->linked?1:0,8);encode(out+24,(node->directory?0040000:(node->symlink?0120000:0100000))|node->permissions,4);
+    encode(out+16,vfs_nlink(p->world,index),8);encode(out+24,(node->directory?0040000:(node->symlink?0120000:0100000))|node->permissions,4);
     encode(out+28,p->ns.uid,4);encode(out+32,p->ns.gid,4);encode(out+48,node->size,8);
     encode(out+56,4096,8);encode(out+64,(node->size+511)/512,8);
     encode(out+72,node->atime,8);encode(out+80,node->atime_ns,8);
@@ -199,7 +207,7 @@ static int64_t vfs_getdents(RyzLinuxProcess *p,uint64_t fd,uint64_t address,uint
         else{
             entry=&p->world->nodes[cursor-2];
             if(cursor==2 || !entry->used || !entry->linked || entry->parent!=f->vnode){cursor++;continue;}
-            name=entry->name;ino=entry->inode;
+            name=entry->name;entry=RYZ_VFS_NODE(p->world,cursor-2);ino=entry->inode;
         }
         n=strlen(name)+1;record=(19+n+7)&~(size_t)7;
         if(record>count-used){if(!used)return -22;break;}
@@ -209,12 +217,35 @@ static int64_t vfs_getdents(RyzLinuxProcess *p,uint64_t fd,uint64_t address,uint
     }
     set_offset(p,fd,cursor);return (int64_t)used;
 }
+static int64_t vfs_link(RyzLinuxProcess *p,const RyzLinuxRegs *r)
+{
+    uint64_t olddir=r->rax==86?L_AT_FDCWD:r->rdi,oldpath=r->rax==86?r->rdi:r->rsi;
+    uint64_t newdir=r->rax==86?L_AT_FDCWD:r->rdx,newpath=r->rax==86?r->rsi:r->r10;
+    char old[RYZ_NS_PATH_MAX],path[RYZ_NS_PATH_MAX],*name;int trailing,code,index,parent,slot,target;size_t i;
+    RyzVnode *entry,*node;
+    if(r->rax==265 && (r->r8 & ~UINT64_C(1024)))return -22;
+    code=ryz_linux_path(p,olddir,oldpath,old,r->rax==265 && (r->r8 & 1024)?1:0,&trailing);if(code)return code;
+    for(i=0;i<p->world->exec_count;i++)if(!strcmp(old,p->world->execs[i].path))return -13;
+    index=vfs_lookup(p->world,old);if(index<0)return index==-10000?-18:index;
+    node=RYZ_VFS_NODE(p->world,index);if(node->directory)return -1;
+    code=ryz_linux_path(p,newdir,newpath,path,-2,&trailing);if(code)return code;
+    for(i=0;i<p->world->exec_count;i++)if(!strcmp(path,p->world->execs[i].path))return -13;
+    target=vfs_lookup(p->world,path);if(target>=0)return -17;
+    if(target!=-2)return target==-10000?-18:target;
+    if(trailing)return -2;
+    parent=vfs_parent(p->world,path,&name);if(parent<0)return parent;
+    slot=vfs_slot(p->world);if(slot<0)return slot;
+    entry=&p->world->nodes[slot];memset(entry,0,sizeof(*entry));entry->used=entry->linked=1;
+    entry->parent=(unsigned int)parent;entry->backing=RYZ_VFS_INDEX(p->world,index)+1;
+    memcpy(entry->name,name,strlen(name)+1);vfs_stamp(p,node,0);return 0;
+}
 static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handled)
 {
     uint64_t nr=r->rax,dirfd=L_AT_FDCWD,address=r->rdi,flags=0,mode=r->rdx,fd=r->rdi;
     char path[RYZ_NS_PATH_MAX],other[RYZ_NS_PATH_MAX],*name;int code,index,trailing,parent,target,slot,follow=1;
     unsigned int i,id;RyzLinuxFD *f=NULL;RyzVnode *node;unsigned char *bytes;
     *handled=1;vfs_init(p->world);
+    if(nr==86 || nr==265)return vfs_link(p,r);
     if(nr==228 || nr==229 || nr==201){
         uint64_t now;
         if(nr!=201 && r->rdi!=0 && r->rdi!=1 && r->rdi!=7)return -22;
@@ -246,7 +277,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
             for(k=1;k<4;k+=2)if(times[k]>=1000000000 && times[k]!=1073741822 && times[k]!=1073741823)return -22;
         }else{times[0]=times[2]=0;times[1]=times[3]=1073741823;}
         if(times[1]==1073741822 && times[3]==1073741822)return 0;
-        node=&p->world->nodes[index];now=RYZ_TICK(p->world);
+        node=RYZ_VFS_NODE(p->world,index);now=RYZ_TICK(p->world);
         if(times[1]!=1073741822){node->atime=times[1]==1073741823?now/1000000:times[0];node->atime_ns=times[1]==1073741823?(now%1000000)*1000:times[1];}
         if(times[3]!=1073741822){node->mtime=times[3]==1073741823?now/1000000:times[2];node->mtime_ns=times[3]==1073741823?(now%1000000)*1000:times[3];}
         node->ctime=now/1000000;node->ctime_ns=(now%1000000)*1000;return 0;
@@ -262,7 +293,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
     if(fd<RYZ_LINUX_FD_MAX && p->fds[fd].open && p->fds[fd].node==RYZ_NS_VFS)f=&p->fds[fd];
     if(nr==0 || nr==1 || nr==5 || nr==8 || nr==74 || nr==75 || nr==77 || nr==81 || nr==91 || nr==217){
         if(!f){*handled=0;return 0;}
-        node=&p->world->nodes[f->vnode];
+        node=RYZ_VFS_NODE(p->world,f->vnode);
         if(nr==1)return vfs_write(p,fd,r->rsi,r->rdx);
         if(nr==0){
             size_t n;
@@ -341,9 +372,9 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
         if(flags & ~(uint64_t)(3|0100|0200|01000|02000|04000|0100000|0200000|0400000|02000000))return -22;
         if((flags & 3)==3)return -22;
         if(index>=0 && (flags & 0300)==0300)return -17;
-        if(index>=0 && p->world->nodes[index].symlink)return -40;
+        if(index>=0 && RYZ_VFS_NODE(p->world,index)->symlink)return -40;
         if(index<0 && (!(flags & 0100) || trailing))return -2;
-        if(index>=0 && ((p->world->nodes[index].permissions & ((flags & 3)==0?0400:((flags & 3)==1?0200:0600)))!=((flags & 3)==0?0400:((flags & 3)==1?0200:0600))))return -13;
+        if(index>=0 && ((RYZ_VFS_NODE(p->world,index)->permissions & ((flags & 3)==0?0400:((flags & 3)==1?0200:0600)))!=((flags & 3)==0?0400:((flags & 3)==1?0200:0600))))return -13;
         if(index>=0 && p->world->nodes[index].directory && ((flags & 3) || (flags & 01000)))return -21;
         if((flags & 0200000) && index>=0 && !p->world->nodes[index].directory)return -20;
         if(index<0 && (flags & 0200000))return -20;
@@ -354,9 +385,9 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
         if(index<0){slot=vfs_slot(p->world);if(slot<0)return slot;}
         id=new_description(p);if(!id)return -24;
         if(index<0){index=vfs_create(p,path,0,(unsigned int)mode);if(index<0){p->world->descriptions[id-1].used=0;return index;}}
-        f=&p->fds[i];memset(f,0,sizeof(*f));f->description=id;f->open=1;f->node=RYZ_NS_VFS;f->vnode=(unsigned int)index;
+        f=&p->fds[i];memset(f,0,sizeof(*f));f->description=id;f->open=1;f->node=RYZ_NS_VFS;f->vnode=RYZ_VFS_INDEX(p->world,index);
         f->mode=(int)(flags & 3);f->cloexec=(flags & 02000000)!=0;f->append=(flags & 02000)!=0;f->nonblock=(flags & 04000)!=0;
-        if(flags & 01000){p->world->nodes[index].size=0;vfs_stamp(p,&p->world->nodes[index],1);}
+        if(flags & 01000){RYZ_VFS_NODE(p->world,index)->size=0;vfs_stamp(p,RYZ_VFS_NODE(p->world,index),1);}
         return i;
     }
     if(nr==88 || nr==266){
@@ -374,7 +405,7 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
         return (code=vfs_create(p,path,1,(unsigned int)(nr==83?r->rsi:mode)))<0?code:0;
     }
     if(index<0)return index;
-    node=&p->world->nodes[index];
+    node=RYZ_VFS_NODE(p->world,index);
     if(nr==89 || nr==267){
         uint64_t dest=nr==89?r->rsi:r->rdx,count=nr==89?r->rdx:r->r10;size_t n;
         if(!node->symlink)return -22;
@@ -399,10 +430,10 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
         for(i=0;i<p->world->exec_count;i++)if(strcmp(other,p->world->execs[i].path)==0)return -13;
         target=vfs_lookup(p->world,other);
         if(trailing && target>=0 && !p->world->nodes[target].directory)return -20;
-        if(target==index)return 0;
+        if(target>=0 && RYZ_VFS_INDEX(p->world,target)==RYZ_VFS_INDEX(p->world,index))return 0;
         if(target<0 && target!=-2)return target==-10000?-18:target;
         if(!index)return -16;
-        if((p->world->nodes[node->parent].permissions & 0300)!=0300)return -13;
+        if((p->world->nodes[p->world->nodes[index].parent].permissions & 0300)!=0300)return -13;
         if(trailing && !node->directory)return -20;
         parent=vfs_parent(p->world,other,&name);if(parent<0)return parent;
         if(node->directory){
@@ -414,17 +445,17 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
             if(node->directory!=dest->directory)return node->directory?-20:-21;
             if(!target)return -16;
             if(dest->directory)for(i=1;i<RYZ_VFS_NODES;i++)if(p->world->nodes[i].linked && p->world->nodes[i].parent==(unsigned int)target)return -39;
-            dest->linked=0;
+            dest->linked=0;vfs_stamp(p,RYZ_VFS_NODE(p->world,target),0);
         }
-        node->parent=(unsigned int)parent;memcpy(node->name,name,strlen(name)+1);vfs_stamp(p,node,0);return 0;
+        p->world->nodes[index].parent=(unsigned int)parent;memcpy(p->world->nodes[index].name,name,strlen(name)+1);vfs_stamp(p,node,0);return 0;
     }
     if(nr==84 || nr==87 || nr==263){
         int directory=nr==84 || (nr==263 && r->rdx==512);
         if(!index)return -16;
-        if((p->world->nodes[node->parent].permissions & 0300)!=0300)return -13;
+        if((p->world->nodes[p->world->nodes[index].parent].permissions & 0300)!=0300)return -13;
         if(directory!=node->directory)return directory?-20:-21;
         if(directory)for(i=1;i<RYZ_VFS_NODES;i++)if(p->world->nodes[i].linked && p->world->nodes[i].parent==(unsigned int)index)return -39;
-        node->linked=0;vfs_stamp(p,node,0);return 0;
+        p->world->nodes[index].linked=0;vfs_stamp(p,node,0);return 0;
     }
     return -38;
 }
