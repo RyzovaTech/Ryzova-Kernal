@@ -132,6 +132,7 @@ jobs:
             artifacts/phase3/phase9-linux-sockets.json
             artifacts/phase3/phase9-linux-persistence.json
             artifacts/phase3/phase9-linux-external.json
+            artifacts/phase3/phase9-linux-symlinks.json
             artifacts/phase3/phase7-secure-closeout.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn

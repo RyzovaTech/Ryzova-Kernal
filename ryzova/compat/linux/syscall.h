@@ -46,7 +46,7 @@ typedef struct RyzLinuxExec {
 } RyzLinuxExec;
 #define RYZ_VFS_NODES 32U
 typedef struct RyzVnode {
-    int used, linked, directory;
+    int used, linked, directory, symlink;
     unsigned int parent, permissions;
     uint64_t inode;
     uint64_t atime, atime_ns, mtime, mtime_ns, ctime, ctime_ns;
@@ -149,6 +149,8 @@ int ryz_linux_process_init(RyzLinuxProcess *p, uint32_t namespace_id,
 
 int ryz_network_budget(RyzLinuxWorld *);
 int ryz_network_idle(RyzLinuxWorld *);
+/* Resolve guest namespace paths, following at most 40 symbolic links. */
+int ryz_linux_path(RyzLinuxProcess *,uint64_t,uint64_t,char *,int,int *);
 void ryz_world_attach(RyzLinuxProcess *,RyzLinuxWorld *);
 void ryz_world_fork(RyzLinuxProcess *,RyzLinuxProcess *);
 void ryz_world_close(RyzLinuxProcess *,int);

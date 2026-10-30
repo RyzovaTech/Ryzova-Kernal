@@ -11,7 +11,7 @@ authorized by these changes.
 | Processes | Fork/vfork/exec/wait, pipes, bounded process groups | Broader process/session/resource APIs |
 | Threads | Cooperative shared-memory clone, musl pthreads, TLS, selected futex/robust operations | More clone profiles, priority inheritance, broader concurrency workloads |
 | Signals/time | Guest frames, masks, pending queues, selected logical timers | More timer APIs and synchronous exception coverage |
-| Files | Bounded writable tree, explicit immutable filesystem persistence and input/output/library snapshots | General live persistent mounts, symlinks, hardlinks, broader metadata and filesystem operations |
+| Files | Bounded writable tree, explicit immutable filesystem persistence and input/output/library snapshots; guest symlinks with bounded resolution | General live persistent mounts, hardlinks, broader metadata and filesystem operations |
 | Networking | Local streams and explicit mapped outbound TCP resources | Guest DNS, UDP, IPv6 socket ABI, external listeners and wider socket APIs |
 | Applications | Selected unmodified BusyBox/musl workloads; freestanding TinyCC compilation; musl pthread HTTP | Full Python, Git, compiler/SDK and interactive workloads |
 | Terminal/graphics | Bounded output callbacks and isolated input snapshots | Interactive terminal, PTY, graphics/audio/device APIs |
@@ -28,3 +28,6 @@ The socket extension is described in
 [COMPACT-LINUX-PERSISTENCE.md](COMPACT-LINUX-PERSISTENCE.md). Outbound resources are in
 [COMPACT-LINUX-NETWORK-RESOURCES.md](COMPACT-LINUX-NETWORK-RESOURCES.md). Earlier native evidence and
 limitations remain attached to their exact historical source commits.
+
+Symbolic-link path semantics and version 2 snapshots are described in
+[COMPACT-LINUX-SYMLINKS.md](COMPACT-LINUX-SYMLINKS.md).

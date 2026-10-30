@@ -54,3 +54,10 @@ Malformed snapshots with recomputed valid checksums test semantic validation.
 The fresh native source-build gate additionally requires six successful native
 invocations and rejection of a corrupted grant, source-specific challenges,
 fixture hashes and clean result records.
+
+## Version 2 symbolic links
+
+New output now uses `FLEXFS2`; validated version 1 snapshots remain importable.
+Record offset 12 encodes regular file (0), directory (1), or symbolic link (2).
+See [COMPACT-LINUX-SYMLINKS.md](COMPACT-LINUX-SYMLINKS.md) for target validation
+and path resolution. Earlier version 1-only readers reject version 2 output.

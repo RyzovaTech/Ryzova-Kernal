@@ -214,7 +214,7 @@ static int exec_task(Jobs *jobs,Task *task,const RyzLinuxRegs *r,int64_t *answer
     Task *replacement,*leader=group_leader(jobs,task);int moved=task!=leader;
     unsigned char *bytes;int memory_slot;char path[257];size_t i;uint64_t entry,stack;int status;const RyzLinuxExec *grant=NULL;
     if(result->execs>=RYZ_JOB_EXECS){*answer=-11;return RYZ_VM_OK;}
-    status=guest_string(&task->cpu,r->rdi,path,sizeof(path));
+    {int trailing;status=ryz_linux_path(&task->process,(uint64_t)-100,r->rdi,path,1,&trailing);}
     if(status){*answer=status;return RYZ_VM_OK;}
     for(i=0;i<jobs->world.exec_count;i++)if(strcmp(path,jobs->world.execs[i].path)==0)grant=&jobs->world.execs[i];
     if(!grant){*answer=-2;return RYZ_VM_OK;}

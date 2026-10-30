@@ -27,7 +27,7 @@ static char jobs[] = "linux-amd64-static-jobs-v1\n"
     "threads=false asynchronous-signals=false dynamic-linker=false general-linux=false\n";
 static char filesystem[] = "linux-amd64-local-tmp-v1\n"
     "profile=jobs path=/tmp lifetime=one-invocation shared=fork,exec host-forwarding=false\n"
-    "nodes=32 file-bytes=65536 permissions=owner timestamps=logical-clock symlinks=false hardlinks=false\n";
+    "nodes=32 file-bytes=65536 permissions=owner timestamps=logical-clock symlinks=guest-paths,40-hop-limit hardlinks=false\n";
 static char runtime[] = "linux-amd64-runtime-v1\n"
     "launch=compact-linux -j ELF args signals=guest-rt-frame,mask,kill,wait,altstack\n"
     "signal-depth=8 realtime-queue=33 per-task-standard-signals=coalesced\n"
@@ -42,7 +42,7 @@ static char network[] = "linux-amd64-tcp-resources-v1\n"
     "external-listen=false external-half-write-close=false\n";
 static char persistence[] = "linux-amd64-filesystem-snapshot-v1\n"
     "launch=compact-linux -j -R snapshot-in -W new-snapshot-out ELF args\n"
-    "scope=/tmp format=FLEXFS1 permissions=0600 export=exclusive-create\n"
+    "scope=/tmp format=FLEXFS2 import=FLEXFS1,FLEXFS2 permissions=0600 export=exclusive-create\n"
     "validation=checksum,topology,names,inodes,bounds auth=none\n"
     "general-host-mounts=false crash-atomic-replace=false\n";
 static char sockets[] = "linux-amd64-local-sockets-v1\n"

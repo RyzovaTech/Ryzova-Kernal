@@ -315,12 +315,18 @@ static int guest_path(RyzLinuxProcess *p, uint64_t address, const char **path, s
     }
     return -36;
 }
+static int vfs_normalize(RyzLinuxProcess *,uint64_t,const char *,char *,int,int *);
 static int resolve(RyzLinuxProcess *p, const char *path, size_t length, enum RyzLinuxNode *kind,uint64_t *size,uint64_t *inode)
 {
     int code;
     char absolute[RYZ_NS_PATH_MAX];
     const char *prefix;
     size_t n;
+    if(p->world){
+        int trailing;
+        code=vfs_normalize(p,L_AT_FDCWD,path,absolute,1,&trailing);if(code)return code;
+        path=absolute;length=strlen(path)+1;
+    }
     if(path[0]!='/'){
         prefix=p->cwd==RYZ_NS_TMP?"/tmp/":(p->cwd==RYZ_NS_PROC_SELF?"/proc/self/":"/");
         n=strlen(prefix);
@@ -342,9 +348,9 @@ static void encode(unsigned char *b, uint64_t v, unsigned int n)
     for(i=0;i<n;i++)b[i]=(unsigned char)(v>>(8*i));
 }
 /* AMD64 Linux UAPI stat layout: exactly 144 bytes, zero padding/timestamps. */
-static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, int by_fd)
+static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, int by_fd,uint64_t dirfd)
 {
-    const char *path;
+    const char *path;char canonical[RYZ_NS_PATH_MAX];
     size_t length;
     enum RyzLinuxNode kind=RYZ_NS_NONE;
     unsigned char data[144], *out;
@@ -357,6 +363,7 @@ static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, i
         else inode=(uint64_t)kind+1;
     }else{
         code=guest_path(p,key,&path,&length);if(code)return code;
+        if(p->world){int trailing;code=ryz_linux_path(p,dirfd,key,canonical,1,&trailing);if(code)return code;path=canonical;length=strlen(path)+1;}
         code=resolve(p,path,length,&kind,&bytes,&inode);if(code)return code;
         if(kind!=RYZ_NS_EXEC)inode=(uint64_t)kind+1;
     }
@@ -379,15 +386,16 @@ static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, i
 static int64_t do_openat(RyzLinuxProcess *p, uint64_t dirfd,
                          uint64_t pathaddr, uint64_t flags)
 {
-    const char *path;
+    const char *path;char canonical[RYZ_NS_PATH_MAX];
     enum RyzLinuxNode kind;
     unsigned int access;
     int fd, code;
     size_t length;
-    if (dirfd != L_AT_FDCWD ||
-        (flags & ~(uint64_t)(L_O_ACCMODE | L_O_CLOEXEC | L_O_TRUNC | (p->world?04000U|0100000U:0) | (p->memory_call?0100U|0200U|02000U:0))) != 0)
+    if ((!p->world && dirfd != L_AT_FDCWD) ||
+        (flags & ~(uint64_t)(L_O_ACCMODE | L_O_CLOEXEC | L_O_TRUNC | (p->world?04000U|0100000U|0400000U:0) | (p->memory_call?0100U|0200U|02000U:0))) != 0)
         return -L_EINVAL;
     code=guest_path(p,pathaddr,&path,&length);if(code)return code;
+    if(p->world){int trailing;code=ryz_linux_path(p,dirfd,pathaddr,canonical,1,&trailing);if(code)return code;path=canonical;length=strlen(path)+1;}
     code=resolve(p,path,length,&kind,NULL,NULL);if(code)return code;
     if((flags & 0300U)==0300U)return -17;
     if((flags & (0100U|02000U)) && kind!=RYZ_NS_OUTPUT)return -L_EACCES;
@@ -635,11 +643,11 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
     }
     case 110:return p->parent_pid?p->parent_pid:1;
     case 111:return (int64_t)p->group_pid;
-    case 4: case 6:return do_stat(p,regs->rdi,regs->rsi,0);
-    case 5:return do_stat(p,regs->rdi,regs->rsi,1);
+    case 4: case 6:return do_stat(p,regs->rdi,regs->rsi,0,L_AT_FDCWD);
+    case 5:return do_stat(p,regs->rdi,regs->rsi,1,L_AT_FDCWD);
     case 262:
-        if(regs->rdi!=L_AT_FDCWD || (regs->r10 & ~UINT64_C(256)))return -L_EINVAL;
-        return do_stat(p,regs->rsi,regs->rdx,0);
+        if((!p->world && regs->rdi!=L_AT_FDCWD) || (regs->r10 & ~UINT64_C(256)))return -L_EINVAL;
+        return do_stat(p,regs->rsi,regs->rdx,0,regs->rdi);
     case 107:return (int64_t)p->ns.uid;
     case 108:return (int64_t)p->ns.gid;
     case 19:if(!p->world)return -L_ENOSYS;return do_readv(p,regs);
