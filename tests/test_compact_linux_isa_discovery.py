@@ -98,6 +98,24 @@ class IsaDiscoveryTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 create_report(root,{"targets":[record]})
 
+    def test_failure_console_lines_never_claim_opcode_support_or_guest_success(self):
+        from compact_linux_isa_discovery import bounded_failure_console_lines
+        report={"reports":[
+            {"target":"busybox","guest_smoke_passed":True,"guest_actual_result":{"status":0}},
+            {"target":"binutils","guest_smoke_passed":False,
+             "guest_actual_result":{"status":5,"last_rip_hex":"1234","unsupported_syscall_nr":999},
+             "candidate":{"image":"main","candidate_bytes_hex":"0f05"}},
+        ]}
+        lines=bounded_failure_console_lines(report)
+        self.assertEqual(len(lines),1)
+        self.assertTrue(lines[0].startswith("CLX04_GUEST_FAILURE "))
+        import json
+        row=json.loads(lines[0].split(" ",1)[1])
+        self.assertEqual(row["target"],"binutils")
+        self.assertEqual(row["unsupported_syscall_nr"],999)
+        self.assertEqual(row["candidate_elf_bytes_hex"],"0f05")
+        self.assertFalse(row["opcode_failure_verified"])
+
     def test_untrusted_names_and_target_collection_denied(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)

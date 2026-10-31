@@ -151,6 +151,26 @@ def create_report(root, profiles):
     }
 
 
+
+def bounded_failure_console_lines(report):
+    """Seven compact, evidence-only diagnostic lines for GitHub CI logs."""
+    lines=[]
+    for record in report.get("reports",[]):
+        if record.get("guest_smoke_passed") is True:
+            continue
+        actual=record.get("guest_actual_result") or {}
+        candidate=record.get("candidate")
+        row={"target":record.get("target"),
+             "vm_status":actual.get("status"),
+             "last_rip_hex":actual.get("last_rip_hex"),
+             "unsupported_syscall_nr":actual.get("unsupported_syscall_nr"),
+             "candidate_elf_bytes_hex":candidate.get("candidate_bytes_hex") if candidate else None,
+             "candidate_image":candidate.get("image") if candidate else None,
+             "opcode_failure_verified":False}
+        lines.append("CLX04_GUEST_FAILURE "+json.dumps(row,sort_keys=True,separators=(",",":")))
+    return lines
+
+
 if __name__ == "__main__":
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--root",type=Path,required=True)
@@ -164,3 +184,5 @@ if __name__ == "__main__":
                       "candidates":sum(x["candidate"] is not None for x in report["reports"]),
                       "targets":len(report["reports"]),
                       "guest_linux_v1_complete":False},sort_keys=True))
+    for line in bounded_failure_console_lines(report):
+        print(line)
