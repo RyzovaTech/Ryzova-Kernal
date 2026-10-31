@@ -138,7 +138,7 @@ class WindowsW4Tests(unittest.TestCase):
         self.assertEqual((first[6]/'payload.bin').read_bytes(),b'private')
     def test_traversal_unc_device_ads_and_ambiguous_paths_are_denied(self):
         ctx=self.context()
-        paths=('..\\escape','a\\..\\escape','.\\file','/etc/passwd','\\outside','\\\\server\\share','\\\\?\\C:\\x','C:relative','C:/x','C:\\x:stream','con','NUL.txt','com1.log','lpt9','x.','x ','a\\\\b','a/./b','a~1.txt','a*','a?','ශ්‍රී','a'*64,'a/'*17+'b')
+        paths=('..\\escape','a\\..\\escape','.\\file','/etc/passwd','\\outside','\\\\server\\share','\\\\?\\C:\\x','C:relative','C:/x','C:\\x:stream','con','NUL.txt','CONIN$','CONOUT$','CLOCK$','com1.log','lpt9','x.','x ','a\\\\b','a/./b','a~1.txt','a*','a?','ශ්‍රී','a'*64,'a/'*17+'b')
         for path in paths:
             with self.subTest(path=path):self.assertEqual(self.open(ctx,path),INVALID);self.assertEqual(self.err(ctx),123)
         self.assertEqual(list(ctx[6].iterdir()),[])

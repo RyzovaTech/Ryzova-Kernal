@@ -22,7 +22,7 @@ static uint32_t win_error(int e) {
     switch(e){case ENOENT:return 2;case ENOTDIR:return 3;case EEXIST:return 80;
     case EMFILE:case ENFILE:return 4;case ENOSPC:case EDQUOT:return 112;
     case ENOMEM:return 8;case EINVAL:return 87;case ENOSYS:case EOPNOTSUPP:return 50;
-    case ELOOP:case EXDEV:case EACCES:case EPERM:return 5;default:return 1117;}
+    case ELOOP:case EXDEV:case EACCES:case EPERM:case EISDIR:return 5;default:return 1117;}
 }
 static int secure_open(int root,const char *name,int flags,unsigned int mode) {
     struct open_how how;

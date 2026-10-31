@@ -34,7 +34,7 @@ int cw_attach_files(CwMachine *m,CwFileNamespace *ns,const CwDirectoryGrant *gra
 static int reserved(const char *s,unsigned int n) {
     unsigned int i=0;char stem[64];
     while(i<n && s[i]!='.'){stem[i]=s[i];i++;}stem[i]=0;
-    if(!strcmp(stem,"con") || !strcmp(stem,"prn") || !strcmp(stem,"aux") || !strcmp(stem,"nul"))return 1;
+    if(!strcmp(stem,"con") || !strcmp(stem,"prn") || !strcmp(stem,"aux") || !strcmp(stem,"nul") || !strcmp(stem,"conin$") || !strcmp(stem,"conout$") || !strcmp(stem,"clock$"))return 1;
     return i==4 && (!memcmp(stem,"com",3) || !memcmp(stem,"lpt",3)) && stem[3]>='1' && stem[3]<='9';
 }
 int cw_file_path(const uint16_t *input,char *out,uint32_t *drive) {
