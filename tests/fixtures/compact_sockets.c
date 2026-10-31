@@ -80,7 +80,7 @@ long app_main(long argc,char **argv,char **env)
   client=C(41,2,1,0);CHECK(client>=0 && C(49,client,address,16)==-98);
   CHECK(!C(50,fd,1,0) && !C(3,fd,0,0) && !C(49,client,address,16));
  }else if(equal(argv[1],"errors")){
-  CHECK(C(41,999,1,0)==-97 && C(41,10,2,0)==-94 && C(41,1,2,0)==-94 && C(41,2,1,17)==-93);
+  CHECK(C(41,999,1,0)==-97 && C(41,10,3,0)==-94 && C(41,1,2,0)==-94 && C(41,2,1,17)==-93);
   fd=C(41,2,1,0);CHECK(fd>=0);address[4]=127;address[7]=1;CHECK(C(42,fd,address,16)==-111);
   CHECK(C(48,fd,1,0)==-107 && C(49,fd,1,16)==-14 && C(43,1,0,0)==-88);
  }else if(equal(argv[1],"udp4") || equal(argv[1],"udp6")){
