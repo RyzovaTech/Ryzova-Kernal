@@ -91,6 +91,20 @@ class TargetLockTests(unittest.TestCase):
   for invalid in (0,5,-1,True,1.5):
    with self.subTest(invalid=invalid),self.assertRaises(ValueError):
     git_make_command(invalid)
+ def test_busybox_help_and_version_config_is_actual_required_build_option(self):
+  from compact_linux_targets import require_busybox_help_config
+  options=('CONFIG_LONG_OPTS=y','CONFIG_SHOW_USAGE=y',
+           'CONFIG_FEATURE_VERBOSE_USAGE=y')
+  self.assertTrue(require_busybox_help_config('\n'.join(options)+'\n'))
+  for item in options:
+   with self.subTest(missing=item),self.assertRaises(RuntimeError):
+    require_busybox_help_config('\n'.join(x for x in options if x!=item))
+   with self.subTest(disabled=item),self.assertRaises(RuntimeError):
+    require_busybox_help_config('\n'.join(
+      '# '+item.removeprefix('CONFIG_').removesuffix('=y')+' is not set'
+      if x==item else x for x in options))
+  with self.assertRaises(TypeError):
+   require_busybox_help_config(None)
  def test_cross_python_generated_makefile_blocks_foreign_extension_import(self):
   from compact_linux_targets import Build
   with tempfile.TemporaryDirectory() as d:
