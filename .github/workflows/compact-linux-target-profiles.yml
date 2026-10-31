@@ -84,7 +84,7 @@ jobs:
           name: compact-linux-target-profiles
           path: |
             ryzova/compact/linux-target-sources.json
-            artifacts/targets/logs/*.log
+            artifacts/targets/logs/*
             artifacts/targets/target-build.json
             artifacts/targets/target-profiles.json
           if-no-files-found: error
