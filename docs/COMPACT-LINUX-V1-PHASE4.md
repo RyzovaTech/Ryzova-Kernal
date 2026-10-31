@@ -30,3 +30,29 @@ and ISA failures can therefore require 4B–4E work before Phase 3 can close. Ke
 that dependency visible in `linux-v1-plan.json`; do not relabel reference Linux
 runs as Flex guest completion. Full network/certificate and PTY workflows retain
 their later phase gates. Operational ARM64 and physical hardware remain separate.
+
+## 4A failure-location qualification helper (separate stacked PR)
+
+A read-only host-side `scripts/compact_linux_isa_discovery.py` references
+the exact frozen target ELF digests from `target-profiles.json`. The utility
+tries to correlate each bounded `last_rip_hex` with bytes in an existing ELF
+PT_LOAD segment, using only the Ryzova runtime's documented main-PIE bias
+(`0x400000`), non-PIE bias zero, and initial musl dynamic interpreter bias
+(`0x800000`). The result is archived as `target-isa-candidates.json`
+alongside target build/ref/guest measurements when the report exists.
+
+**Security and scientific limitations:** a sampled RIP may describe the
+instruction after a fault, an unsupported syscall return, a stale instruction
+pointer, or a page dynamically mapped by the musl loader. It is **not**
+guaranteed to be the faulting opcode. Unknown/malformed/unmapped locations
+produce null rather than a guessed instruction. Files must stay in the measured
+root and match the recorded SHA-256; a normal in-root /bin/gcc or /bin/as
+symlink is allowed but a symlink escape is denied. The helper never executes
+the sampled bytes, changes user-space ISA behavior, adjusts limits or
+converts a failed guest workload into an acceptance success.
+
+Exact source-built native QEMU and tests for actual CPU semantics, loader
+relocations, FP/SIMD behavior and guest application workflows remain mandatory.
+The helper is a triage aid to determine which **original Ryzova-specific ISA
+implementation** should be built and tested next; it does NOT close 4B–4F,
+AMD64-ABI or any Compact Linux V1 application acceptance ID.
