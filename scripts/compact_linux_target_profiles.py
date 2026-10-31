@@ -93,7 +93,8 @@ def main(directory,output):
             seen.add(name);file=next((root/base/name for base in ('lib','usr/lib','usr/local/lib') if (root/base/name).is_file()),None)
             if file is None:raise ValueError('missing target dependency '+target+': '+name)
             dep=elf_info(file.read_bytes());virtual='/'+str(file.relative_to(root));libraries.append({'path':virtual,**dep});grants+=['-x',virtual+'='+str(file)];pending.extend(dep['needed'])
-        guest=subprocess.run([str(runner),'-r','-b','1048576',*grants,str(binary),*args],env=env,capture_output=True,timeout=30)
+        guest_args=['--version'] if target=='python' else args
+        guest=subprocess.run([str(runner),'-r','-b','1048576',*grants,str(binary),*guest_args],env=env,capture_output=True,timeout=30)
         (logs/(target+'-guest.stdout')).write_bytes(guest.stdout);(logs/(target+'-guest.stderr')).write_bytes(guest.stderr)
         result=re.search(rb'COMPACT_JOBS_RESULT status=([0-9]+) exited=([01]) exit=([0-9]+) steps=([0-9]+) syscalls=([0-9]+)',guest.stderr)
         actual={key:int(value) for key,value in zip(('status','exited','exit','steps','syscalls'),result.groups())} if result else None
@@ -108,7 +109,7 @@ def main(directory,output):
             if library['bytes']>4*1024*1024:blockers.append(library['path']+' exceeds current 4-MiB grant image ceiling')
         if len(grants)//2>16:blockers.append('dependency closure exceeds 16 executable/library grants')
         if not success:blockers.append('guest smoke failed: '+str(actual if actual else {'runner_exit':guest.returncode}))
-        records.append({'target':target,'version':version,'elf':info,'startup_libraries':libraries,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_output_excerpt':text[:2048],'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode,'guest_blockers':blockers,'full_target_workflows_qualified':False})
+        records.append({'target':target,'version':version,'elf':info,'startup_libraries':libraries,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_output_excerpt':text[:2048],'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode,'guest_probe_args':guest_args,'guest_blockers':blockers,'full_target_workflows_qualified':False})
     report={'schema':'compact-linux-target-profiles/v1','source_lock_sha256':build['source_lock_sha256'],'abi':build['abi'],'targets':records,'phase4_entry_ready':all(r['linux_reference_passed'] for r in records),'phase3_complete':False,'resource_qualified':False,'full_target_workflows_qualified':False,'limitations':['Reference smoke measurements are not full target workflow budgets','max_child_rss is not aggregate process-tree RAM','Target networking/certificate and PTY workflows remain unqualified','Guest failures are recorded, never promoted to successful measurements']}
     Path(output).write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
     return 0 if report['phase4_entry_ready'] else 1

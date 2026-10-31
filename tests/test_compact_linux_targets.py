@@ -44,6 +44,14 @@ class TargetLockTests(unittest.TestCase):
    b=Build(Path(d)/'out',d,2);cwd=Path(d)/'actual';cwd.mkdir()
    (cwd/'Makefile').write_text('all:\n\t@test "$(PWD)" = "$(CURDIR)"\n')
    b.run('pwd-proof',['make'],cwd,dict(os.environ,PWD='/incorrect-parent'))
+ def test_repeated_native_snapshot_preserves_links_and_discards_partial_apps(self):
+  from compact_linux_targets import Build
+  import os
+  with tempfile.TemporaryDirectory() as d:
+   b=Build(Path(d)/'out',d,2);source=Path(d)/'sdk';(source/'lib').mkdir(parents=True)
+   (source/'lib/libc.so').write_bytes(b'libc');(source/'lib/ld-musl-x86_64.so.1').symlink_to('/lib/libc.so')
+   b.restore_native_root(source);(b.root/'partial-app').write_bytes(b'partial');b.restore_native_root(source)
+   self.assertFalse((b.root/'partial-app').exists());self.assertEqual(os.readlink(b.root/'lib/ld-musl-x86_64.so.1'),'/lib/libc.so');self.assertEqual((b.root/'lib/libc.so').read_bytes(),b'libc')
  def test_native_binutils_excludes_out_of_scope_glibc_profiler(self):
   from compact_linux_targets import Build
   from unittest.mock import patch,Mock

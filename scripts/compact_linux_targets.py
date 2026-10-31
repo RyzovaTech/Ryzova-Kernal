@@ -74,6 +74,11 @@ class Build:
             if len(children)!=1 or not children[0].is_dir():raise ValueError('expected one source root '+s['id'])
             result[s['id']]=children[0]
         return result
+    def restore_native_root(self,output):
+        # This is an isolated build fixture, refreshed from the verified SDK.
+        # copytree(dirs_exist_ok=True) cannot replace existing symlinks.
+        if self.root.exists():shutil.rmtree(self.root)
+        shutil.copytree(output,self.root,symlinks=True)
     def toolchain(self,src,native=False):
         name='native' if native else 'cross';build=self.out/('build-'+name);build.mkdir(exist_ok=True)
         driver_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=self.driver,text=True).strip()
@@ -91,7 +96,7 @@ class Build:
             saved=json.loads(checkpoint.read_text())
             if saved.get('signature')==signature and all((output/p['path']).is_file() and hashlib.sha256((output/p['path']).read_bytes()).hexdigest()==p['sha256'] for p in saved.get('files',[])) and saved.get('files'):
                 print('REUSE',name,'verified checkpoint',flush=True);self.reused_stages.append(name);shutil.rmtree(build)
-                if native:shutil.copytree(output,self.root,dirs_exist_ok=True,symlinks=True)
+                if native:self.restore_native_root(output)
                 return
         if output.exists():shutil.rmtree(output)
         (build/'config.mak').write_text('\n'.join(config)+'\n')
@@ -101,7 +106,7 @@ class Build:
         for file in sorted(output.rglob('*')):
             if file.is_file() and not file.is_symlink():records.append({'path':str(file.relative_to(output)),'sha256':hashlib.sha256(file.read_bytes()).hexdigest()})
         checkpoint.write_text(json.dumps({'signature':signature,'files':records},indent=2)+'\n')
-        if native:shutil.copytree(output,self.root,dirs_exist_ok=True,symlinks=True)
+        if native:self.restore_native_root(output)
         shutil.rmtree(build)
     def app(self,name,source,args,env,install='install'):
         build=self.out/('build-'+name);build.mkdir(exist_ok=True)
