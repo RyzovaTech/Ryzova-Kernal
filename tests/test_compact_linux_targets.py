@@ -19,6 +19,13 @@ class TargetLockTests(unittest.TestCase):
   for key,value in [('digest','x'*64),('archive','Python-3.99.tar.xz'),('urls',['http://example.com/source'])]:
    d=copy.deepcopy(lock);d['sources'][1][key]=value;self.assertTrue(validate(d))
   lock['sources'].append(lock['sources'][0]);self.assertTrue(validate(lock))
+ def test_build_subprocess_pwd_matches_actual_make_directory(self):
+  from compact_linux_targets import Build
+  import os
+  with tempfile.TemporaryDirectory() as d:
+   b=Build(Path(d)/'out',d,2);cwd=Path(d)/'actual';cwd.mkdir()
+   (cwd/'Makefile').write_text('all:\n\t@test "$(PWD)" = "$(CURDIR)"\n')
+   b.run('pwd-proof',['make'],cwd,dict(os.environ,PWD='/incorrect-parent'))
  def test_toolchain_checkpoint_reuse_verifies_file_hashes(self):
   from compact_linux_targets import Build
   from unittest.mock import patch,Mock

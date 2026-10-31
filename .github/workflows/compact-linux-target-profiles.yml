@@ -53,13 +53,13 @@ jobs:
         run: |
           python scripts/compact_linux_targets.py --check-lock
           python -m unittest discover -s tests -p test_compact_linux_targets.py -v
-          python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 2 --stage sources
+          python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 4 --stage sources
       - name: Build or verify pinned bootstrap cross compiler
-        run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 2 --stage cross
+        run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 4 --stage cross
       - name: Build or verify native musl GCC and binutils
-        run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 2 --stage native
+        run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 4 --stage native
       - name: Build named applications and dependency closure
-        run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 2 --stage apps
+        run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 4 --stage apps
       - name: Discover actual resource use and guest admission blockers
         run: python scripts/compact_linux_target_profiles.py --directory artifacts/targets --output artifacts/targets/target-profiles.json
       - uses: actions/cache/save@v4

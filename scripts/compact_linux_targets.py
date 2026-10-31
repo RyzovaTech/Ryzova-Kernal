@@ -39,8 +39,9 @@ class Build:
     def run(self,name,argv,cwd,env=None):
         self.commands.append({'stage':name,'argv':list(map(str,argv)),'cwd':str(cwd)})
         print('BUILD',name,flush=True)
+        command_env=dict(env or self.env,PWD=str(Path(cwd).resolve()))
         with (self.logs/(name+'.log')).open('a') as log:
-            subprocess.run(list(map(str,argv)),cwd=cwd,env=env or self.env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=5400)
+            subprocess.run(list(map(str,argv)),cwd=cwd,env=command_env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=5400)
     def sources(self):
         result={}
         for s in self.lock['sources']:
@@ -110,6 +111,8 @@ class Build:
         if stage=='cross':return
         self.toolchain(src,True)
         if stage=='native':return
+        (self.root/'usr').mkdir(exist_ok=True)
+        shutil.copytree(self.root/'include',self.root/'usr/include',dirs_exist_ok=True,symlinks=True)
         env=dict(self.env,PATH=str(self.cross/'bin')+os.pathsep+self.env['PATH'],CC=TRIPLE+'-gcc',CXX=TRIPLE+'-g++',AR=TRIPLE+'-ar',RANLIB=TRIPLE+'-ranlib',CFLAGS='-O2 -march=x86-64 -mtune=generic',CPPFLAGS='-I'+str(self.root/'usr/include'),LDFLAGS='-L'+str(self.root/'usr/lib'),PKG_CONFIG='/bin/false')
         # Packages are built against the pinned musl cross sysroot and explicit dependencies.
         self.run('zlib-configure',['./configure','--prefix=/usr'],src['zlib'],env)
@@ -148,7 +151,10 @@ class Build:
         self.run('dev-zero',['sudo','mknod','-m','666',str(self.root/'dev/zero'),'c','1','5'],self.out)
         for binary in ('gcc','cc','as','ld','ar','nm','readelf','ranlib','strip'):
             path=self.root/'bin'/binary
-            if not path.exists():path.symlink_to(TRIPLE+'-'+('gcc' if binary=='cc' else binary))
+            target=self.root/'bin'/(TRIPLE+'-'+('gcc' if binary=='cc' else binary))
+            if not path.exists() and target.exists():path.symlink_to(target.name)
+            elif not target.exists() and path.exists():target.symlink_to(path.name)
+            elif not path.exists():raise ValueError('missing native tool '+binary)
         self.manifest()
     def manifest(self):
         files=[]

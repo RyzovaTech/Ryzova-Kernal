@@ -14,8 +14,8 @@ TARGETS={
  'busybox':('/bin/busybox',['--help'],'1.35.0'),
  'python':('/usr/bin/python3.12',['-c','import json,pathlib,tempfile,threading,multiprocessing,subprocess,socket,ssl,hashlib,zlib; print(json.dumps({"version":__import__("sys").version,"ssl":ssl.OPENSSL_VERSION})); p=pathlib.Path("/tmp/python-proof"); p.write_text("proof"); assert p.read_text()=="proof"'],'3.12.10'),
  'git':('/usr/bin/git',['--version'],'2.49.0'),
- 'gcc':('/bin/x86_64-linux-musl-gcc',['--version'],'14.2.0'),
- 'binutils':('/bin/x86_64-linux-musl-as',['--version'],'2.43.1'),
+ 'gcc':('/bin/gcc',['--version'],'14.2.0'),
+ 'binutils':('/bin/as',['--version'],'2.43.1'),
  'make':('/usr/bin/make',['--version'],'4.4.1'),
  'musl':('/lib/libc.so',[],'1.2.6')}
 
@@ -54,7 +54,8 @@ def main(directory,output):
     env=dict(os.environ,PATH='/usr/bin:/bin',LC_ALL='C',PYTHONDONTWRITEBYTECODE='1')
     for target,(path,args,version) in TARGETS.items():
         binary=root/path.lstrip('/');info=elf_info(binary.read_bytes())
-        entry=next((x for x in build['files'] if x['path']==path),None)
+        resolved='/'+str(binary.resolve().relative_to(root))
+        entry=next((x for x in build['files'] if x['path']==resolved),None)
         if not entry or entry['sha256']!=info['sha256'] or entry['bytes']!=info['bytes']:raise ValueError('artifact manifest mismatch '+target)
         trace=logs/(target+'-trace');usage=logs/(target+'-usage.json')
         command=['sudo','-n','/usr/bin/time','-f','{"elapsed_seconds":%e,"max_child_rss_kib":%M,"user_seconds":%U,"system_seconds":%S}','-o',str(usage),'strace','-ff','-qq','-yy','-o',str(trace),'chroot',str(root),path,*args]
