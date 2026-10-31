@@ -157,7 +157,7 @@ fail:
     syscall
 .section .data
 usage: .zero 144
-success: .ascii "RUSAGE_VIRTUAL_OK!\\n"
+success: .ascii "RUSAGE_VIRTUAL_OK!\n"
 """
         source=self.root/'rusage.S'
         binary=self.root/'rusage'
@@ -169,7 +169,7 @@ success: .ascii "RUSAGE_VIRTUAL_OK!\\n"
         self.assertEqual(native.returncode,0,native.stderr)
         self.assertEqual(guest.returncode,0,guest.stderr)
         self.assertEqual(guest.stdout,native.stdout)
-        self.assertEqual(guest.stdout,b'RUSAGE_VIRTUAL_OK!\\n')
+        self.assertEqual(guest.stdout,b'RUSAGE_VIRTUAL_OK!\n')
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
 
     def test_unsupported_sse2_subencoding_fails_explicitly(self):
