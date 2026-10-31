@@ -78,7 +78,7 @@ class Build:
         for key,ident in [('GCC','gcc'),('BINUTILS','binutils'),('MUSL','musl'),('GMP','gmp'),('MPC','mpc'),('MPFR','mpfr'),('LINUX','linux')]:config.append(key+'_SRCDIR = '+str(src[ident]))
         env=self.env.copy()
         if native:
-            config+=['HOST = '+TRIPLE];env.update(PATH=str(self.cross/'bin')+os.pathsep+env['PATH'],CC=TRIPLE+'-gcc',CXX=TRIPLE+'-g++',AR=TRIPLE+'-ar',RANLIB=TRIPLE+'-ranlib',LDFLAGS='-static-libstdc++ -static-libgcc')
+            config+=['HOST = '+TRIPLE,'BINUTILS_CONFIG = --disable-gprofng'];env.update(PATH=str(self.cross/'bin')+os.pathsep+env['PATH'],CC=TRIPLE+'-gcc',CXX=TRIPLE+'-g++',AR=TRIPLE+'-ar',RANLIB=TRIPLE+'-ranlib',LDFLAGS='-static-libstdc++ -static-libgcc')
         output=self.out/'native-toolchain' if native else self.cross
         signature=hashlib.sha256(('\n'.join(config)+driver_commit+json.dumps({x['id']:x['digest'] for x in self.lock['sources'] if x['id'] in ('gcc','binutils','musl','gmp','mpc','mpfr','linux')},sort_keys=True)).encode()).hexdigest()
         checkpoint=output/'toolchain-stage.json'

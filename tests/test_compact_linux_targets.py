@@ -32,6 +32,18 @@ class TargetLockTests(unittest.TestCase):
    b=Build(Path(d)/'out',d,2);cwd=Path(d)/'actual';cwd.mkdir()
    (cwd/'Makefile').write_text('all:\n\t@test "$(PWD)" = "$(CURDIR)"\n')
    b.run('pwd-proof',['make'],cwd,dict(os.environ,PWD='/incorrect-parent'))
+ def test_native_binutils_excludes_out_of_scope_glibc_profiler(self):
+  from compact_linux_targets import Build
+  from unittest.mock import patch,Mock
+  with tempfile.TemporaryDirectory() as d:
+   driver=Path(d)/'driver';(driver/'litecross').mkdir(parents=True);(driver/'litecross/Makefile').write_text('all:\n')
+   b=Build(Path(d)/'out',driver,2);src={s['id']:Path(d)/s['id'] for s in b.lock['sources']}
+   def fake(name,argv,cwd,env=None):
+    if name=='native':self.assertIn('BINUTILS_CONFIG = --disable-gprofng',(cwd/'config.mak').read_text())
+    if name=='native-install':
+     output=b.out/'native-toolchain';(output/'bin').mkdir(parents=True);(output/'bin/as').write_bytes(b'assembler')
+   b.run=Mock(side_effect=fake)
+   with patch('compact_linux_targets.subprocess.check_output',return_value=b.lock['build_driver']['commit']):b.toolchain(src,True)
  def test_toolchain_checkpoint_reuse_verifies_file_hashes(self):
   from compact_linux_targets import Build
   from unittest.mock import patch,Mock
