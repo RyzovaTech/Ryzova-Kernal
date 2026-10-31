@@ -96,6 +96,86 @@ class Sse2DifferentialTests(unittest.TestCase):
         self.assertEqual(guest.stdout[8:],expected)
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
 
+    def test_punpckldq_register_memory_and_alias_linux_differential(self):
+        # CPython 3.12.10 diagnostics: 66 0F 62 C2. Compare real
+        # Linux and the same ELF in the Ryzova instruction interpreter.
+        asm=r"""
+.intel_syntax noprefix
+.section .text
+.global _start
+_start:
+    movdqu xmm0, XMMWORD PTR [rip + left]
+    movdqu xmm1, XMMWORD PTR [rip + right]
+    punpckldq xmm0, xmm1
+    movdqu XMMWORD PTR [rip + out0], xmm0
+    movdqu xmm2, XMMWORD PTR [rip + second]
+    punpckldq xmm2, XMMWORD PTR [rip + aligned]
+    movdqu XMMWORD PTR [rip + out1], xmm2
+    movdqu xmm3, XMMWORD PTR [rip + left]
+    punpckldq xmm3, xmm3
+    movdqu XMMWORD PTR [rip + out2], xmm3
+    mov eax, 1
+    mov edi, 1
+    lea rsi, [rip + out0]
+    mov edx, 48
+    syscall
+    mov eax, 60
+    xor edi, edi
+    syscall
+.section .data
+.balign 16
+left: .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+right: .byte 128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143
+second: .byte 240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255
+aligned: .byte 160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175
+out0: .zero 16
+out1: .zero 16
+out2: .zero 16
+"""
+        source=self.root/'unpack.S'
+        binary=self.root/'unpack'
+        source.write_text(asm)
+        subprocess.run(['cc','-nostdlib','-static','-no-pie',str(source),'-o',str(binary)],
+                       capture_output=True,check=True,timeout=30)
+        native=subprocess.run([str(binary)],capture_output=True,timeout=5)
+        guest=subprocess.run([str(self.runner),str(binary)],capture_output=True,timeout=25)
+        self.assertEqual(native.returncode,0,native.stderr)
+        self.assertEqual(guest.returncode,0,guest.stderr)
+        self.assertEqual(guest.stdout,native.stdout)
+        self.assertEqual(guest.stdout,
+                         bytes([0,1,2,3,128,129,130,131,4,5,6,7,132,133,134,135,
+                                240,241,242,243,160,161,162,163,244,245,246,247,164,165,166,167,
+                                0,1,2,3,0,1,2,3,4,5,6,7,4,5,6,7]))
+        self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
+
+    def test_punpckldq_unaligned_memory_denied_like_linux(self):
+        asm=r"""
+.intel_syntax noprefix
+.section .text
+.global _start
+_start:
+    movdqu xmm0, XMMWORD PTR [rip + left]
+    punpckldq xmm0, XMMWORD PTR [rip + unaligned]
+    mov eax, 60
+    xor edi, edi
+    syscall
+.section .data
+.balign 16
+left: .zero 16
+unaligned_pad: .byte 7
+unaligned: .zero 16
+"""
+        source=self.root/'unpack-bad.S'
+        binary=self.root/'unpack-bad'
+        source.write_text(asm)
+        subprocess.run(['cc','-nostdlib','-static','-no-pie',str(source),'-o',str(binary)],
+                       capture_output=True,check=True,timeout=30)
+        native=subprocess.run([str(binary)],capture_output=True,timeout=5)
+        guest=subprocess.run([str(self.runner),str(binary)],capture_output=True,timeout=25)
+        self.assertEqual(native.returncode,-11,native.stderr)
+        self.assertEqual(guest.returncode,2,guest.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=2',guest.stderr)
+
     def test_misaligned_legacy_por_memory_fails_closed(self):
         # Legacy POR's 128-bit memory operand requires 16-byte alignment.
         # Confirm real Linux SIGSEGV and bounded VM map failure separately.

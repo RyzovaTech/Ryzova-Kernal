@@ -140,3 +140,15 @@ A real Ryzova C guest opens a 6-MiB explicit read-only image and seeks
 to byte 5,242,880; seeking beyond 32 MiB must return Linux EINVAL,
 without affecting another host resource. This **does not** imply general
 large-file VFS support or full ELF/stdlib compatibility.
+
+## 4E CPython's first measured PUNPCKLDQ gap
+
+The first target failure after the earlier SSE2/getrusage work was the
+CPython 3.12.10 candidate `66 0F 62 C2` (legacy SSE2 PUNPCKLDQ). The
+original Ryzova interpreter now implements the exact 128-bit low-dword
+interleave for register and aligned memory sources, including self-aliasing
+without corrupting source bytes. Unaligned memory and malformed forms remain
+fail-closed. Executing identical, independently assembled AMD64 ELF fixtures
+under host Linux and Ryzova checks results and fault behavior byte for byte.
+**This does not close AMD64-ABI or APP-PYTHON** until the pinned CPython ELF
+and its required stdlib/thread/subprocess/TLS workflows actually pass.

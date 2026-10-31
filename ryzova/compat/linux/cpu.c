@@ -543,6 +543,30 @@ static int step(Cpu *c)
             if(c->operand16 && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
             vector_move(c,rm,reg,op2==0x7f);
         }
+        else if(op2==0x62 && c->operand16 && !c->repeat){
+            /* 66 0F 62 /r PUNPCKLDQ xmm, xmm/m128:
+             * [old dst dword0, src dword0, old dst dword1, src dword1].
+             * Copy both inputs before writing, including xmmN,xmmN alias.
+             * Legacy SSE2 memory operands must be 16-byte aligned.
+             * EFLAGS are unaffected; unsupported prefix forms still deny. */
+            unsigned char dst[8],src[8],out[16];
+            uint64_t at;
+            rm=decode(c,&reg,&group,16);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            memcpy(dst,c->xmm[reg],8);
+            if(rm.reg>=0)memcpy(src,c->xmm[rm.reg],8);
+            else{
+                at=address(c,rm)+c->segment;
+                if((at&15U) || !ryz_memory_access(c->m,at,16,RYZ_READ))
+                    return RYZ_VM_MAP_ERROR;
+                memcpy(src,c->m->bytes+(size_t)(at-c->m->base),8);
+            }
+            memcpy(out,dst,4);
+            memcpy(out+4,src,4);
+            memcpy(out+8,dst+4,4);
+            memcpy(out+12,src+4,4);
+            memcpy(c->xmm[reg],out,16);
+        }
         else if(op2==0x6c && c->operand16 && !c->repeat){
             unsigned char bytes[8];rm=decode(c,&reg,&group,16);
             if(rm.reg>=0)memcpy(bytes,c->xmm[rm.reg],8);
