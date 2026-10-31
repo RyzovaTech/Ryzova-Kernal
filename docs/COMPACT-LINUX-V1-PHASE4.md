@@ -189,3 +189,17 @@ fetch; unimplemented scalar-double instruction remains denied. MXCSR
 nondefault rounding and floating exception flags are NOT implemented or
 claimed. All frozen Python stdlib, process/thread and TLS acceptance
 criteria remain pending independent actual guest evidence.
+
+## 4E default-rounding DIVSS scalar binary32 research
+
+The measured frozen CPython `-c` reached opcode `F3 0F 5E`
+(DIVSS). The bounded Ryzova interpreter now uses an integer-only
+binary32 division routine for default round-to-nearest/ties-to-even,
+with signed zero, normal/subnormal rounding, overflow, zero divisors
+and quiet-NaN handling. It accepts register and unaligned scalar m32
+sources and preserves the upper 96 bits of the destination XMM and EFLAGS.
+A differential AMD64 ELF checks eight exact output vectors against both
+native Linux and the Ryzova VM. The F2 DIVSD form remains unsupported.
+MXCSR nondefault rounding, precise FP exceptions/signalling NaN effects,
+IEEE status flags and the full CPython workflow are **not** qualified;
+guest code acceptance requires a new actual target-profile result.

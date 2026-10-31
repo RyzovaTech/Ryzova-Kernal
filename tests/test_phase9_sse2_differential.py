@@ -211,6 +211,60 @@ unaligned: .long -42
         self.assertEqual(guest.stdout,expected)
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
 
+    def test_divss_scalar_ieee754_linux_differential(self):
+        # CPython -c candidate F3 0F 5E C1. Preserve full destination XMM
+        # upper 96 bits; test exact default round-to-nearest-even results.
+        cases=[
+            (0x40e00000,0x40000000,0x40600000,'register'),  # 7 / 2 = 3.5
+            (0x00000003,0x40000000,0x00000002,'memory'),    # subnormal tie-even
+            (0x40e00000,0x00000000,0x7f800000,'register'),  # +infinity
+            (0xc0e00000,0x40000000,0xc0600000,'register'),  # -7 / 2
+            (0x00800000,0x40000000,0x00400000,'memory'),    # min-normal / 2
+            (0x00000001,0x40000000,0x00000000,'register'),  # underflow tie-even
+            (0x80000000,0x40000000,0x80000000,'register'),  # signed zero
+            (0x7f7fffff,0x00800000,0x7f800000,'register'),  # overflow
+        ]
+        asm=['.intel_syntax noprefix','.section .text','.global _start','_start:']
+        for i,(_,__,___,kind) in enumerate(cases):
+            asm += [f'movdqu xmm0, XMMWORD PTR [rip + left{i}]',
+                    f'movdqu xmm1, XMMWORD PTR [rip + right{i}]',
+                    (f'divss xmm0, DWORD PTR [rip + right{i}]'
+                     if kind=='memory' else 'divss xmm0, xmm1'),
+                    f'movdqu XMMWORD PTR [rip + out{i}], xmm0']
+        asm += ['mov eax, 1','mov edi, 1','lea rsi, [rip + out0]',
+                f'mov edx, {16*len(cases)}','syscall','mov eax, 60',
+                'xor edi, edi','syscall','.section .data','.balign 16']
+        for i in range(len(cases)):
+            asm += [f'out{i}: .zero 16']
+        for i,(left,right,_,__) in enumerate(cases):
+            for label,value in ((f'left{i}',left),(f'right{i}',right)):
+                asm += [f'{label}: .long {value}', '  .byte '+','.join(
+                    str(x) for x in range(160,172))]
+        source=self.root/'divss.S'
+        binary=self.root/'divss'
+        source.write_text('\\n'.join(asm)+'\\n')
+        subprocess.run(['cc','-nostdlib','-static','-no-pie',str(source),'-o',str(binary)],
+                       capture_output=True,check=True,timeout=30)
+        native=subprocess.run([str(binary)],capture_output=True,timeout=5)
+        guest=subprocess.run([str(self.runner),str(binary)],capture_output=True,timeout=25)
+        self.assertEqual(native.returncode,0,native.stderr)
+        self.assertEqual(guest.returncode,0,guest.stderr)
+        self.assertEqual(guest.stdout,native.stdout)
+        import struct
+        expected=b''.join(struct.pack('<I',word)+bytes(range(160,172))
+                          for _,__,word,___ in cases)
+        self.assertEqual(guest.stdout,expected)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
+
+    def test_unimplemented_double_divsd_stays_explicitly_denied(self):
+        from test_phase9_image_admission import executable
+        bad=self.root/'unsupported-divsd.elf'
+        bad.write_bytes(executable(code=bytes([0xf2,0x0f,0x5e,0xc1])))
+        out=subprocess.run([str(self.runner),str(bad)],
+                           capture_output=True,timeout=15)
+        self.assertEqual(out.returncode,2,out.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=3',out.stderr)
+
     def test_unimplemented_scalar_double_form_still_fails_closed(self):
         from test_phase9_image_admission import executable
         bad=self.root/'unsupported-cvtsi2sd.elf'
