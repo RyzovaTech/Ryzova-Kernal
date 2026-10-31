@@ -445,6 +445,10 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     if(jobs->world.network_failed)status=RYZ_JOB_NETWORK_LIMIT;
     result->pipe_bytes=jobs->world.pipe_bytes;
     result->arena_peak_bytes=jobs->arena_peak;result->shared_peak_pages=jobs->world.shared_peak;
+    /* Snapshot before closing descriptors/tearing down the guest world. */
+    result->network_bytes=jobs->world.network_bytes;
+    result->resource_bytes=jobs->world.resource_bytes;
+    result->output_bytes=jobs->world.output_bytes;
     for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE){futex_clear(&jobs->tasks[i]);ryz_world_close(&jobs->tasks[i].process,0);}
     for(i=0;i<RYZ_JOB_TASKS;i++)mm_release(jobs,&jobs->tasks[i]);
     if(config->filesystem && config->filesystem->output)fs_export(&jobs->world,config->filesystem);

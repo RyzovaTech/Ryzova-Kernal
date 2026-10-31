@@ -23,6 +23,8 @@ typedef struct RyzVmResult {
     /* Diagnostic only, never forward an unsupported guest syscall to host. */
     uint64_t unsupported_syscall_nr;
     int unsupported_syscall_valid;
+    /* Monotonic guest-model counters, NOT physical host CPU/RAM/network. */
+    uint64_t network_bytes,resource_bytes,output_bytes;
 } RyzVmResult;
 /*
  * Execute a deliberately tiny x86-64 opcode subset via a software interpreter.

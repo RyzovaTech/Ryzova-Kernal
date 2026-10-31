@@ -107,6 +107,8 @@ def main(directory,output):
             actual['last_rip_hex']=rip.group(1).decode() if rip else None
             rejected=re.search(rb' unsupported_syscall=([0-9]+) unsupported_syscall_valid=([01])',guest.stderr)
             actual['unsupported_syscall_nr']=int(rejected.group(1)) if rejected and rejected.group(2)==b'1' else None
+            guest_io=re.search(rb'COMPACT_GUEST_IO network_bytes=([0-9]+) resource_bytes=([0-9]+) output_bytes=([0-9]+)',guest.stderr)
+            actual['guest_io']={key:int(value) for key,value in zip(('network_bytes','resource_bytes','output_bytes'),guest_io.groups())} if guest_io else None
         success=bool(actual and actual['status']==0 and actual['exited'] and actual['exit']==expected and version.encode() in guest.stdout+guest.stderr)
         blockers=[]
         if info['bytes']>IMAGE_MAX_BYTES:blockers.append('ELF exceeds current bounded 32-MiB image ceiling')
@@ -133,6 +135,8 @@ def main(directory,output):
                 measured['last_rip_hex']=rip.group(1).decode() if rip else None
                 denied=re.search(rb' unsupported_syscall=([0-9]+) unsupported_syscall_valid=([01])',attempt.stderr)
                 measured['unsupported_syscall_nr']=int(denied.group(1)) if denied and denied.group(2)==b'1' else None
+                guest_io=re.search(rb'COMPACT_GUEST_IO network_bytes=([0-9]+) resource_bytes=([0-9]+) output_bytes=([0-9]+)',attempt.stderr)
+                measured['guest_io']={key:int(value) for key,value in zip(('network_bytes','resource_bytes','output_bytes'),guest_io.groups())} if guest_io else None
             passed=bool(measured and measured['status']==0 and measured['exited']==1
                         and measured['exit']==0 and
                         b'CLX_PYTHON_CODE_OK\n' in attempt.stdout)
@@ -144,7 +148,7 @@ def main(directory,output):
                 blockers.append('actual guest CPython -c code execution not yet qualified')
         if not success:blockers.append('guest smoke failed: '+str(actual if actual else {'runner_exit':guest.returncode}))
         records.append({'target':target,'version':version,'elf':info,'startup_libraries':libraries,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_output_excerpt':text[:2048],'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode, 'guest_probe_args':guest_args,'guest_blockers':blockers,'python_code_probe':python_code_probe,'full_target_workflows_qualified':False})
-    report={'schema':'compact-linux-target-profiles/v1','source_lock_sha256':build['source_lock_sha256'],'abi':build['abi'],'targets':records,'phase4_entry_ready':all(r['linux_reference_passed'] for r in records),'phase3_complete':False,'resource_qualified':False,'full_target_workflows_qualified':False,'limitations':['Reference smoke measurements are not full target workflow budgets','max_child_rss is not aggregate process-tree RAM','Target networking/certificate and PTY workflows remain unqualified','Guest failures are recorded, never promoted to successful measurements']}
+    report={'schema':'compact-linux-target-profiles/v1','source_lock_sha256':build['source_lock_sha256'],'abi':build['abi'],'targets':records,'phase4_entry_ready':all(r['linux_reference_passed'] for r in records),'phase3_complete':False,'resource_qualified':False,'full_target_workflows_qualified':False,'limitations':['Reference smoke measurements are not full target workflow budgets','max_child_rss is not aggregate process-tree RAM','Target networking/certificate and PTY workflows remain unqualified','Guest failures are recorded, never promoted to successful measurements','Guest I/O counters are bounded emulator model totals, never actual physical NIC/host RSS measurements']}
     Path(output).write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
     return 0 if report['phase4_entry_ready'] else 1
 if __name__=='__main__':

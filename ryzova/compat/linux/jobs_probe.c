@@ -90,6 +90,7 @@ int main(int argc,char **argv)
     status=ryz_vm_run_jobs_elf(image,(size_t)n,arena,RYZ_PROCESS_MAX_SPAN,input?&files:NULL,&args,&config,sink,NULL,&result);
     fprintf(stderr,"COMPACT_JOBS_RESULT status=%d exited=%d exit=%u steps=%u syscalls=%u forks=%u execs=%u peak=%u blocked=%u pipebytes=%llu rip=%llx unsupported_syscall=%llu unsupported_syscall_valid=%d\n",status,result.exited,(unsigned)result.exit_status,(unsigned)result.executed_steps,(unsigned)result.syscall_count,(unsigned)result.forks,(unsigned)result.execs,(unsigned)result.peak_tasks,(unsigned)result.blocked_syscalls,(unsigned long long)result.pipe_bytes,(unsigned long long)result.last_rip,(unsigned long long)result.unsupported_syscall_nr,result.unsupported_syscall_valid);
     fprintf(stderr,"COMPACT_RESOURCE_STATS arena_peak=%llu shared_peak=%u\n",(unsigned long long)result.arena_peak_bytes,(unsigned)result.shared_peak_pages);
+    fprintf(stderr,"COMPACT_GUEST_IO network_bytes=%llu resource_bytes=%llu output_bytes=%llu\n",(unsigned long long)result.network_bytes,(unsigned long long)result.resource_bytes,(unsigned long long)result.output_bytes);
     if(status==RYZ_VM_OK && result.exited && result.exit_status==0 && files.output_size)fwrite(out,1,files.output_size,stdout);
     if(stateoutpath && fs.output_size){
         file=fopen(stateoutpath,"wx");if(!file)return 65;

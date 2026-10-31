@@ -71,6 +71,16 @@ class ImageAdmissionTests(unittest.TestCase):
         self.assertEqual(out.returncode,0,out.stderr[-2500:])
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',out.stderr)
 
+    def test_actual_guest_io_telemetry_is_bounded_and_not_host_usage(self):
+        file=self.d/'io-telemetry'
+        file.write_bytes(executable())
+        out=self.invoke(file)
+        self.assertEqual(out.returncode,0,out.stderr)
+        self.assertIn(
+            b'COMPACT_GUEST_IO network_bytes=0 resource_bytes=0 output_bytes=0',
+            out.stderr)
+        self.assertIn(b'COMPACT_RESOURCE_STATS arena_peak=',out.stderr)
+
     def test_over_per_image_ceiling_rejected_before_loading(self):
         file=self.d/'oversized-elf'
         with file.open('wb') as stream:

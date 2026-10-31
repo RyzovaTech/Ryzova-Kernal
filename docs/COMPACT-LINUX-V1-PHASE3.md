@@ -208,3 +208,22 @@ QEMU evidence are missing. The final gate is **expected to be red during
 development**; older source/regression jobs can be green even while
 Linux V1 qualification is incomplete. This is metadata consistency and
 review support, not substitute native acceptance or permission to merge.
+
+## 3E independently recorded guest I/O counters
+
+The bounded C emulator result now returns invocation-local guest-world
+`network_bytes`, `resource_bytes` and `output_bytes` totals **before**
+resource cleanup. `jobs_probe` emits a separate `COMPACT_GUEST_IO` line
+without changing the existing `COMPACT_JOBS_RESULT` and
+`COMPACT_RESOURCE_STATS` parsing contracts. The frozen-target
+`target-profiles.json` records these counters for each version smoke
+and the independently assessed CPython `-c` probe.
+
+These are **logical guest-model counters** representing accepted operations
+under their existing quotas, not physical NIC transfers, host RSS,
+true concurrent file-descriptor high-water marks, total process-tree memory
+or production kernel resource accounting. Source-built Linux-vs-Ryzova
+network-differential fixtures and null-I/O negative tests check the
+recording. The `RESOURCE` acceptance gate remains open until actual
+per-application budgets for each required full guest workflow,
+aggregate accounting and independent native evidence pass.
