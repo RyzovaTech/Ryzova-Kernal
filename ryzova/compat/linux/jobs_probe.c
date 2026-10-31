@@ -28,7 +28,7 @@ int main(int argc,char **argv)
     RyzProcessArgs args;RyzJobConfig config;RyzLinuxFiles files;RyzVmResult result;
     char *texts[RYZ_PROCESS_ARGS],*eq;RyzLinuxExec grants[RYZ_PROCESS_ARGS];size_t gi;
     const char *env[]={"FLEX_MODE=test","PATH=/bin"};
-    unsigned char *image,*arena,*input=NULL,*out=NULL;FILE *file;long n;int first=1,status;
+    unsigned char *image,*arena,*input=NULL,*out=NULL;FILE *file;long n;size_t total_image_bytes;int first=1,status;
     memset(&network,0,sizeof network);memset(network_grants,0,sizeof network_grants);network.grants=network_grants;network.now_ns=network_now;network.wait=network_wait;
     memset(&resources,0,sizeof resources);
     umask(077);memset(&fs,0,sizeof fs);
@@ -68,6 +68,7 @@ int main(int argc,char **argv)
     if(stateoutpath){stateout=malloc(RYZ_FS_SNAPSHOT_MAX);if(!stateout)return 65;fs.output=stateout;fs.output_capacity=RYZ_FS_SNAPSHOT_MAX;}
     config.execs=grants;file=fopen(argv[first],"rb");if(!file || fseek(file,0,SEEK_END))return 65;
     n=ftell(file);if(n<=0 || n>RYZ_PROCESS_IMAGE_MAX || fseek(file,0,SEEK_SET))return 65;
+    total_image_bytes=(size_t)n;
     image=malloc((size_t)n);arena=malloc(RYZ_PROCESS_MAX_SPAN);if(!image || !arena)return 65;
     if(fread(image,1,(size_t)n,file)!=(size_t)n)return 65;
     fclose(file);args.argv=(const char *const *)(argv+first);args.argc=(size_t)(argc-first);args.envp=env;args.envc=2;
@@ -76,7 +77,9 @@ int main(int argc,char **argv)
         if(eq){
             unsigned char *bytes;long length;
             *eq=0;file=fopen(eq+1,"rb");if(!file || fseek(file,0,SEEK_END))return 65;
-            length=ftell(file);if(length<=0 || length>RYZ_PROCESS_IMAGE_MAX || fseek(file,0,SEEK_SET))return 65;
+            length=ftell(file);if(length<=0 || length>RYZ_PROCESS_IMAGE_MAX ||
+                (size_t)length>RYZ_PROCESS_IMAGE_TOTAL_MAX-total_image_bytes || fseek(file,0,SEEK_SET))return 65;
+            total_image_bytes+=(size_t)length;
             bytes=malloc((size_t)length);if(!bytes || fread(bytes,1,(size_t)length,file)!=(size_t)length)return 65;
             fclose(file);grants[gi].image=bytes;grants[gi].size=(size_t)length;
         }else{grants[gi].image=image;grants[gi].size=(size_t)n;}

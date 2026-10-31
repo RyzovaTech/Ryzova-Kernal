@@ -10,6 +10,10 @@ import re
 import subprocess
 import time
 ROOT=Path(__file__).resolve().parents[1]
+# Exact measured CPython 3.12.10 executable: 27,726,864 bytes.
+# Keep these in lockstep with process.h; unit tests assert both ceilings.
+IMAGE_MAX_BYTES=32*1024*1024
+IMAGE_TOTAL_BYTES=48*1024*1024
 TARGETS={
  'busybox':('/bin/busybox',['--help'],'1.35.0'),
  'python':('/usr/bin/python3.12',['-c','import json,pathlib,tempfile,threading,multiprocessing,subprocess,socket,ssl,hashlib,zlib; print(json.dumps({"version":__import__("sys").version,"ssl":ssl.OPENSSL_VERSION})); p=pathlib.Path("/tmp/python-proof"); p.write_text("proof"); assert p.read_text()=="proof"'],'3.12.10'),
@@ -103,10 +107,12 @@ def main(directory,output):
             actual['last_rip_hex']=rip.group(1).decode() if rip else None
         success=bool(actual and actual['status']==0 and actual['exited'] and actual['exit']==expected and version.encode() in guest.stdout+guest.stderr)
         blockers=[]
-        if info['bytes']>4*1024*1024:blockers.append('ELF exceeds current 4-MiB image ceiling')
+        if info['bytes']>IMAGE_MAX_BYTES:blockers.append('ELF exceeds current bounded 32-MiB image ceiling')
         if info['load_span_bytes']+65536+4096>16*1024*1024:blockers.append('load span plus stack/guard exceeds current 16-MiB arena')
         for library in libraries:
-            if library['bytes']>4*1024*1024:blockers.append(library['path']+' exceeds current 4-MiB grant image ceiling')
+            if library['bytes']>IMAGE_MAX_BYTES:blockers.append(library['path']+' exceeds current bounded 32-MiB grant image ceiling')
+        if info['bytes']+sum(library['bytes'] for library in libraries)>IMAGE_TOTAL_BYTES:
+            blockers.append('main image plus transitive library images exceed bounded 48-MiB aggregate ceiling')
         if len(grants)//2>16:blockers.append('dependency closure exceeds 16 executable/library grants')
         if not success:blockers.append('guest smoke failed: '+str(actual if actual else {'runner_exit':guest.returncode}))
         records.append({'target':target,'version':version,'elf':info,'startup_libraries':libraries,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_output_excerpt':text[:2048],'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode,'guest_probe_args':guest_args,'guest_blockers':blockers,'full_target_workflows_qualified':False})
