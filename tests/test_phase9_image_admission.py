@@ -16,7 +16,7 @@ SOURCES=[CORE/(x+'.c') for x in
          ('elf64','namespace','syscall','subset_vm','memory','process','cpu','jobs','jobs_probe')]
 
 
-def executable(*,pie=False,mapped=8192,interpreter=None):
+def executable(*,pie=False,mapped=8192,interpreter=None,code=EXIT0):
     """File-offset-aligned real AMD64 ELF64 with a bounded synthetic PT_LOAD."""
     if mapped < 8192 or mapped > 8*1024*1024:
         raise ValueError("test fixture memory span must remain bounded")
@@ -29,7 +29,9 @@ def executable(*,pie=False,mapped=8192,interpreter=None):
     # loader validates AT_PHDR against a mapped, readable segment.
     vaddr=0 if pie else 0x400000
     struct.pack_into('<IIQQQQQQ',raw,64,1,5,0,vaddr,0,0x1200,mapped,0x1000)
-    raw[0x1000:0x1000+len(EXIT0)]=EXIT0
+    if not 1 <= len(code) <= 256:
+        raise ValueError('bounded guest test code only')
+    raw[0x1000:0x1000+len(code)]=code
     if interpreter:
         filename=interpreter.encode('ascii')+b'\0'
         if len(filename)>128:
@@ -97,6 +99,15 @@ class ImageAdmissionTests(unittest.TestCase):
         out=self.invoke('-x',interp+'='+str(ld),main)
         self.assertEqual(out.returncode,0,out.stderr[-2500:])
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',out.stderr)
+
+    def test_unknown_guest_syscall_reports_number_and_fails_closed(self):
+        # mov eax,999; syscall — no corresponding allowed Linux syscall.
+        image=self.d/'unsupported-syscall'
+        image.write_bytes(executable(code=bytes([0xb8,0xe7,0x03,0,0,0x0f,0x05])))
+        out=self.invoke(image)
+        self.assertEqual(out.returncode,2,out.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=5',out.stderr)
+        self.assertIn(b'unsupported_syscall=999 unsupported_syscall_valid=1',out.stderr)
 
     def test_budgets_match_host_profile_configuration(self):
         from importlib.util import spec_from_file_location,module_from_spec

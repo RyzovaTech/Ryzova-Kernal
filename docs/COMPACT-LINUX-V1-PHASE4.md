@@ -81,3 +81,13 @@ and 16-MiB arena admission checks.
 **This is not proof that CPython starts, imports modules, or supports required
 SSE2/FP instructions.** Real pinned guest CPython and full pipeline workloads
 must be separately demonstrated before CLX-04 or MEM-PROC/RESOURCE may close.
+
+## 4A exact unsupported-syscall evidence
+
+On fail-closed guest syscall rejection, the runtime records the original
+guest number and a distinct validity flag in the diagnostic result. It never
+forwards unknown syscalls to Linux. The pinned host differential uses an
+actual AMD64 ELF containing `mov eax,999; syscall` and must report Ryzova
+status 5 plus unsupported syscall 999. The frozen-target profile includes
+this number only when the validity flag is set. Failed guest execution
+remains failed; no compatibility gates are closed by emitting diagnostics.

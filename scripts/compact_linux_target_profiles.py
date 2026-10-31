@@ -105,6 +105,8 @@ def main(directory,output):
         if actual:
             rip=re.search(rb' rip=([0-9a-f]+)',guest.stderr)
             actual['last_rip_hex']=rip.group(1).decode() if rip else None
+            rejected=re.search(rb' unsupported_syscall=([0-9]+) unsupported_syscall_valid=([01])',guest.stderr)
+            actual['unsupported_syscall_nr']=int(rejected.group(1)) if rejected and rejected.group(2)==b'1' else None
         success=bool(actual and actual['status']==0 and actual['exited'] and actual['exit']==expected and version.encode() in guest.stdout+guest.stderr)
         blockers=[]
         if info['bytes']>IMAGE_MAX_BYTES:blockers.append('ELF exceeds current bounded 32-MiB image ceiling')
