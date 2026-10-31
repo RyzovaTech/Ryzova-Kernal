@@ -52,7 +52,7 @@ def build(output):
     output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
     subprocess.run([os.environ.get('CC','cc'),'-std=c11','-Wall','-Wextra','-Werror','-pedantic','-O2',
                     '-fsanitize=undefined','-fno-sanitize-recover=all',
-                    *[str(ROOT/'ryzova/compat/windows'/n) for n in ('loader.c','cpu.c','api.c','api_probe.c')],'-o',str(output)],check=True)
+                    *[str(ROOT/'ryzova/compat/windows'/n) for n in ('loader.c','cpu.c','api.c','files.c','api_probe.c')],'-o',str(output)],check=True)
     return output
 
 def execute(probe, image, command=COMMAND, env_name='FLEX_W3_PROBE', env_value='ready', consoles=3, api_mask=511, budget=262144):

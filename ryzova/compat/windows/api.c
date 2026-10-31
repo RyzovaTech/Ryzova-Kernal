@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #include "api.h"
+#include "files.h"
 #include <string.h>
 #define ERR_INVALID_HANDLE 6U
 #define ERR_MEMORY 8U
@@ -8,7 +9,7 @@
 #define ERR_ENVIRONMENT 203U
 #define ERR_ADDRESS 487U
 #define ERR_NOACCESS 998U
-static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree"};
+static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers"};
 int cw_api_id(const char *name) {
     unsigned int i;for(i=0;i<CW_API_COUNT;i++)if(!strcmp(name,names[i]))return (int)i;
     return -1;
@@ -92,7 +93,7 @@ static uint64_t write_file(CwMachine *m,const uint64_t *a) {
     if(a[0]==UINT64_C(0x10001))stream=0;
     else if(a[0]==UINT64_C(0x10002))stream=1;
     else return fail(s,ERR_INVALID_HANDLE);
-    if(!(s->launch.console_mask&(1U<<stream)))return fail(s,ERR_INVALID_HANDLE);
+    if(!(s->launch.console_mask&(1U<<stream)) || (s->console_closed&(1U<<stream)))return fail(s,ERR_INVALID_HANDLE);
     if(a[4])return fail(s,ERR_UNSUPPORTED);
     if(n>CW_OUTPUT_LIMIT)return fail(s,ERR_PARAMETER);
     if(n && !(input=cw_memory(m,a[1],n,CW_R)))return fail(s,ERR_NOACCESS);
@@ -183,17 +184,18 @@ static uint64_t virtual_free(CwMachine *m,const uint64_t *a) {
     return 1;
 }
 int cw_api_dispatch(CwMachine *m) {
-    uint64_t token=m->ip;unsigned int id;uint64_t a[5],result=0,ret;unsigned char *stack;
+    uint64_t token=m->ip;unsigned int id;uint64_t a[7],result=0,ret;unsigned char *stack;
     CwServices *s=m->services;
     if(token<CW_THUNK_BASE || token-CW_THUNK_BASE>=16U*CW_API_COUNT || (token-CW_THUNK_BASE)%16)return CW_MEMORY;
     id=(unsigned int)((token-CW_THUNK_BASE)/16);
     if(!s || s->bound_machine!=m || !(m->plan.api_mask&(1U<<id)) || !(s->launch.api_mask&(1U<<id)))return CW_API;
     if((m->r[4]&15)!=8 || m->r[4]<m->stack_base || m->r[4]-m->stack_base>CW_STACK-40 || !(stack=cw_memory(m,m->r[4],40,CW_R)))return CW_ABI;
     if(!cw_memory(m,m->r[4]+8,32,CW_W))return CW_ABI;
-    a[0]=m->r[1];a[1]=m->r[2];a[2]=m->r[8];a[3]=m->r[9];a[4]=0;
-    if(id==CW_WRITE_FILE) {
-        unsigned char *fifth=cw_memory(m,m->r[4]+40,8,CW_R);if(!fifth)return CW_ABI;
-        a[4]=get64(fifth);
+    a[0]=m->r[1];a[1]=m->r[2];a[2]=m->r[8];a[3]=m->r[9];a[4]=a[5]=a[6]=0;
+    if(id==CW_WRITE_FILE || id==CW_READ_FILE || id==CW_CREATE_FILE) {
+        unsigned int count=id==CW_CREATE_FILE?3U:1U,i;
+        unsigned char *extra=cw_memory(m,m->r[4]+40,count*8,CW_R);if(!extra)return CW_ABI;
+        for(i=0;i<count;i++)a[4+i]=get64(extra+i*8);
     }
     ret=get64(stack);s->calls[id]++;
     switch(id) {
@@ -203,14 +205,18 @@ int cw_api_dispatch(CwMachine *m) {
         else if((uint32_t)a[0]==UINT32_MAX-9)result=0; /* stdin absent */
         else {s->last_error=ERR_PARAMETER;result=UINT64_MAX;}
         break;
-    case CW_WRITE_FILE:result=write_file(m,a);break;
-    case CW_EXIT_PROCESS:m->exit_code=(uint32_t)a[0];m->exited=1;m->exit_kind=1;return CW_OK;
+    case CW_WRITE_FILE:
+        result=(a[0]==0x10001 || a[0]==0x10002)?write_file(m,a):cw_file_call(m,id,a);break;
+    case CW_EXIT_PROCESS:cw_files_close_all(m);m->exit_code=(uint32_t)a[0];m->exited=1;m->exit_kind=1;return CW_OK;
     case CW_GET_LAST_ERROR:result=s->last_error;break;
     case CW_SET_LAST_ERROR:s->last_error=(uint32_t)a[0];break;
     case CW_GET_COMMAND_LINE:result=s->command_base;break;
     case CW_GET_ENVIRONMENT_VARIABLE:result=environment(m,a);break;
     case CW_VIRTUAL_ALLOC:result=virtual_alloc(m,a);break;
     case CW_VIRTUAL_FREE:result=virtual_free(m,a);break;
+    case CW_CREATE_FILE:case CW_READ_FILE:case CW_CLOSE_HANDLE:
+    case CW_SET_FILE_POINTER:case CW_GET_FILE_SIZE:case CW_FLUSH_FILE_BUFFERS:
+        result=cw_file_call(m,id,a);break;
     default:return CW_API;
     }
     m->r[0]=result;m->r[4]+=8;

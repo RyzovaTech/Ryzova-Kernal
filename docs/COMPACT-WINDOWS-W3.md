@@ -5,6 +5,9 @@ profile. It is stacked on W2 PR #84, which is stacked on W1 PR #83. Linux,
 shared CPU code and shared Compact negotiation remain unchanged. Native Flex
 kernel/QEMU qualification remains W6. This is not general Windows compatibility.
 
+W4 extends this historical phase baseline with file handles and explicit drive
+grants; see `COMPACT-WINDOWS-W4.md` for the additional current behavior.
+
 ## Admission and calls
 
 The loader accepts one unbound `kernel32.dll` import descriptor with an in-range

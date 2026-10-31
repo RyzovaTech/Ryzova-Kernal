@@ -33,7 +33,7 @@ class WindowsW2Tests(unittest.TestCase):
         cls.directory = Path(cls.temp.name)
         cls.probe = build(cls.directory / 'probe', sanitize=True)
         library = cls.directory / 'runtime.so'
-        subprocess.run([os.environ.get('CC', 'cc'), '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-shared', '-fPIC', '-fsanitize=undefined', '-fno-sanitize-recover=all', *[str(ROOT / 'ryzova/compat/windows' / x) for x in ('loader.c', 'cpu.c', 'api.c')], '-o', str(library)], check=True)
+        subprocess.run([os.environ.get('CC', 'cc'), '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-shared', '-fPIC', '-fsanitize=undefined', '-fno-sanitize-recover=all', *[str(ROOT / 'ryzova/compat/windows' / x) for x in ('loader.c', 'cpu.c', 'api.c', 'files.c')], '-o', str(library)], check=True)
         cls.lib = C.CDLL(str(library))
         cls.lib.cw_plan.argtypes = [C.c_void_p, C.c_size_t, C.c_uint64, C.POINTER(Plan)]
         cls.lib.cw_load.argtypes = [C.c_void_p, C.c_size_t, C.c_uint64, C.c_void_p, C.c_size_t, C.POINTER(Machine)]
