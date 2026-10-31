@@ -25,6 +25,18 @@ class TargetLockTests(unittest.TestCase):
    path=Path(d)/'usage.json'
    result=subprocess.run(['/usr/bin/time','-q','-f','{"rss":%M}','-o',str(path),'sh','-c','exit 1'],capture_output=True)
    self.assertEqual(result.returncode,1);self.assertGreaterEqual(json.loads(path.read_text())['rss'],0)
+ def test_build_failure_keeps_actual_diagnostics_in_ci_console(self):
+  from compact_linux_targets import Build
+  from unittest.mock import patch
+  from contextlib import redirect_stdout
+  import io
+  import subprocess
+  with tempfile.TemporaryDirectory() as d:
+   b=Build(Path(d)/'out',d,2);(b.logs/'failure.log').write_text('actual-compiler-error')
+   stream=io.StringIO()
+   with redirect_stdout(stream),patch('compact_linux_targets.subprocess.run',side_effect=subprocess.CalledProcessError(2,['make'])):
+    with self.assertRaises(subprocess.CalledProcessError):b.run('failure',['make'],d)
+   self.assertIn('actual-compiler-error',stream.getvalue())
  def test_build_subprocess_pwd_matches_actual_make_directory(self):
   from compact_linux_targets import Build
   import os

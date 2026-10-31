@@ -41,7 +41,12 @@ class Build:
         print('BUILD',name,flush=True)
         command_env=dict(env or self.env,PWD=str(Path(cwd).resolve()))
         with (self.logs/(name+'.log')).open('a') as log:
-            subprocess.run(list(map(str,argv)),cwd=cwd,env=command_env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=5400)
+            try:
+                subprocess.run(list(map(str,argv)),cwd=cwd,env=command_env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=5400)
+            except (subprocess.CalledProcessError,subprocess.TimeoutExpired):
+                log.flush()
+                print('BUILD_FAILURE_TAIL '+name+'\n'+(self.logs/(name+'.log')).read_text(errors='replace')[-12000:],flush=True)
+                raise
     def sources(self):
         result={}
         for s in self.lock['sources']:

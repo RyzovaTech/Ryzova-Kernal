@@ -7,12 +7,13 @@ on:
       - 'scripts/compact_linux_target_profiles.py'
       - 'ryzova/compact/linux-target-sources.json'
       - 'ryzova/compact/linux-v1-plan.json'
+      - 'ryzova/compat/linux/**'
       - 'tests/test_compact_linux_targets.py'
       - '.github/workflows/compact-linux-target-profiles.yml'
   workflow_dispatch:
 concurrency:
   group: compact-target-profiles-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
