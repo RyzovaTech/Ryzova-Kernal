@@ -110,8 +110,11 @@ def create_report(root, profiles):
                      "make":"/usr/bin/make", "musl":"/lib/libc.so"}
             if name not in names:
                 raise ValueError("unknown frozen target")
-            image = root / names[name].lstrip("/")
-            if not image.is_file() or image.is_symlink() or image.stat().st_size > MAX_IMAGE:
+            image = (root / names[name].lstrip("/")).resolve()
+            # The pinned target build legitimately uses /bin/gcc and /bin/as
+            # symlinks. Resolve those inside the measured root, never outside.
+            if (not image.is_relative_to(root) or not image.is_file()
+                    or image.stat().st_size > MAX_IMAGE):
                 raise ValueError("missing bounded measured executable")
             data = image.read_bytes()
             if hashlib.sha256(data).hexdigest() != elf["sha256"]:
@@ -122,8 +125,9 @@ def create_report(root, profiles):
             if candidate is None:
                 # The only supported initial dynamic loader is the existing
                 # separately verified musl 1.2.6 interpreter at 0x800000.
-                interpreter = root / "lib/libc.so"
-                if interpreter.is_file() and not interpreter.is_symlink() and interpreter.stat().st_size <= MAX_IMAGE:
+                interpreter = (root / "lib/libc.so").resolve()
+                if (interpreter.is_relative_to(root) and interpreter.is_file()
+                        and interpreter.stat().st_size <= MAX_IMAGE):
                     libc = interpreter.read_bytes()
                     musl = next((v for v in targets if v.get("target")=="musl"),None)
                     if musl and type(musl.get("elf")) is dict and hashlib.sha256(libc).hexdigest() == musl["elf"].get("sha256"):
