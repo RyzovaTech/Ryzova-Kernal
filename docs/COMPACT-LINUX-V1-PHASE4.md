@@ -91,3 +91,17 @@ actual AMD64 ELF containing `mov eax,999; syscall` and must report Ryzova
 status 5 plus unsupported syscall 999. The frozen-target profile includes
 this number only when the validity flag is set. Failed guest execution
 remains failed; no compatibility gates are closed by emitting diagnostics.
+
+## 4C observed AMD64 SIMD compatibility increment
+
+Source-pinned guest diagnostics identified no-prefix `0F 16 /r` MOVHPS /
+MOVLHPS, legacy SSE2 `66 0F 73 /3,/7` PSRLDQ/PSLLDQ and
+`66 0F EB /r` POR as the first target-required instruction set gaps.
+Original Ryzova interpreter cases implement byte-accurate operations and
+retain preserved XMM halves and unaffected EFLAGS. Aligned POR memory
+operands are required; Linux faults on misaligned m128 and the VM returns
+a bounded map error rather than silently permitting it. Source-built
+AMD64 Linux-vs-Ryzova differential fixtures and negative-encoding tests
+provide evidence on the exact PR head. This does not imply complete SSE2,
+x87, IEEE-754, TLS or general AMD64 compatibility. Full pinned CPython,
+GCC and Make workflows remain required for the Phase 4 exit.

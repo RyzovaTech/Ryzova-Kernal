@@ -49,6 +49,7 @@ _start:
 .balign 16
 initial: .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
 upper:   .byte 0x10,0x20,0x30,0x40,0x50,0x60,0x70,0x80
+.balign 16
 other:   .byte 0x80,0x40,0x20,0x10,0,0,0,0,0,0,0,0,0,0,0,0
 upper_out: .zero 8
 result: .zero 16
@@ -94,6 +95,22 @@ class Sse2DifferentialTests(unittest.TestCase):
                        for i in range(16))
         self.assertEqual(guest.stdout[8:],expected)
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
+
+    def test_misaligned_legacy_por_memory_fails_closed(self):
+        # Legacy POR's 128-bit memory operand requires 16-byte alignment.
+        # Confirm real Linux SIGSEGV and bounded VM map failure separately.
+        source=self.root/'por-bad.S'
+        binary=self.root/'por-bad'
+        source.write_text(ASSEMBLY.replace(
+            '.balign 16\\nother:', 'other:').replace(
+            '.balign 16\nother:', 'other:'))
+        subprocess.run(['cc','-nostdlib','-static','-no-pie',str(source),'-o',str(binary)],
+                       capture_output=True,check=True,timeout=30)
+        native=subprocess.run([str(binary)],capture_output=True,timeout=5)
+        guest=subprocess.run([str(self.runner),str(binary)],capture_output=True,timeout=25)
+        self.assertEqual(native.returncode,-11)
+        self.assertEqual(guest.returncode,2,guest.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=2',guest.stderr)
 
     def test_unsupported_sse2_subencoding_fails_explicitly(self):
         # 66 0F73 /2 imm8 is a different instruction family, not

@@ -128,6 +128,9 @@ static void vector_or(Cpu *c, Operand o, unsigned int reg)
     if(o.reg>=0)memcpy(data,c->xmm[o.reg],16);
     else{
         at=address(c,o)+c->segment;
+        /* Legacy SSE2 POR m128 requires a 16-byte aligned operand.
+         * Linux raises #GP on misalignment; the VM must fail closed. */
+        if(at&15U){c->fault=1;return;}
         if(!ryz_memory_access(c->m,at,16,RYZ_READ)){c->fault=1;return;}
         memcpy(data,c->m->bytes+(size_t)(at-c->m->base),16);
     }
