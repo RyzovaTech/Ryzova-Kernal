@@ -78,6 +78,33 @@ class IsaDiscoveryTests(unittest.TestCase):
             out=create_report(root,{"targets":[gone]})
             self.assertIsNone(out["reports"][0]["candidate"])
 
+    def test_python_code_probe_has_independent_pinned_candidate(self):
+        image=minimal_elf()
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"usr/bin").mkdir(parents=True)
+            (root/"usr/bin/python3.12").write_bytes(image)
+            target={
+                "target":"python","elf":{"sha256":hashlib.sha256(image).hexdigest()},
+                "guest_smoke_passed":True,"guest_actual_result":{"last_rip_hex":"401000","status":0},
+                "python_code_probe":{"passed":False,"actual":{"last_rip_hex":"401000","status":3}}
+            }
+            result=create_report(root,{"targets":[target]})
+            self.assertEqual(len(result["reports"]),2)
+            self.assertIsNone(result["reports"][0]["candidate"])
+            failed=result["reports"][1]
+            self.assertEqual(failed["target"],"python-code")
+            self.assertEqual(failed["guest_actual_result"]["status"],3)
+            self.assertEqual(failed["candidate"]["candidate_bytes_hex"],"0f57c0c3")
+            self.assertFalse(result["guest_linux_v1_complete"])
+            target["python_code_probe"]["passed"]=True
+            self.assertIsNone(create_report(root,{"targets":[target]})
+                              ["reports"][1]["candidate"])
+            target["python_code_probe"]["passed"]=False
+            target["elf"]["sha256"]="a"*64
+            with self.assertRaises(ValueError):
+                create_report(root,{"targets":[target]})
+
     def test_symlink_must_remain_beneath_locked_root(self):
         raw=minimal_elf()
         with tempfile.TemporaryDirectory() as d:

@@ -139,6 +139,30 @@ def create_report(root, profiles):
             if candidate is not None:
                 result["candidate"] = {"image":source, **candidate}
         records.append(result)
+        # Successful --version does not qualify actual CPython execution.
+        # Preserve a separate, digest-bound candidate for the -c proof.
+        probe=target.get("python_code_probe")
+        if name=="python" and type(probe) is dict:
+            observed=probe.get("actual")
+            detail={"target":"python-code", "guest_smoke_passed":probe.get("passed") is True,
+                    "guest_actual_result":observed, "candidate":None,
+                    "limitations":"actual -c execution is required; RIP is only a byte candidate"}
+            cursor=(observed or {}).get("last_rip_hex") if type(observed) is dict else None
+            if (probe.get("passed") is not True and
+                    type(cursor) is str and re.fullmatch(r"[0-9a-f]{1,16}",cursor)):
+                image=(root/"usr/bin/python3.12").resolve()
+                if (not image.is_relative_to(root) or not image.is_file()
+                        or image.stat().st_size>MAX_IMAGE):
+                    raise ValueError("missing bounded pinned Python")
+                binary=image.read_bytes()
+                if hashlib.sha256(binary).hexdigest()!=elf["sha256"]:
+                    raise ValueError("measured Python ELF digest mismatch")
+                etype=int.from_bytes(binary[16:18],"little") if len(binary)>=64 else 0
+                candidate=locate_candidate(binary,int(cursor,16),
+                                           bias=MAIN_PIE_BIAS if etype==3 else 0)
+                if candidate is not None:
+                    detail["candidate"]={"image":"main",**candidate}
+            records.append(detail)
     return {
         "schema":_VERSION,
         "measured_profile_sha256":hashlib.sha256(json.dumps(profiles,sort_keys=True).encode()).hexdigest(),

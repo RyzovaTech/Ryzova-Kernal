@@ -162,3 +162,14 @@ memory operands, using all four immediate 2-bit dword selectors. Host Linux
 vs Ryzova ELF differential tests cover register, aligned memory, self alias,
 and misaligned fault rejection. The candidate RIP alone is not proof of
 complete CPython execution; no APP-PYTHON or AMD64-ABI gate is closed.
+
+## 4E.2 Distinguishing successful Python version from failed Python code
+
+At source head `84026da...` all seven `--version`/startup guest smokes
+passed, but the independent pinned CPython 3.12.10 `-c 'print(...)'`
+probe failed with guest VM status 3, last RIP `0x58af90`, no denied syscall.
+The source-hash-bounded ISA discovery now reports a separate
+`python-code` candidate under the measured Python ELF. It **does not**
+convert version-only success into APP-PYTHON completion or guess an opcode
+from the RIP alone. The first actual executable-byte evidence is required
+before an original instruction implementation is selected.
