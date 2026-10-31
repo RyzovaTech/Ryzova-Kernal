@@ -161,7 +161,20 @@ class Build:
         self.run('openssl-install',['make','install_sw','DESTDIR='+str(self.root)],src['openssl'],env)
         common=['--build='+subprocess.check_output([str(src['gcc']/'config.guess')],text=True).strip(),'--host='+TRIPLE,'--prefix=/usr']
         self.app('curl',src['curl'],[*common,'--with-openssl='+str(self.root/'usr'),'--with-zlib='+str(self.root/'usr'),'--disable-ldap','--disable-ldaps','--disable-manual','--without-libpsl','--without-brotli','--without-zstd','--without-libidn2','--without-nghttp2','--without-librtmp','--without-libssh2','--enable-shared','--disable-static'],env)
-        genv=dict(env,NO_GETTEXT='YesPlease',NO_TCLTK='YesPlease',NO_PERL='YesPlease',NO_PYTHON='YesPlease',CURL_CONFIG=str(self.root/'usr/bin/curl-config'),**self.git_runtime_probes(env))
+        # Git 2.49 adds -Icompat/regex for NO_REGEX. An earlier generic
+        # CPPFLAGS=-I<musl-include> wins that search and silently selects
+        # musl regex.h, which lacks REG_STARTEND. Put dependency headers in
+        # the *system* include tier so Git's bundled header takes precedence.
+        git_cppflags='-isystem '+str(self.root/'usr/include')
+        genv=dict(env,CPPFLAGS=git_cppflags,NO_GETTEXT='YesPlease',NO_TCLTK='YesPlease',NO_PERL='YesPlease',NO_PYTHON='YesPlease',CURL_CONFIG=str(self.root/'usr/bin/curl-config'),**self.git_runtime_probes(env))
+        # Real cross-compiler preflight: reject the exact header-shadowing
+        # failure before starting a costly Git build, with no source patch.
+        regex_check=self.out/'git-regex-header-check.c'
+        regex_check.write_text('#include <regex.h>\\n#ifndef REG_STARTEND\\n#error bundled Git regex header not selected\\n#endif\\nint main(void){return REG_STARTEND==0;}\\n'.replace('\\n','\n'))
+        self.run('git-regex-header-check',[
+            env['CC'],'-fsyntax-only','-I'+str(src['git']/'compat/regex'),
+            '-isystem',str(self.root/'usr/include'),str(regex_check)
+        ],self.out,genv)
         self.run('git-configure',['make','configure'],src['git'],genv)
         self.run('git-config',['./configure',*common,'--with-openssl='+str(self.root/'usr'),'--with-curl='+str(self.root/'usr'),'--with-zlib='+str(self.root/'usr'),'--without-tcltk'],src['git'],genv)
         configuration=(src['git']/'config.mak.autogen').read_text()
