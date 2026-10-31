@@ -16,17 +16,19 @@ SOURCES=[CORE/(x+'.c') for x in
          ('elf64','namespace','syscall','subset_vm','memory','process','cpu','jobs','jobs_probe')]
 
 
-def executable(*,pie=False,mapped=4096,interpreter=None):
+def executable(*,pie=False,mapped=8192,interpreter=None):
     """File-offset-aligned real AMD64 ELF64 with a bounded synthetic PT_LOAD."""
-    if mapped < 4096 or mapped > 8*1024*1024:
+    if mapped < 8192 or mapped > 8*1024*1024:
         raise ValueError("test fixture memory span must remain bounded")
     raw=bytearray(0x1200)
     raw[:7]=b'\x7fELF\x02\x01\x01'
     struct.pack_into('<HHI',raw,16,3 if pie else 2,62,1)
     struct.pack_into('<QQ',raw,24,0x1000 if pie else 0x401000,64)
     struct.pack_into('<HHH',raw,52,64,56,2 if interpreter else 1)
-    vaddr=0x1000 if pie else 0x401000
-    struct.pack_into('<IIQQQQQQ',raw,64,1,5,0x1000,vaddr,0,0x200,mapped,0x1000)
+    # Real PT_LOAD must include ELF header and PT_PHDR bytes: the Ryzova
+    # loader validates AT_PHDR against a mapped, readable segment.
+    vaddr=0 if pie else 0x400000
+    struct.pack_into('<IIQQQQQQ',raw,64,1,5,0,vaddr,0,0x1200,mapped,0x1000)
     raw[0x1000:0x1000+len(EXIT0)]=EXIT0
     if interpreter:
         filename=interpreter.encode('ascii')+b'\0'
