@@ -246,6 +246,29 @@ static int guest_syscall(Cpu *c)
     RyzLinuxRegs r;
     uint64_t nr=c->r[0], value;
     int64_t answer;
+    if(nr==98){
+        /* Linux x86_64 getrusage (RUSAGE_SELF only). This is logical
+         * *virtual guest* CPU accounting, not physical host timing/RSS.
+         * 1 executed guest instruction = 1 virtual nanosecond; all
+         * unmeasured counters stay zero instead of inventing host use.
+         * Do not forward any resource query to the host kernel. */
+        answer=-22; /* EINVAL for unsupported who */
+        if(c->r[7]==0){
+            if(!ryz_memory_access(c->m,c->r[6],144,RYZ_WRITE|256U))
+                answer=-14; /* EFAULT without partial guest writes */
+            else{
+                unsigned char *out=c->m->bytes+(size_t)(c->r[6]-c->m->base);
+                uint64_t usec=(uint64_t)c->result->executed_steps/1000U;
+                memset(out,0,144);
+                store(c,c->r[6],8,usec/1000000U);
+                store(c,c->r[6]+8,8,usec%1000000U);
+                answer=c->fault?-14:0;
+            }
+        }
+        c->r[1]=c->cur;c->r[11]=c->flags;c->r[0]=(uint64_t)answer;
+        c->result->syscall_count++;
+        return RYZ_VM_OK;
+    }
     if(nr==158 || nr==218){
         answer=-22;
         if(nr==218){

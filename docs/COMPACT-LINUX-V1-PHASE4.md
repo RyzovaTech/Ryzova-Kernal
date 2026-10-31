@@ -105,3 +105,24 @@ AMD64 Linux-vs-Ryzova differential fixtures and negative-encoding tests
 provide evidence on the exact PR head. This does not imply complete SSE2,
 x87, IEEE-754, TLS or general AMD64 compatibility. Full pinned CPython,
 GCC and Make workflows remain required for the Phase 4 exit.
+
+## 4D bounded getrusage RUSAGE_SELF compatibility
+
+The pinned Binutils host-reference guest failure identified Linux AMD64
+syscall 98 (`getrusage`). The initial original Ryzova scope implements
+`RUSAGE_SELF=0` only with the full 144-byte x86_64 struct; it validates
+the guest's writable address range before modifying memory and returns
+guest `EFAULT` and `EINVAL` for invalid address/who. It records virtual
+user time from retired guest instruction steps at 1 logical nanosecond per
+step. Unmeasured resident set and other counters are **zero, not
+physical measurements**. The host OS is not queried, and the result
+must never be described as actual CPU/RAM resource consumption.
+Other `who` categories remain unimplemented and reject explicitly;
+`RUSAGE_CHILDREN`, `RUSAGE_THREAD` and full Linux rusage semantics
+remain outside this bounded increment.
+
+A source-built AMD64 Linux ELF verifies successful `RUSAGE_SELF`,
+invalid-who and invalid-pointer results on both host Linux and
+the original Ryzova guest interpreter, without comparing their
+inherently different time/RSS values. This does not qualify the
+full Binutils assembler workflow or CLX-03 RESOURCE budgets.

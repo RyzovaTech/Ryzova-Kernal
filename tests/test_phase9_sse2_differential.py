@@ -112,6 +112,66 @@ class Sse2DifferentialTests(unittest.TestCase):
         self.assertEqual(guest.returncode,2,guest.stderr)
         self.assertIn(b'COMPACT_JOBS_RESULT status=2',guest.stderr)
 
+    def test_getrusage_self_returns_bounded_virtual_abi_without_host_forward(self):
+        # A source-built Linux AMD64 ELF probes getrusage(98). Compare the
+        # positive call plus EINVAL and EFAULT negative paths on real Linux
+        # and on the user-space Ryzova guest. Do not compare physical CPU
+        # timing/RSS against explicitly virtual instruction-time estimates.
+        assembly=r"""
+.intel_syntax noprefix
+.section .text
+.global _start
+_start:
+    mov eax, 98
+    xor edi, edi
+    lea rsi, [rip + usage]
+    syscall
+    test eax, eax
+    jne fail
+    mov rax, QWORD PTR [rip + usage + 8]
+    cmp rax, 1000000
+    jae fail
+    mov eax, 98
+    mov edi, 99
+    lea rsi, [rip + usage]
+    syscall
+    cmp rax, -22
+    jne fail
+    mov eax, 98
+    xor edi, edi
+    xor esi, esi
+    syscall
+    cmp rax, -14
+    jne fail
+    mov eax, 1
+    mov edi, 1
+    lea rsi, [rip + success]
+    mov edx, 19
+    syscall
+    mov eax, 60
+    xor edi, edi
+    syscall
+fail:
+    mov eax, 60
+    mov edi, 22
+    syscall
+.section .data
+usage: .zero 144
+success: .ascii "RUSAGE_VIRTUAL_OK!\\n"
+"""
+        source=self.root/'rusage.S'
+        binary=self.root/'rusage'
+        source.write_text(assembly)
+        subprocess.run(['cc','-nostdlib','-static','-no-pie',str(source),'-o',str(binary)],
+                       capture_output=True,check=True,timeout=30)
+        native=subprocess.run([str(binary)],capture_output=True,timeout=5)
+        guest=subprocess.run([str(self.runner),str(binary)],capture_output=True,timeout=20)
+        self.assertEqual(native.returncode,0,native.stderr)
+        self.assertEqual(guest.returncode,0,guest.stderr)
+        self.assertEqual(guest.stdout,native.stdout)
+        self.assertEqual(guest.stdout,b'RUSAGE_VIRTUAL_OK!\\n')
+        self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
+
     def test_unsupported_sse2_subencoding_fails_explicitly(self):
         # 66 0F73 /2 imm8 is a different instruction family, not
         # supported by the intentionally finite CLX-04 subset.
