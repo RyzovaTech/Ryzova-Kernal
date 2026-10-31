@@ -83,6 +83,36 @@ long app_main(long argc,char **argv,char **env)
   CHECK(C(41,999,1,0)==-97 && C(41,10,2,0)==-94 && C(41,1,2,0)==-94 && C(41,2,1,17)==-93);
   fd=C(41,2,1,0);CHECK(fd>=0);address[4]=127;address[7]=1;CHECK(C(42,fd,address,16)==-111);
   CHECK(C(48,fd,1,0)==-107 && C(49,fd,1,16)==-14 && C(43,1,0,0)==-88);
+ }else if(equal(argv[1],"udp4") || equal(argv[1],"udp6")){
+  int domain=equal(argv[1],"udp6")?10:2;
+  int addrsize=domain==10?28:16;
+  unsigned int src_length;
+  address[0]=(unsigned char)domain;
+  if(domain==10)address[23]=1;
+  else{address[4]=127;address[7]=1;}
+  server=C(41,domain,2|04000,0);
+  CHECK(server>=0 && !C(49,server,address,addrsize));
+  length=addrsize;CHECK(!C(51,server,address,&length) && length==addrsize);
+  client=C(41,domain,2,0);CHECK(client>=0);
+  CHECK(call(44,client,(long)"packet",6,0,(long)address,addrsize)==6);
+  src_length=sizeof peer;
+  CHECK(call(45,server,(long)data,3,2,(long)peer,(long)&src_length)==3);
+  CHECK(data[0]=='p' && data[2]=='c' && src_length==addrsize && peer[0]==domain);
+  src_length=sizeof peer;
+  CHECK(call(45,server,(long)data,32,0,(long)peer,(long)&src_length)==6);
+  CHECK(data[0]=='p' && data[5]=='t' && src_length==addrsize);
+  CHECK(call(45,server,(long)data,32,0,0,0)==-11);
+  CHECK(!C(42,client,address,addrsize) && C(1,client,"last",4)==4);
+  CHECK(C(0,server,data,2)==2 && data[0]=='l' && data[1]=='a');
+  CHECK(C(0,server,data,32)==-11);
+  CHECK(C(50,server,1,0)==-95 && C(43,server,0,0)==-95);
+ }else if(equal(argv[1],"udp-deny")){
+  unsigned char offlink[28]={2,0};
+  fd=C(41,2,2,0);CHECK(fd>=0);
+  offlink[4]=10;offlink[7]=2;
+  CHECK(call(44,fd,(long)"x",1,0,(long)offlink,16)==-101);
+  CHECK(C(42,fd,offlink,16)==-101);
+  CHECK(!C(3,fd,0,0));
  }else if(equal(argv[1],"ipv6-deny")){
   unsigned char offlink[28]={10,0};
   fd=C(41,10,1,0);CHECK(fd>=0);

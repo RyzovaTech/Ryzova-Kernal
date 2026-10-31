@@ -170,6 +170,13 @@ static int net_autobind(RyzLinuxWorld *w,RyzLinuxSocket *s)
 static unsigned int net_poll(RyzLinuxProcess *p,uint64_t fd,unsigned int events)
 {
     RyzLinuxSocket *s=&p->world->sockets[p->fds[fd].socket];unsigned int out=0;
+    if(s->type==2){
+        unsigned int ready=0;
+        if(s->dgram_count)ready|=events&1U;
+        if(s->dgram_count<4 && s->size<RYZ_NET_BUFFER &&
+           p->world->network_bytes<4U*1024U*1024U)ready|=events&4U;
+        return ready;
+    }
     if(s->listening)return s->pending_count?(events&1U):0;
     if(!s->connected)return (events&4U)|16U;
     if(s->external){
@@ -187,10 +194,107 @@ static unsigned int net_poll(RyzLinuxProcess *p,uint64_t fd,unsigned int events)
     if((events&8192U) && (s->peer<0 || p->world->sockets[s->peer].write_closed))out|=8192U;
     return out;
 }
+/* CLX-05: bounded in-namespace UDP datagrams; NO host network callbacks,
+ * DNS resolver, arbitrary remote route, transparent TLS or UDP spoofing.
+ * Each socket stores at most four messages totaling <= 4096 bytes. */
+static int64_t net_dgram_send(RyzLinuxProcess *p,uint64_t fd,uint64_t at,
+    uint64_t size,uint64_t flags,uint64_t dest,uint64_t dest_size)
+{
+    RyzLinuxWorld *w=p->world;
+    RyzLinuxSocket *s;
+    RyzLinuxSocket *peer=NULL;
+    unsigned char address[128],*input=NULL;
+    unsigned int length=0,i,slot;
+    int error=0;
+    if(flags&~(uint64_t)(64|16384))return -95;
+    if(size>RYZ_NET_BUFFER)return -90;
+    s=net_socket(p,fd,&error);
+    if(!s)return error;
+    if(s->type!=2)return -95;
+    if(size && !buffer(p,at,(size_t)size,0,&input))return -14;
+    if(dest){
+        error=net_input(p,dest,dest_size,s->domain,address,&length);
+        if(error)return error;
+    }else{
+        if(dest_size || !s->connected)return -89;
+        memcpy(address,s->remote,s->remote_length);
+        length=s->remote_length;
+    }
+    if(s->domain==2 && (address[4]!=127 || address[5]!=0 ||
+                        address[6]!=0 || address[7]!=1))return -101;
+    if(s->domain==10 && address[23]!=1)return -101;
+    for(i=0;i<RYZ_NET_SOCKETS;i++){
+        RyzLinuxSocket *candidate=&w->sockets[i];
+        if(!candidate->used || candidate->type!=2 ||
+           candidate->domain!=s->domain || !candidate->bound ||
+           candidate->local[2]!=address[2] || candidate->local[3]!=address[3])
+            continue;
+        if(s->domain==2){
+            if(candidate->local[4] &&
+               memcmp(candidate->local+4,address+4,4))continue;
+        }else if(candidate->local[23] && candidate->local[23]!=address[23])
+            continue;
+        peer=candidate;
+        break;
+    }
+    if(!peer)return -111; /* Unknown guest loopback destination, no host route. */
+    if(peer->dgram_count>=4 || size>RYZ_NET_BUFFER-peer->size)
+        return p->fds[fd].nonblock || (flags&64)?-11:RYZ_LINUX_BLOCKED;
+    if(size>4U*1024U*1024U-w->network_bytes)return -28;
+    if(!s->bound){
+        error=net_autobind(w,s);
+        if(error)return error;
+    }
+    if(s->domain==2 && !s->local[4]){s->local[4]=127;s->local[7]=1;}
+    if(s->domain==10 && !s->local[23])s->local[23]=1;
+    slot=(peer->dgram_head+peer->dgram_count)%4;
+    peer->dgram_lengths[slot]=(unsigned int)size;
+    peer->dgram_source_lengths[slot]=(unsigned char)s->local_length;
+    memcpy(peer->dgram_sources[slot],s->local,s->local_length);
+    for(i=0;i<(unsigned int)size;i++)
+        peer->bytes[(peer->head+peer->size+i)%RYZ_NET_BUFFER]=input[i];
+    peer->size+=(size_t)size;
+    peer->dgram_count++;
+    w->network_bytes+=size;
+    return (int64_t)size;
+}
+static int64_t net_dgram_recv(RyzLinuxProcess *p,uint64_t fd,uint64_t at,
+    uint64_t size,uint64_t flags,uint64_t source,uint64_t source_length)
+{
+    RyzLinuxSocket *s;
+    unsigned char *out=NULL;
+    unsigned int slot,n,packet,i;
+    int error=0;
+    if(flags&~(uint64_t)(2|64))return -95;
+    if(size>RYZ_LINUX_IO_MAX)return -22;
+    s=net_socket(p,fd,&error);
+    if(!s)return error;
+    if(s->type!=2)return -95;
+    if(size && !buffer(p,at,(size_t)size,1,&out))return -14;
+    if(source && (error=net_output_check(p,source,source_length)))return error;
+    if(!source && source_length)return -14;
+    if(!s->dgram_count)return p->fds[fd].nonblock || (flags&64)?-11:RYZ_LINUX_BLOCKED;
+    slot=s->dgram_head;
+    packet=s->dgram_lengths[slot];
+    n=packet>(unsigned int)size?(unsigned int)size:packet;
+    for(i=0;i<n;i++)out[i]=s->bytes[(s->head+i)%RYZ_NET_BUFFER];
+    if(source)net_output(p,source,source_length,s->dgram_sources[slot],
+                         s->dgram_source_lengths[slot]);
+    if(!(flags&2)){
+        s->head=(s->head+packet)%RYZ_NET_BUFFER;
+        s->size-=packet;
+        s->dgram_head=(s->dgram_head+1)%4;
+        s->dgram_count--;
+    }
+    return (int64_t)n;
+}
 static int64_t net_io(RyzLinuxProcess *p,uint64_t fd,uint64_t address,uint64_t count,uint64_t flags,int write)
 {
     int error=0;RyzLinuxSocket *s=net_socket(p,fd,&error),*peer;unsigned char *bytes;size_t n,i;
     if(!s)return error;
+    if(s->type==2)return write?
+        net_dgram_send(p,fd,address,count,flags,0,0):
+        net_dgram_recv(p,fd,address,count,flags,0,0);
     if(flags & ~(uint64_t)(2|64|16384))return -95;
     if(write && (flags&(2|256)))return -95;
     if(count>RYZ_LINUX_IO_MAX)return -22;
@@ -240,6 +344,7 @@ static int64_t net_message(RyzLinuxProcess *p,const RyzLinuxRegs *r)
     unsigned char header[56],vectors[16*16],*in,*ignored;uint64_t n,i,total=0,done=0,at,count,name;
     int receiving=r->rax==47;int64_t result;RyzLinuxSocket *socket=&p->world->sockets[p->fds[r->rdi].socket];
     size_t saved_head,saved_size;
+    if(socket->type==2)return -95; /* Datagram msg ancillary API not qualified. */
     if(r->rdx & ~(uint64_t)(2|64|16384))return -95;
     if(!receiving && (r->rdx&2))return -95;
     if(!buffer(p,r->rsi,56,0,&in) || (receiving && !buffer(p,r->rsi,56,1,&in)))return -14;
@@ -276,20 +381,24 @@ static int64_t net_message(RyzLinuxProcess *p,const RyzLinuxRegs *r)
 }
 static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
 {
-    RyzLinuxWorld *w=p->world;RyzLinuxSocket *s,*peer;unsigned char address[128],*out;unsigned int length=0,i;int error=0,slot,fd,other;uint64_t flags=0;
+    RyzLinuxWorld *w=p->world;RyzLinuxSocket *s,*peer;unsigned char address[128],*out;unsigned int length=0,i,type;int error=0,slot,fd,other;uint64_t flags=0;
     if(r->rax==41 || r->rax==53){
         if(r->rdi!=1 && r->rdi!=2 && r->rdi!=10)return -97;
-        if((r->rsi & ~(uint64_t)(15|04000|02000000)) || (r->rsi&15)!=1)return -94;
-        if(r->rdx && !((r->rdi==2 || r->rdi==10) && r->rdx==6))return -93;
-        if(r->rax==53 && r->rdi!=1)return -95;
+        type=(unsigned int)(r->rsi&15);
+        if((r->rsi & ~(uint64_t)(15|04000|02000000)) ||
+           (type!=1 && type!=2) ||
+           (type==2 && r->rdi==1))return -94;
+        if(r->rdx && !((r->rdi==2 || r->rdi==10) &&
+               ((type==1 && r->rdx==6) || (type==2 && r->rdx==17))))return -93;
+        if(r->rax==53 && (r->rdi!=1 || type!=1))return -95;
         if(r->rax==53 && !buffer(p,r->r10,8,1,&out))return -14;
         slot=net_slot(w);if(slot<0)return -23;
-        s=&w->sockets[slot];s->domain=(int)r->rdi;s->local[0]=(unsigned char)r->rdi;
+        s=&w->sockets[slot];s->domain=(int)r->rdi;s->type=(int)type;s->local[0]=(unsigned char)r->rdi;
         s->local_length=r->rdi==10?28:(r->rdi==2?16:2);
         fd=net_fd(p,(unsigned int)slot,r->rsi);if(fd<0){s->used=0;return fd;}
         if(r->rax==41)return fd;
         other=net_slot(w);if(other<0){p->fds[fd].open=0;s->used=0;return -23;}
-        peer=&w->sockets[other];peer->domain=1;peer->local[0]=1;peer->local_length=2;
+        peer=&w->sockets[other];peer->domain=1;peer->type=1;peer->local[0]=1;peer->local_length=2;
         error=net_fd(p,(unsigned int)other,r->rsi);
         if(error<0){w->descriptions[p->fds[fd].description-1].used=0;p->fds[fd].open=0;s->used=peer->used=0;return error;}
         s->connected=peer->connected=1;s->peer=other;peer->peer=slot;
@@ -297,6 +406,10 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         encode(out,(uint64_t)fd,4);encode(out+4,(uint64_t)error,4);return 0;
     }
     s=net_socket(p,r->rdi,&error);if(!s)return error;
+    if(s->type==2){
+        if(r->rax==44)return net_dgram_send(p,r->rdi,r->rsi,r->rdx,r->r10,r->r8,r->r9);
+        if(r->rax==45)return net_dgram_recv(p,r->rdi,r->rsi,r->rdx,r->r10,r->r8,r->r9);
+    }
     if(r->rax==49 || r->rax==42){
         error=net_input(p,r->rsi,r->rdx,s->domain,address,&length);if(error)return error;
         if(r->rax==49){
@@ -310,6 +423,15 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         }
         if(s->connected)return -106;
         if(s->listening)return -22;
+        if(s->type==2){
+            if(s->domain==2 && (address[4]!=127 || address[5] || address[6] || address[7]!=1))return -101;
+            if(s->domain==10 && address[23]!=1)return -101;
+            if(!s->bound && (error=net_autobind(w,s)))return error;
+            if(s->domain==2 && !s->local[4]){s->local[4]=127;s->local[7]=1;}
+            if(s->domain==10 && !s->local[23])s->local[23]=1;
+            s->connected=1;memcpy(s->remote,address,length);s->remote_length=length;
+            return 0;
+        }
         if(s->domain==2 && !address[4])return -101;
         if(s->domain==2 && w->network){
             unsigned int gi;
@@ -345,6 +467,7 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         s->connected=1;s->peer=slot;memcpy(s->remote,address,length);s->remote_length=length;return 0;
     }
     if(r->rax==50){
+        if(s->type==2)return -95;
         if(s->connected)return -22;
         if(!s->bound){if(s->domain==1)return -22;error=net_autobind(w,s);if(error)return error;}
         s->listening=1;s->backlog=(int32_t)r->rsi<0?RYZ_NET_BACKLOG:(r->rsi<RYZ_NET_BACKLOG?(unsigned int)r->rsi:RYZ_NET_BACKLOG);
@@ -352,6 +475,7 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         return 0;
     }
     if(r->rax==43 || r->rax==288){
+        if(s->type==2)return -95;
         if(!s->listening)return -22;
         flags=r->rax==288?r->r10:0;if(flags&~(uint64_t)(04000|02000000))return -22;
         error=net_output_check(p,r->rsi,r->rdx);if(error)return error;
@@ -384,7 +508,7 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
     }
     if(r->rax==54 || r->rax==55){
         unsigned int option=(unsigned int)r->rdx,value=0,count;
-        if(r->rsi!=1 && !(r->rsi==6 && (s->domain==2 || s->domain==10) && option==1))return -92;
+        if(r->rsi!=1 && !(r->rsi==6 && s->type==1 && (s->domain==2 || s->domain==10) && option==1))return -92;
         if(r->rax==54){
             if(s->external)return -95;
             if(r->r8<4)return -22;
