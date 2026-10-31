@@ -150,3 +150,32 @@ result counts and measured arena peaks. The driver only exits on the new final
 marker; old runtime markers cannot terminate it early. Missing/mutated evidence
 fails. MEM-PROC remains partial until its declared profile is qualified and wider
 required-call scope is resolved; RESOURCE and Phase 3 remain open.
+
+## Named-target build and Phase 4 handoff
+
+`linux-target-sources.json` now freezes all seven target source releases plus
+GMP, MPC, MPFR, Linux headers, zlib, OpenSSL and curl. Each download is checked
+with SHA256/SHA512 before data-filtered extraction. The build driver is an exact
+musl-cross-make Git commit; its litecross Makefile is used without source patches.
+The cross bootstrap includes C++ for building GCC itself; the native guest GCC
+has only the declared C language frontend. Host compiler/kernel details, build
+commands and hashes/sizes of produced files are recorded, not represented as a
+hermetic or bit-for-bit reproducibility guarantee.
+
+`compact-linux-target-profiles.yml` builds real x86_64-musl executables and their
+libraries, runs Linux-reference smoke measurements in a disposable chroot, then
+runs a separate bounded Flex admission probe. The report distinguishes image/load
+span, reference RSS/time/syscalls/I/O, and actual guest result/steps. Reference
+RSS is a maximum child measurement, not aggregate tree RAM; observed descriptor
+numbers are not live-FD peaks. Smoke workloads do not replace the full frozen
+application/network/certificate/PTY workflows. Build logs and measurement JSON
+are retained; no new binary release is published.
+
+Phase 4 entry is ready only if all seven version-identical Linux-reference
+smokes pass and the generated artifact manifest matches the measured executables.
+A source lock alone cannot pass this gate. Guest failures are explicit inputs to
+Phase 4; they cannot close RESOURCE or Phase 3. The original Phase 3/4 ordering
+has a dependency overlap: measuring complete guest workloads requires their
+loader/ISA support, which is a Phase 4 exit. Resolving those actual failures is
+required before claiming Phase 3 fully complete; no acceptance criterion is
+removed to make the status green.

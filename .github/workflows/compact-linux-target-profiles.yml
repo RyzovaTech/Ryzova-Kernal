@@ -1,0 +1,52 @@
+name: Compact Linux locked target build and resource discovery
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/compact_linux_targets.py'
+      - 'scripts/compact_linux_target_profiles.py'
+      - 'ryzova/compact/linux-target-sources.json'
+      - 'ryzova/compact/linux-v1-plan.json'
+      - 'tests/test_compact_linux_targets.py'
+      - '.github/workflows/compact-linux-target-profiles.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  target-profiles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: richfelker/musl-cross-make
+          ref: 5e8042e63de29f8473fc3b0b831a587ba284e1a8
+          path: artifacts/build-driver
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install bounded build and measurement prerequisites
+        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex texinfo lzip rsync strace time pkg-config
+      - name: Validate source lock and build selected target releases for musl
+        run: |
+          python scripts/compact_linux_targets.py --check-lock
+          python -m unittest discover -s tests -p test_compact_linux_targets.py -v
+          python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 2
+      - name: Discover actual resource use and guest admission blockers
+        run: python scripts/compact_linux_target_profiles.py --directory artifacts/targets --output artifacts/targets/target-profiles.json
+      - name: Preserve source locks, build logs and honest qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-linux-target-profiles
+          path: |
+            ryzova/compact/linux-target-sources.json
+            artifacts/targets/logs/*.log
+            artifacts/targets/target-build.json
+            artifacts/targets/target-profiles.json
+          if-no-files-found: error
+          retention-days: 30

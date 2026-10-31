@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Measure real musl target smoke workloads on Linux and probe Flex admission separately."""
+import argparse
+import collections
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import time
+ROOT=Path(__file__).resolve().parents[1]
+TARGETS={
+ 'busybox':('/bin/busybox',['--help'],'1.35.0'),
+ 'python':('/usr/bin/python3.12',['-c','import json,pathlib,tempfile,threading,multiprocessing,subprocess,socket,ssl,hashlib,zlib; print(json.dumps({"version":__import__("sys").version,"ssl":ssl.OPENSSL_VERSION})); p=pathlib.Path("/tmp/python-proof"); p.write_text("proof"); assert p.read_text()=="proof"'],'3.12.10'),
+ 'git':('/usr/bin/git',['--version'],'2.49.0'),
+ 'gcc':('/bin/x86_64-linux-musl-gcc',['--version'],'14.2.0'),
+ 'binutils':('/bin/x86_64-linux-musl-as',['--version'],'2.43.1'),
+ 'make':('/usr/bin/make',['--version'],'4.4.1'),
+ 'musl':('/lib/libc.so',[],'1.2.6')}
+
+def elf_info(data):
+    if data[:6]!=b'\x7fELF\x02\x01':raise ValueError('not little-endian ELF64')
+    phoff=int.from_bytes(data[32:40],'little');size=int.from_bytes(data[54:56],'little');count=int.from_bytes(data[56:58],'little')
+    if size!=56 or count>128 or phoff+size*count>len(data):raise ValueError('invalid program headers')
+    loads=[];interpreter=None
+    for i in range(count):
+        h=data[phoff+i*size:phoff+(i+1)*size];kind=int.from_bytes(h[:4],'little');off=int.from_bytes(h[8:16],'little');at=int.from_bytes(h[16:24],'little');length=int.from_bytes(h[32:40],'little');memory=int.from_bytes(h[40:48],'little')
+        if off+length>len(data):raise ValueError('truncated segment')
+        if kind==1:loads.append((at,at+memory))
+        if kind==3:interpreter=data[off:off+length].rstrip(b'\0').decode('ascii')
+    return {'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'load_span_bytes':max((b for a,b in loads),default=0)-min((a for a,b in loads),default=0),'interpreter':interpreter}
+
+def trace_metrics(paths):
+    calls=collections.Counter();max_fd=2;read_bytes=write_bytes=network_bytes=0
+    for path in paths:
+        for line in path.read_text(errors='replace').splitlines():
+            match=re.search(r'\b([a-zA-Z_][a-zA-Z_0-9]*)\((.*)\)\s+=\s+(-?[0-9]+)',line)
+            if not match:continue
+            name,args,value=match.groups();value=int(value);calls[name]+=1
+            if name in ('open','openat','creat','dup','dup2','dup3','socket','accept','accept4') and value>=0:max_fd=max(max_fd,value)
+            if value>0:
+                if name in ('read','readv','pread64'):read_bytes+=value
+                if name in ('write','writev','pwrite64'):write_bytes+=value
+                if name in ('sendto','sendmsg','recvfrom','recvmsg') or (name in ('read','write','readv','writev') and ('<TCP:' in args or '<UDP:' in args)):network_bytes+=value
+    return {'observed_syscalls':dict(sorted(calls.items())),'max_observed_fd':max_fd,'returned_read_bytes':read_bytes,'returned_write_bytes':write_bytes,'returned_network_bytes':network_bytes,'fd_metric':'largest descriptor returned by traced operations; not live-fd peak','scope':'Linux reference including chroot launcher; not Flex guest counters'}
+
+def main(directory,output):
+    directory=Path(directory).resolve();root=directory/'root';build=json.loads((directory/'target-build.json').read_text());logs=directory/'logs';records=[]
+    core=ROOT/'ryzova/compat/linux';runner=directory/'jobs-probe'
+    sources=[core/(n+'.c') for n in ('elf64','namespace','syscall','subset_vm','memory','process','cpu','jobs','jobs_probe')]
+    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-O2',*map(str,sources),'-o',str(runner)],check=True,timeout=120)
+    env=dict(os.environ,PATH='/usr/bin:/bin',LC_ALL='C',PYTHONDONTWRITEBYTECODE='1')
+    for target,(path,args,version) in TARGETS.items():
+        binary=root/path.lstrip('/');info=elf_info(binary.read_bytes())
+        entry=next((x for x in build['files'] if x['path']==path),None)
+        if not entry or entry['sha256']!=info['sha256'] or entry['bytes']!=info['bytes']:raise ValueError('artifact manifest mismatch '+target)
+        trace=logs/(target+'-trace');usage=logs/(target+'-usage.json')
+        command=['sudo','-n','/usr/bin/time','-f','{"elapsed_seconds":%e,"max_child_rss_kib":%M,"user_seconds":%U,"system_seconds":%S}','-o',str(usage),'strace','-ff','-qq','-yy','-o',str(trace),'chroot',str(root),path,*args]
+        start=time.monotonic();reference=subprocess.run(command,env=env,capture_output=True,timeout=120)
+        elapsed=time.monotonic()-start;(logs/(target+'-reference.stdout')).write_bytes(reference.stdout);(logs/(target+'-reference.stderr')).write_bytes(reference.stderr)
+        text=(reference.stdout+reference.stderr).decode(errors='replace');expected=1 if target=='musl' else 0
+        reference_ok=reference.returncode==expected and version in text
+        metrics=trace_metrics(logs.glob(target+'-trace.*'));metrics.update(json.loads(usage.read_text()));metrics['supervised_wall_seconds']=elapsed
+        grants=[]
+        if info['interpreter']:grants=['-x',info['interpreter']+'='+str(root/'lib/libc.so')]
+        # Explicit immutable library grants; live-directory grants never bypass mmap policy.
+        for lib in ('libz.so.1','libssl.so.3','libcrypto.so.3','libcurl.so.4'):
+            file=root/'usr/lib'/lib
+            if file.exists():grants+=['-x','/usr/lib/'+lib+'='+str(file)]
+        guest=subprocess.run([str(runner),'-r','-b','1048576',*grants,str(binary),*args],env=env,capture_output=True,timeout=30)
+        (logs/(target+'-guest.stdout')).write_bytes(guest.stdout);(logs/(target+'-guest.stderr')).write_bytes(guest.stderr)
+        result=re.search(rb'COMPACT_JOBS_RESULT status=([0-9]+) exited=([01]) exit=([0-9]+) steps=([0-9]+) syscalls=([0-9]+)',guest.stderr)
+        actual={key:int(value) for key,value in zip(('status','exited','exit','steps','syscalls'),result.groups())} if result else None
+        success=bool(actual and actual['status']==0 and actual['exited'] and actual['exit']==expected and version.encode() in guest.stdout+guest.stderr)
+        blockers=[]
+        if info['bytes']>4*1024*1024:blockers.append('ELF exceeds current 4-MiB image ceiling')
+        if info['load_span_bytes']+65536+4096>16*1024*1024:blockers.append('load span plus stack/guard exceeds current 16-MiB arena')
+        if not success:blockers.append('guest smoke failed: '+str(actual if actual else {'runner_exit':guest.returncode}))
+        records.append({'target':target,'version':version,'elf':info,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode,'guest_blockers':blockers,'full_target_workflows_qualified':False})
+    report={'schema':'compact-linux-target-profiles/v1','source_lock_sha256':build['source_lock_sha256'],'abi':build['abi'],'targets':records,'phase4_entry_ready':all(r['linux_reference_passed'] for r in records),'phase3_complete':False,'resource_qualified':False,'full_target_workflows_qualified':False,'limitations':['Reference smoke measurements are not full target workflow budgets','max_child_rss is not aggregate process-tree RAM','Target networking/certificate and PTY workflows remain unqualified','Guest failures are recorded, never promoted to successful measurements']}
+    Path(output).write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'phase4_entry_ready':report['phase4_entry_ready'],'phase3_complete':False,'targets':[{k:r[k] for k in ('target','linux_reference_passed','guest_smoke_passed','guest_blockers')} for r in records]},indent=2))
+    return 0 if report['phase4_entry_ready'] else 1
+if __name__=='__main__':
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--directory',required=True);p.add_argument('--output',required=True);a=p.parse_args();raise SystemExit(main(a.directory,a.output))
