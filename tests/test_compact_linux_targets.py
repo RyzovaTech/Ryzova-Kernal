@@ -91,6 +91,25 @@ class TargetLockTests(unittest.TestCase):
   for invalid in (0,5,-1,True,1.5):
    with self.subTest(invalid=invalid),self.assertRaises(ValueError):
     git_make_command(invalid)
+ def test_cross_python_generated_makefile_blocks_foreign_extension_import(self):
+  from compact_linux_targets import Build
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d)/'Makefile'
+   unsafe='PYTHONPATH=$(shell test -f pybuilddir.txt && echo $(abs_builddir)/`cat pybuilddir.txt`:)$(srcdir)/Lib'
+   original='PYTHON_FOR_BUILD=_PYTHON_PROJECT_BASE=$(abs_builddir) '+unsafe+' $(HOSTPYTHON)\\nchecksharedmods:\\n\\t@$(RUNSHARED) $(PYTHON_FOR_BUILD) check_extension_modules.py\\n'
+   p.write_text(original.replace('\\n','\n').replace('\\t','\t'))
+   Build.isolate_cross_python_build(p)
+   result=p.read_text()
+   self.assertIn('PYTHON_FOR_BUILD=_PYTHON_PROJECT_BASE=$(abs_builddir) PYTHONPATH=$(srcdir)/Lib $(HOSTPYTHON)',result)
+   self.assertNotIn(unsafe,result)
+   self.assertIn('checksharedmods:',result)
+   self.assertIn('check_extension_modules.py',result)
+   with self.assertRaises(RuntimeError):
+    Build.isolate_cross_python_build(p)
+   self.assertEqual(result,p.read_text())
+   p.write_text('PYTHON_FOR_BUILD=hostpython\\n'.replace('\\n','\n'))
+   with self.assertRaises(RuntimeError):
+    Build.isolate_cross_python_build(p)
  def test_libc_configure_probes_report_real_results_and_reject_unknown_modes(self):
   import subprocess
   with tempfile.TemporaryDirectory() as d:
