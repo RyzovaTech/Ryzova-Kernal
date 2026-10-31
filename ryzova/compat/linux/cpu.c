@@ -164,6 +164,47 @@ static uint32_t convert_signed_binary32(uint64_t raw,unsigned int width)
     return ((uint32_t)sign<<31U)|((uint32_t)exponent<<23U)|
            ((uint32_t)kept&UINT32_C(0x7fffff));
 }
+/* Default RN-even scalar binary32 division via integer mantissas.
+ * Does not use host FP; non-default MXCSR/exception flags unqualified. */
+static uint32_t divide_binary32(uint32_t left,uint32_t right)
+{
+    uint32_t sign=(left^right)&UINT32_C(0x80000000);
+    unsigned int ea=(left>>23U)&255U,eb=(right>>23U)&255U;
+    uint32_t ma=left&UINT32_C(0x7fffff),mb=right&UINT32_C(0x7fffff);
+    int expa,expb,exponent,shift;
+    uint64_t numerator,denominator,q,r;
+    if(ea==255U && ma)return left|UINT32_C(0x00400000);
+    if(eb==255U && mb)return right|UINT32_C(0x00400000);
+    if((ea==255U && eb==255U) ||
+       (ea==0U && ma==0U && eb==0U && mb==0U))
+        return UINT32_C(0xffc00000);
+    if(ea==255U || (eb==0U && mb==0U))
+        return sign|UINT32_C(0x7f800000);
+    if((ea==0U && ma==0U) || eb==255U)return sign;
+    expa=ea?(int)ea-127:-126;
+    expb=eb?(int)eb-127:-126;
+    if(ea)ma|=UINT32_C(1)<<23U;
+    if(eb)mb|=UINT32_C(1)<<23U;
+    while(ma<(UINT32_C(1)<<23U)){ma<<=1U;expa--;}
+    while(mb<(UINT32_C(1)<<23U)){mb<<=1U;expb--;}
+    exponent=expa-expb;
+    if(ma<mb){ma<<=1U;exponent--;}
+    numerator=(uint64_t)ma<<23U;
+    if(exponent>=-126){
+        denominator=mb;q=numerator/denominator;r=numerator%denominator;
+        if(r*2U>denominator || (r*2U==denominator && (q&1U)))q++;
+        if(q==(UINT64_C(1)<<24U)){q>>=1U;exponent++;}
+        if(exponent>127)return sign|UINT32_C(0x7f800000);
+        return sign|((uint32_t)(exponent+127)<<23U)|((uint32_t)q&UINT32_C(0x7fffff));
+    }
+    shift=-126-exponent;
+    if(shift>=32)return sign;
+    denominator=(uint64_t)mb<<(unsigned int)shift;
+    q=numerator/denominator;r=numerator%denominator;
+    if(r*2U>denominator || (r*2U==denominator && (q&1U)))q++;
+    if(q>=(UINT64_C(1)<<23U))return sign|UINT32_C(0x00800000);
+    return sign|(uint32_t)q;
+}
 static uint64_t resultflags(Cpu *c,uint64_t v,unsigned int size)
 {
     unsigned int parity=0, i;
@@ -570,6 +611,22 @@ static int step(Cpu *c)
             rm=decode(c,&reg,&group,16);
             if(c->operand16 && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
             vector_move(c,rm,reg,op2==0x7f);
+        }
+        else if(op2==0x5e && c->repeat==0xf3 && !c->operand16){
+            /* F3 0F 5E /r DIVSS xmm, xmm/m32; upper XMM & flags unchanged. */
+            uint32_t a=0,b=0,q;unsigned int k;
+            rm=decode(c,&reg,&group,4);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            for(k=0;k<4;k++)a|=(uint32_t)c->xmm[reg][k]<<(8U*k);
+            if(rm.reg>=0){
+                for(k=0;k<4;k++)b|=(uint32_t)c->xmm[rm.reg][k]<<(8U*k);
+            }else{
+                v=get(c,rm,4);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+                b=(uint32_t)v;
+            }
+            q=divide_binary32(a,b);
+            for(k=0;k<4;k++)c->xmm[reg][k]=(unsigned char)(q>>(8U*k));
         }
         else if(op2==0x2a && c->repeat==0xf3 && !c->operand16){
             /* F3 [REX.W] 0F 2A /r CVTSI2SS xmm, r/m32|r/m64.
