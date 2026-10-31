@@ -10,7 +10,7 @@ from phase9_dynamic import build
 from phase9_threads import commands as thread_commands
 from phase9_runtime import commands as runtime_commands
 ROOT=Path(__file__).resolve().parents[1]
-CASES=('pair','unix','inet','inet6','ipv6-deny','udp4','udp6','udp-deny','accept-fault','peek','poll','shutdown','sigpipe','nonblock','alias','reclaim','backpressure','bound','errors','fd-limit','namespace','poll-timeout','poll-wake','message','options','accept4','byte-order','bad-message','wrap','traffic-quota','queue-close')
+CASES=('pair','unix','inet','inet6','ipv6-deny','udp4','udp6','udp-quota','udp-deny','accept-fault','peek','poll','shutdown','sigpipe','nonblock','alias','reclaim','backpressure','bound','errors','fd-limit','namespace','poll-timeout','poll-wake','message','options','accept4','byte-order','bad-message','wrap','traffic-quota','queue-close')
 DIFFERENTIAL=('pair','inet','inet6','udp4','udp6','peek','poll','shutdown','sigpipe','nonblock','alias','reclaim','bound','poll-timeout','poll-wake','message','options','accept4','byte-order','bad-message','wrap')
 NAMES={'sockets.elf':'sk-raw','socket-http':'sk-http'}
 def fixtures(directory,commit):

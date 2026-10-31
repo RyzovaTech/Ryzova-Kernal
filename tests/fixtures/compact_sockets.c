@@ -106,6 +106,22 @@ long app_main(long argc,char **argv,char **env)
   CHECK(C(0,server,data,2)==2 && data[0]=='l' && data[1]=='a');
   CHECK(C(0,server,data,32)==-11);
   CHECK(C(50,server,1,0)==-95 && C(43,server,0,0)==-95);
+ }else if(equal(argv[1],"udp-quota")){
+  int i;
+  address[0]=2;address[4]=127;address[7]=1;
+  server=C(41,2,2|04000,0);
+  CHECK(server>=0 && !C(49,server,address,16));
+  length=16;CHECK(!C(51,server,address,&length) && length==16);
+  client=C(41,2,2|04000,0);CHECK(client>=0);
+  CHECK(call(44,client,1,1,0,(long)address,16)==-14);
+  for(i=0;i<4;i++)CHECK(call(44,client,(long)"x",1,0,(long)address,16)==1);
+  CHECK(call(44,client,(long)"y",1,0,(long)address,16)==-11);
+  CHECK(C(0,server,data,1)==1 && data[0]=='x');
+  CHECK(call(44,client,(long)"z",1,0,(long)address,16)==1);
+  for(i=0;i<3;i++)CHECK(C(0,server,data,1)==1 && data[0]=='x');
+  CHECK(C(0,server,data,1)==1 && data[0]=='z');
+  CHECK(C(0,server,data,1)==-11);
+  CHECK(call(44,client,(long)big,sizeof big+1,0,(long)address,16)==-90);
  }else if(equal(argv[1],"udp-deny")){
   unsigned char offlink[28]={2,0};
   fd=C(41,2,2,0);CHECK(fd>=0);
