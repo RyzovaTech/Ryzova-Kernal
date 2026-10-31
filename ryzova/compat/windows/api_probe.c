@@ -5,6 +5,11 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <inttypes.h>
+#ifdef CW_FILES_PROBE
+#include "files_host.h"
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 static int utf16(const char *text,uint16_t *out,size_t cap) {
     size_t n=0;const unsigned char *p=(const unsigned char *)text;
     while(*p) {
@@ -29,6 +34,9 @@ int main(int argc,char **argv) {
     FILE *file;long length;unsigned char *input,*arena=NULL,*heap=NULL;
     CwMachine m;CwPlan plan;CwLaunch launch;CwServices *s;uint32_t budget=CW_MAX_STEPS;int status;
     unsigned int i;
+#ifdef CW_FILES_PROBE
+    CwFileNamespace *ns=NULL;CwFileHost *host=NULL;
+#endif
     if(argc<2 || argc>9 || argc==4)return 64;
     memset(&launch,0,sizeof(launch));
     if(!utf16(argc>2?argv[2]:"flex.exe",launch.command_line,CW_COMMAND_UNITS))return 64;
@@ -36,7 +44,9 @@ int main(int argc,char **argv) {
     if(argc>5 && !number(argv[5],3,&launch.console_mask))return 64;
     if(argc>6 && !number(argv[6],CW_ALL_APIS,&launch.api_mask))return 64;
     if(argc>7 && !number(argv[7],CW_MAX_STEPS,&budget))return 64;
+#ifndef CW_FILES_PROBE
     if(argc>8)return 64;
+#endif
     file=fopen(argv[1],"rb");if(!file)return 65;
     if(fseek(file,0,SEEK_END) || (length=ftell(file))<0 || length>CW_MAX_FILE || fseek(file,0,SEEK_SET)){fclose(file);return 65;}
     input=(unsigned char *)malloc(length?(size_t)length:1);if(!input){fclose(file);return 66;}
@@ -50,6 +60,17 @@ int main(int argc,char **argv) {
     if(!arena || !heap || !s){free(arena);free(heap);free(s);free(input);return 66;}
     status=cw_load(input,(size_t)length,0,arena,(size_t)plan.image_bytes+CW_STACK,&m);
     if(!status)status=cw_attach_services(&m,s,&launch,heap,CW_HEAP_LIMIT);
+#ifdef CW_FILES_PROBE
+    if(!status && argc==9) {
+        CwDirectoryGrant grant;int root;
+        memset(&grant,0,sizeof(grant));strcpy(grant.ref,"work");grant.drive='C';grant.rights=31;
+        ns=(CwFileNamespace *)calloc(1,sizeof(*ns));host=cw_file_host_new();
+        root=open(argv[8],O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+        if(!ns || !host || root<0 || cw_file_host_add_root(host,root)!=0)status=CW_API;
+        if(root>=0)close(root);
+        if(!status)status=cw_attach_files(&m,ns,&grant,1,cw_file_host_ops(),host);
+    }
+#endif
     if(!status)status=cw_run(&m,budget);
     printf("{\"status\":%d,\"executed\":%s,\"exited\":%s,\"exit_code\":%" PRIu32 ",\"exit_kind\":%" PRIu32 ",\"instructions\":%" PRIu32 ",\"imports\":%" PRIu32 ",\"stdout_hex\":\"",status,m.instructions?"true":"false",m.exited?"true":"false",m.exit_code,m.exit_kind,m.instructions,plan.import_count);
     if(m.services)hex(s->output[0],s->output_bytes[0]);
@@ -57,6 +78,11 @@ int main(int argc,char **argv) {
     if(m.services)hex(s->output[1],s->output_bytes[1]);
     printf("\",\"api_calls\":{");
     for(i=0;i<CW_API_COUNT;i++)printf("%s\"%s\":%" PRIu32,i?",":"",cw_api_name(i),m.services?s->calls[i]:0);
+#ifdef CW_FILES_PROBE
+    printf("},\"provider_open_files\":%" PRIu32 ",\"native_kernel_qualified\":false}\n",host?cw_file_host_open_count(host):0);
+    cw_files_close_all(&m);cw_file_host_destroy(host);free(ns);
+#else
     printf("},\"native_kernel_qualified\":false}\n");
+#endif
     free(s);free(heap);free(arena);free(input);return status?1:0;
 }

@@ -2,7 +2,7 @@
 #ifndef RYZ_WINDOWS_API_H
 #define RYZ_WINDOWS_API_H
 #include "runtime.h"
-#define CW_API_COUNT 9U
+#define CW_API_COUNT 15U
 #define CW_ALL_APIS ((1U<<CW_API_COUNT)-1U)
 #define CW_OUTPUT_LIMIT 65536U
 #define CW_HEAP_LIMIT (1024U*1024U)
@@ -11,7 +11,8 @@
 #define CW_THUNK_BASE UINT64_C(0xffffffffff000000)
 enum CwApi { CW_GET_STD_HANDLE, CW_WRITE_FILE, CW_EXIT_PROCESS, CW_GET_LAST_ERROR,
     CW_SET_LAST_ERROR, CW_GET_COMMAND_LINE, CW_GET_ENVIRONMENT_VARIABLE,
-    CW_VIRTUAL_ALLOC, CW_VIRTUAL_FREE };
+    CW_VIRTUAL_ALLOC, CW_VIRTUAL_FREE, CW_CREATE_FILE, CW_READ_FILE, CW_CLOSE_HANDLE,
+    CW_SET_FILE_POINTER, CW_GET_FILE_SIZE, CW_FLUSH_FILE_BUFFERS };
 typedef struct CwEnvironment { uint16_t name[64], value[256]; } CwEnvironment;
 typedef struct CwLaunch {
     uint32_t api_mask, console_mask, environment_count;
@@ -29,6 +30,8 @@ typedef struct CwServices {
     unsigned char owner[CW_HEAP_LIMIT/4096], protection[CW_HEAP_LIMIT/4096];
     CwAllocation allocations[16];
     CwMachine *bound_machine;
+    struct CwFileNamespace *files;
+    uint32_t console_closed;
 } CwServices;
 /* Zero-initialize services before first attach; a service belongs to one machine.
    Trusted launcher attaches explicit policy/backing, never host env/DLLs. */

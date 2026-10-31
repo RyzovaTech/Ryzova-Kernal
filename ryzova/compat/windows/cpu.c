@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Windows-owned bounded AMD64 subset. No Linux process, host CPU jump or syscall. */
 #include "api.h"
+#include "files.h"
 #include <string.h>
 #define CF 1U
 #define PF 4U
@@ -168,7 +169,7 @@ int cw_run(CwMachine *m,uint32_t budget) {
     if(!m || !m->image || !m->stack)return CW_HEADER;
     if(m->status)return m->status;
     if(m->exited)return CW_OK;
-    if(!budget || budget>CW_MAX_STEPS)return m->status=CW_BUDGET;
-    while(m->instructions<budget){int status;m->instructions++;status=m->ip>=CW_THUNK_BASE?cw_api_dispatch(m):tick(m);if(status)return m->status=status;if(m->exited)return CW_OK;}
-    return m->status=CW_BUDGET;
+    if(!budget || budget>CW_MAX_STEPS){cw_files_close_all(m);return m->status=CW_BUDGET;}
+    while(m->instructions<budget){int status;m->instructions++;status=m->ip>=CW_THUNK_BASE?cw_api_dispatch(m):tick(m);if(status){cw_files_close_all(m);return m->status=status;}if(m->exited){cw_files_close_all(m);return CW_OK;}}
+    cw_files_close_all(m);return m->status=CW_BUDGET;
 }

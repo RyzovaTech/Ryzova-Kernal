@@ -69,7 +69,7 @@
       "depends_on": [
         "W3"
       ],
-      "state": "pending"
+      "state": "implemented"
     },
     {
       "id": "W5",
@@ -150,7 +150,14 @@
     "kernel32.dll!GetCommandLineW",
     "kernel32.dll!GetEnvironmentVariableW",
     "kernel32.dll!VirtualAlloc",
-    "kernel32.dll!VirtualFree"
+    "kernel32.dll!VirtualFree",
+    "kernel32.dll!CreateFileW",
+    "kernel32.dll!ReadFile",
+    "kernel32.dll!CloseHandle",
+    "kernel32.dll!SetFilePointerEx",
+    "kernel32.dll!GetFileSizeEx",
+    "kernel32.dll!FlushFileBuffers"
   ],
-  "native_kernel_qualified": false
+  "native_kernel_qualified": false,
+  "hosted_file_namespace": "explicit drive grants, portable provider interface and Linux descriptor transport; native Flex transport pending"
 }

@@ -22,7 +22,7 @@ class Launch(C.Structure):
 class Allocation(C.Structure):
     _fields_=[('first',C.c_uint32),('pages',C.c_uint32)]
 class Services(C.Structure):
-    _fields_=[('launch',Launch),('last_error',C.c_uint32),('output_bytes',C.c_uint32*2),('calls',C.c_uint32*9),('output',(C.c_ubyte*65536)*2),('command_bytes',C.c_ubyte*2048),('command_base',C.c_uint64),('heap_base',C.c_uint64),('heap',C.c_void_p),('heap_bytes',C.c_size_t),('owner',C.c_ubyte*256),('protection',C.c_ubyte*256),('allocations',Allocation*16),('bound_machine',C.c_void_p)]
+    _fields_=[('launch',Launch),('last_error',C.c_uint32),('output_bytes',C.c_uint32*2),('calls',C.c_uint32*15),('output',(C.c_ubyte*65536)*2),('command_bytes',C.c_ubyte*2048),('command_base',C.c_uint64),('heap_base',C.c_uint64),('heap',C.c_void_p),('heap_bytes',C.c_size_t),('owner',C.c_ubyte*256),('protection',C.c_ubyte*256),('allocations',Allocation*16),('bound_machine',C.c_void_p),('files',C.c_void_p),('console_closed',C.c_uint32)]
 
 def put_utf16(array,text):
     units=struct.unpack('<'+'H'*(len(text.encode('utf-16le'))//2),text.encode('utf-16le'))
@@ -167,7 +167,7 @@ class WindowsW3Tests(unittest.TestCase):
         m.ip=0xffffffffff000001;self.assertEqual(self.lib.cw_api_dispatch(C.byref(m)),6)
         m.ip=0xffffffffff000030;m.r[4]=m.initial_sp-1;self.assertEqual(self.lib.cw_api_dispatch(C.byref(m)),9)
     def test_launcher_limits_duplicate_names_invalid_utf16_and_authority_fail(self):
-        for mutate in (lambda c:setattr(c,'environment_count',17),lambda c:setattr(c,'api_mask',512),lambda c:setattr(c,'console_mask',4),lambda c:c.command_line.__setitem__(0,0xd800)):
+        for mutate in (lambda c:setattr(c,'environment_count',17),lambda c:setattr(c,'api_mask',32768),lambda c:setattr(c,'console_mask',4),lambda c:c.command_line.__setitem__(0,0xd800)):
             config=launch();mutate(config);m,arena=self.loaded(imported_pe(b'\xc3'));s=Services();heap=C.create_string_buffer(4096)
             self.assertEqual(self.lib.cw_attach_services(C.byref(m),C.byref(s),C.byref(config),heap,4096),10);self.assertFalse(m.services)
         config=launch();config.environment_count=2;put_utf16(config.environment[1].name,'flex_w3_probe');m,arena=self.loaded(imported_pe(b'\xc3'));s=Services();heap=C.create_string_buffer(4096)
