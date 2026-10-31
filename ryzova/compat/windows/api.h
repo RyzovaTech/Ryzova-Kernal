@@ -28,8 +28,10 @@ typedef struct CwServices {
     size_t heap_bytes;
     unsigned char owner[CW_HEAP_LIMIT/4096], protection[CW_HEAP_LIMIT/4096];
     CwAllocation allocations[16];
+    CwMachine *owner;
 } CwServices;
-/* Trusted launcher attaches explicit policy and guest-owned backing, never host env/DLLs. */
+/* Zero-initialize services before first attach; a service belongs to one machine.
+   Trusted launcher attaches explicit policy/backing, never host env/DLLs. */
 int cw_attach_services(CwMachine *,CwServices *,const CwLaunch *,unsigned char *,size_t);
 int cw_api_id(const char *);
 const char *cw_api_name(unsigned int);

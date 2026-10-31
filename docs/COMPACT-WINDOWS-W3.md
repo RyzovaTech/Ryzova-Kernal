@@ -61,8 +61,10 @@ edge-case compatibility.
 ## Bounds and launch policy
 
 A trusted C caller provides `CwLaunch`, `CwServices` and heap backing to
-`cw_attach_services`. Configuration is validated and copied before execution;
-reattachment is refused. Image, machine state, policy and heap backing may not
+`cw_attach_services` with zero-initialized service state. Configuration is
+validated and copied before execution; reattachment and attaching the same
+service state to another machine are refused. Every service access checks its
+owner, so even a copied service pointer cannot borrow another guest's authority. Image, machine state, policy and heap backing may not
 alias guest-writable storage. API/console masks default to zero in the CLI.
 Missing imported API permissions are rejected before allocating the execution
 arena. The synthetic Python fixtures deliberately attach their explicit test

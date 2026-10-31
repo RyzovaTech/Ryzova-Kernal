@@ -22,7 +22,7 @@ class Launch(C.Structure):
 class Allocation(C.Structure):
     _fields_=[('first',C.c_uint32),('pages',C.c_uint32)]
 class Services(C.Structure):
-    _fields_=[('launch',Launch),('last_error',C.c_uint32),('output_bytes',C.c_uint32*2),('calls',C.c_uint32*9),('output',(C.c_ubyte*65536)*2),('command_bytes',C.c_ubyte*2048),('command_base',C.c_uint64),('heap_base',C.c_uint64),('heap',C.c_void_p),('heap_bytes',C.c_size_t),('owner',C.c_ubyte*256),('protection',C.c_ubyte*256),('allocations',Allocation*16)]
+    _fields_=[('launch',Launch),('last_error',C.c_uint32),('output_bytes',C.c_uint32*2),('calls',C.c_uint32*9),('output',(C.c_ubyte*65536)*2),('command_bytes',C.c_ubyte*2048),('command_base',C.c_uint64),('heap_base',C.c_uint64),('heap',C.c_void_p),('heap_bytes',C.c_size_t),('owner',C.c_ubyte*256),('protection',C.c_ubyte*256),('allocations',Allocation*16),('owner',C.c_void_p)]
 
 def put_utf16(array,text):
     units=struct.unpack('<'+'H'*(len(text.encode('utf-16le'))//2),text.encode('utf-16le'))
@@ -195,6 +195,17 @@ class WindowsW3Tests(unittest.TestCase):
         config.console_mask=0
         self.assertEqual(self.lib.cw_attach_services(C.byref(m),C.byref(s),C.byref(config),heap,4096),10)
         self.assertEqual(s.launch.console_mask,3)
+
+    def test_service_state_cannot_be_attached_to_a_second_machine(self):
+        first=self.context();m,arena=self.loaded(imported_pe(b'\xc3'));config=launch();config.console_mask=0;heap=C.create_string_buffer(4096)
+        self.assertEqual(self.lib.cw_attach_services(C.byref(m),C.byref(first[1]),C.byref(config),heap,4096),10)
+        self.assertFalse(m.services);self.assertEqual(first[1].launch.console_mask,3)
+        self.assertEqual(self.api(first,'GetStdHandle',(0xfffffff5,)),0x10001)
+        # Even a misconfigured host copying the services pointer cannot borrow authority.
+        m.services=C.addressof(first[1]);m.ip=0xffffffffff000000
+        self.assertEqual(self.lib.cw_api_dispatch(C.byref(m)),10)
+        out=C.create_string_buffer(2)
+        self.assertNotEqual(self.lib.cw_read(C.byref(m),first[1].command_base,out,2,1),0)
 
     def test_reference_provenance_and_execution_cannot_be_forged(self):
         image=self.directory/'comparison.exe';image.write_bytes(console_fixture());receipt=self.directory/'reference.json';output=self.directory/'comparison.json'

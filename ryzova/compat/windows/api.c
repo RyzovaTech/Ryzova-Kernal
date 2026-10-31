@@ -42,7 +42,7 @@ static int overlap(const void *a,size_t an,const void *b,size_t bn) {
 }
 int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigned char *heap,size_t heap_bytes) {
     unsigned int i,j;int length;CwLaunch copy;
-    if(!m || !m->image || !s || !launch || m->services || m->instructions || m->exited)return CW_API;
+    if(!m || !m->image || !s || !launch || s->owner || m->services || m->instructions || m->exited)return CW_API;
     if((launch->api_mask&~CW_ALL_APIS) || (m->plan.api_mask&~launch->api_mask) ||
        (launch->console_mask&~3U) || launch->environment_count>CW_ENV_COUNT ||
        heap_bytes>CW_HEAP_LIMIT || heap_bytes%4096 || (heap_bytes && !heap) ||
@@ -55,7 +55,7 @@ int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigne
     /* Guest-writable backing must not alias trusted service/policy/machine state. */
     {
         size_t used=(size_t)m->plan.image_bytes+CW_STACK;
-        if(overlap(s,sizeof(*s),m,sizeof(*m)) || overlap(s,sizeof(*s),m->image,used) ||
+        if(overlap(m,sizeof(*m),m->image,used) || overlap(s,sizeof(*s),m,sizeof(*m)) || overlap(s,sizeof(*s),m->image,used) ||
            overlap(launch,sizeof(*launch),m->image,used) ||
            overlap(heap,heap_bytes,m->image,used) || overlap(heap,heap_bytes,m,sizeof(*m)) ||
            overlap(heap,heap_bytes,s,sizeof(*s)) || overlap(heap,heap_bytes,launch,sizeof(*launch)))return CW_API;
@@ -66,11 +66,11 @@ int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigne
     s->heap_base=s->command_base+65536;
     for(i=0;i<=(unsigned int)length;i++){s->command_bytes[2*i]=(unsigned char)copy.command_line[i];s->command_bytes[2*i+1]=(unsigned char)(copy.command_line[i]>>8);}
     if(heap_bytes)memset(heap,0,heap_bytes);
-    m->services=s;return CW_OK;
+    s->owner=m;m->services=s;return CW_OK;
 }
 unsigned char *cw_service_memory(CwMachine *m,uint64_t at,size_t n,unsigned int rights) {
     CwServices *s=m->services;uint64_t off;size_t first,last,i;
-    if(!s || !n)return NULL;
+    if(!s || s->owner!=m || !n)return NULL;
     if(at>=s->command_base && span(sizeof(s->command_bytes),at-s->command_base,n))
         return rights==CW_R?s->command_bytes+(size_t)(at-s->command_base):NULL;
     if(at<s->heap_base || !span(s->heap_bytes,at-s->heap_base,n) || rights==CW_X)return NULL;
@@ -187,7 +187,7 @@ int cw_api_dispatch(CwMachine *m) {
     CwServices *s=m->services;
     if(token<CW_THUNK_BASE || token-CW_THUNK_BASE>=16U*CW_API_COUNT || (token-CW_THUNK_BASE)%16)return CW_MEMORY;
     id=(unsigned int)((token-CW_THUNK_BASE)/16);
-    if(!s || !(m->plan.api_mask&(1U<<id)) || !(s->launch.api_mask&(1U<<id)))return CW_API;
+    if(!s || s->owner!=m || !(m->plan.api_mask&(1U<<id)) || !(s->launch.api_mask&(1U<<id)))return CW_API;
     if((m->r[4]&15)!=8 || m->r[4]<m->stack_base || m->r[4]-m->stack_base>CW_STACK-40 || !(stack=cw_memory(m,m->r[4],40,CW_R)))return CW_ABI;
     if(!cw_memory(m,m->r[4]+8,32,CW_W))return CW_ABI;
     a[0]=m->r[1];a[1]=m->r[2];a[2]=m->r[8];a[3]=m->r[9];a[4]=0;

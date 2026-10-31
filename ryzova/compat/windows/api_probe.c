@@ -46,7 +46,7 @@ int main(int argc,char **argv) {
     if(plan.api_mask&~launch.api_mask){printf("{\"status\":10,\"executed\":false,\"allocation_bytes\":0}\n");free(input);return 1;}
     if((size_t)plan.image_bytes+CW_STACK+4096+CW_HEAP_LIMIT>CW_MAX_MEMORY){free(input);return 66;}
     arena=(unsigned char *)malloc((size_t)plan.image_bytes+CW_STACK);
-    heap=(unsigned char *)malloc(CW_HEAP_LIMIT);s=(CwServices *)malloc(sizeof(*s));
+    heap=(unsigned char *)malloc(CW_HEAP_LIMIT);s=(CwServices *)calloc(1,sizeof(*s));
     if(!arena || !heap || !s){free(arena);free(heap);free(s);free(input);return 66;}
     status=cw_load(input,(size_t)length,0,arena,(size_t)plan.image_bytes+CW_STACK,&m);
     if(!status)status=cw_attach_services(&m,s,&launch,heap,CW_HEAP_LIMIT);
