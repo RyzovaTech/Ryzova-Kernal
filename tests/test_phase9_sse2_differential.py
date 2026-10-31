@@ -242,7 +242,7 @@ unaligned: .long -42
                     str(x) for x in range(160,172))]
         source=self.root/'divss.S'
         binary=self.root/'divss'
-        source.write_text('\\n'.join(asm)+'\\n')
+        source.write_text('\n'.join(asm)+'\n')
         subprocess.run(['cc','-nostdlib','-static','-no-pie',str(source),'-o',str(binary)],
                        capture_output=True,check=True,timeout=30)
         native=subprocess.run([str(binary)],capture_output=True,timeout=5)
