@@ -38,7 +38,17 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 10
     steps:
+      - name: Preserve source bytes for receipt hashes
+        shell: pwsh
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
+        with:
+          # Plan 9 source contains Windows-reserved names such as con.scat.
+          # This reference job only needs these two Windows-compatible files.
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_reference.ps1
+            /tests/fixtures/windows_w1_reference.c
       - name: Build and run the freestanding AMD64 Windows reference
         shell: pwsh
         run: ./scripts/compact_windows_reference.ps1
