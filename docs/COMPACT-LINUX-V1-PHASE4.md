@@ -152,3 +152,13 @@ fail-closed. Executing identical, independently assembled AMD64 ELF fixtures
 under host Linux and Ryzova checks results and fault behavior byte for byte.
 **This does not close AMD64-ABI or APP-PYTHON** until the pinned CPython ELF
 and its required stdlib/thread/subprocess/TLS workflows actually pass.
+
+## 4E.1 CPython's next measured SIMD gap: PSHUFD
+
+The successive frozen CPython guest test advanced past PUNPCKLDQ and failed
+at the source-digest-attributed candidate `66 0F 70 E8 E5`. The bounded
+interpreter now implements legacy SSE2 PSHUFD for register and aligned
+memory operands, using all four immediate 2-bit dword selectors. Host Linux
+vs Ryzova ELF differential tests cover register, aligned memory, self alias,
+and misaligned fault rejection. The candidate RIP alone is not proof of
+complete CPython execution; no APP-PYTHON or AMD64-ABI gate is closed.

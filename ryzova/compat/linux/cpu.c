@@ -543,6 +543,31 @@ static int step(Cpu *c)
             if(c->operand16 && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
             vector_move(c,rm,reg,op2==0x7f);
         }
+        else if(op2==0x70 && c->operand16 && !c->repeat){
+            /* 66 0F 70 /r ib: PSHUFD xmm, xmm/m128, imm8.
+             * Each destination dword i comes from source dword
+             * (imm8 >> (i*2)) & 3. Copy the source first for self-alias.
+             * Like other legacy SSE2 m128 forms, memory must be aligned.
+             * This instruction leaves EFLAGS unchanged. */
+            unsigned char source[16],out[16];
+            unsigned int shuffle,i,selector;
+            uint64_t at;
+            rm=decode(c,&reg,&group,16);
+            shuffle=(unsigned int)fetch(c,1);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(rm.reg>=0)memcpy(source,c->xmm[rm.reg],16);
+            else{
+                at=address(c,rm)+c->segment;
+                if((at&15U) || !ryz_memory_access(c->m,at,16,RYZ_READ))
+                    return RYZ_VM_MAP_ERROR;
+                memcpy(source,c->m->bytes+(size_t)(at-c->m->base),16);
+            }
+            for(i=0;i<4;i++){
+                selector=(shuffle>>(i*2))&3U;
+                memcpy(out+i*4,source+selector*4,4);
+            }
+            memcpy(c->xmm[reg],out,16);
+        }
         else if(op2==0x62 && c->operand16 && !c->repeat){
             /* 66 0F 62 /r PUNPCKLDQ xmm, xmm/m128:
              * [old dst dword0, src dword0, old dst dword1, src dword1].

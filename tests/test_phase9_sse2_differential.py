@@ -148,6 +148,79 @@ out2: .zero 16
                                 0,1,2,3,0,1,2,3,4,5,6,7,4,5,6,7]))
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
 
+    def test_pshufd_register_memory_and_self_alias_linux_differential(self):
+        # CPython 3.12.10 now reaches 66 0F 70 E8 E5.
+        asm=r"""
+.intel_syntax noprefix
+.section .text
+.global _start
+_start:
+    movdqu xmm1, XMMWORD PTR [rip + src0]
+    pshufd xmm0, xmm1, 0xe5
+    movdqu XMMWORD PTR [rip + out0], xmm0
+    pshufd xmm2, XMMWORD PTR [rip + src1], 0x1b
+    movdqu XMMWORD PTR [rip + out1], xmm2
+    movdqu xmm3, XMMWORD PTR [rip + src0]
+    pshufd xmm3, xmm3, 0x00
+    movdqu XMMWORD PTR [rip + out2], xmm3
+    mov eax, 1
+    mov edi, 1
+    lea rsi, [rip + out0]
+    mov edx, 48
+    syscall
+    mov eax, 60
+    xor edi, edi
+    syscall
+.section .data
+.balign 16
+src0: .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+src1: .byte 128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143
+out0: .zero 16
+out1: .zero 16
+out2: .zero 16
+"""
+        source=self.root/'pshufd.S'
+        binary=self.root/'pshufd'
+        source.write_text(asm)
+        subprocess.run(['cc','-nostdlib','-static','-no-pie',str(source),'-o',str(binary)],
+                       capture_output=True,check=True,timeout=30)
+        native=subprocess.run([str(binary)],capture_output=True,timeout=5)
+        guest=subprocess.run([str(self.runner),str(binary)],capture_output=True,timeout=25)
+        self.assertEqual(native.returncode,0,native.stderr)
+        self.assertEqual(guest.returncode,0,guest.stderr)
+        self.assertEqual(guest.stdout,native.stdout)
+        expect=(bytes([4,5,6,7,4,5,6,7,8,9,10,11,12,13,14,15])+
+                bytes([140,141,142,143,136,137,138,139,132,133,134,135,128,129,130,131])+
+                bytes([0,1,2,3]*4))
+        self.assertEqual(guest.stdout,expect)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
+
+    def test_pshufd_misaligned_memory_denied_like_linux(self):
+        asm=r"""
+.intel_syntax noprefix
+.section .text
+.global _start
+_start:
+    pshufd xmm0, XMMWORD PTR [rip + unaligned], 0x1b
+    mov eax, 60
+    xor edi, edi
+    syscall
+.section .data
+.balign 16
+misalign_pad: .byte 3
+unaligned: .zero 16
+"""
+        source=self.root/'pshufd-bad.S'
+        binary=self.root/'pshufd-bad'
+        source.write_text(asm)
+        subprocess.run(['cc','-nostdlib','-static','-no-pie',str(source),'-o',str(binary)],
+                       capture_output=True,check=True,timeout=30)
+        native=subprocess.run([str(binary)],capture_output=True,timeout=5)
+        guest=subprocess.run([str(self.runner),str(binary)],capture_output=True,timeout=25)
+        self.assertEqual(native.returncode,-11,native.stderr)
+        self.assertEqual(guest.returncode,2,guest.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=2',guest.stderr)
+
     def test_punpckldq_unaligned_memory_denied_like_linux(self):
         asm=r"""
 .intel_syntax noprefix
