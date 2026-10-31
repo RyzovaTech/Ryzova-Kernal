@@ -209,9 +209,17 @@ class Build:
         self.app('make',src['make'],[*common,'--without-guile','--disable-nls'],env)
         self.run('busybox-config',['make','allnoconfig'],src['busybox'],env)
         config=src['busybox']/'.config';text=config.read_text()
-        for key in ('STATIC','DESKTOP','LONG_OPTS','ASH','SH_IS_ASH','ASH_JOB_CONTROL','ASH_ALIAS','ASH_MATH_SUPPORT','ASH_BUILTIN_ECHO','ASH_BUILTIN_PRINTF','ASH_BUILTIN_TEST','ASH_CMDCMD','ECHO','PRINTF','TEST','CAT','CP','MV','RM','MKDIR','RMDIR','LS','PWD','TOUCH','HEAD','TAIL','SORT','WC','GREP','EGREP','FGREP','SED','FIND','FEATURE_FIND_NAME','FEATURE_FIND_TYPE','FEATURE_FIND_PRINT0','FEATURE_FIND_EXEC','TAR','FEATURE_TAR_CREATE','FEATURE_TAR_GZIP','GZIP','GUNZIP','WGET','FEATURE_WGET_STATUSBAR','SHA256SUM','CHMOD','LN','TRUE','FALSE','SLEEP','ENV','UNAME'):
+        for key in ('STATIC','DESKTOP','LONG_OPTS','SHOW_USAGE','FEATURE_VERBOSE_USAGE','ASH','SH_IS_ASH','ASH_JOB_CONTROL','ASH_ALIAS','ASH_MATH_SUPPORT','ASH_BUILTIN_ECHO','ASH_BUILTIN_PRINTF','ASH_BUILTIN_TEST','ASH_CMDCMD','ECHO','PRINTF','TEST','CAT','CP','MV','RM','MKDIR','RMDIR','LS','PWD','TOUCH','HEAD','TAIL','SORT','WC','GREP','EGREP','FGREP','SED','FIND','FEATURE_FIND_NAME','FEATURE_FIND_TYPE','FEATURE_FIND_PRINT0','FEATURE_FIND_EXEC','TAR','FEATURE_TAR_CREATE','FEATURE_TAR_GZIP','GZIP','GUNZIP','WGET','FEATURE_WGET_STATUSBAR','SHA256SUM','CHMOD','LN','TRUE','FALSE','SLEEP','ENV','UNAME'):
             text=text.replace('# CONFIG_'+key+' is not set','CONFIG_'+key+'=y')
         config.write_text(text);self.run('busybox-oldconfig',['make','oldconfig'],src['busybox'],env)
+        # Refuse a binary with no usage/version help: it silently interpreted
+        # `busybox --help` as the nonexistent "-help" applet (exit 127).
+        # Do not replace the real Linux reference with a fabricated output.
+        normalized=config.read_text().splitlines()
+        for required in ('CONFIG_LONG_OPTS=y','CONFIG_SHOW_USAGE=y',
+                         'CONFIG_FEATURE_VERBOSE_USAGE=y'):
+            if required not in normalized:
+                raise RuntimeError('BusyBox required version/help config disabled: '+required)
         self.run('busybox-make',['make','-j'+str(self.jobs),'CC='+env['CC'],'HOSTCC=cc'],src['busybox'],env)
         shutil.copy2(src['busybox']/'busybox',self.root/'bin/busybox')
         for key in ('sh','cat','echo','mkdir','rm','cp','mv','touch','ln','true','false','sleep','env','grep','sed','find','tar'):
