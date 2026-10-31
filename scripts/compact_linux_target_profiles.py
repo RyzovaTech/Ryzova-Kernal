@@ -23,13 +23,32 @@ def elf_info(data):
     if data[:6]!=b'\x7fELF\x02\x01' or len(data)<64 or int.from_bytes(data[18:20],'little')!=62:raise ValueError('not little-endian AMD64 ELF64')
     phoff=int.from_bytes(data[32:40],'little');size=int.from_bytes(data[54:56],'little');count=int.from_bytes(data[56:58],'little')
     if size!=56 or count>128 or phoff+size*count>len(data):raise ValueError('invalid program headers')
-    loads=[];interpreter=None
+    loads=[];file_maps=[];dynamic=None;interpreter=None
     for i in range(count):
         h=data[phoff+i*size:phoff+(i+1)*size];kind=int.from_bytes(h[:4],'little');off=int.from_bytes(h[8:16],'little');at=int.from_bytes(h[16:24],'little');length=int.from_bytes(h[32:40],'little');memory=int.from_bytes(h[40:48],'little')
         if off+length>len(data):raise ValueError('truncated segment')
-        if kind==1:loads.append((at,at+memory))
+        if kind==1:loads.append((at,at+memory));file_maps.append((at,length,off))
+        if kind==2:dynamic=(off,length)
         if kind==3:interpreter=data[off:off+length].rstrip(b'\0').decode('ascii')
-    return {'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'load_span_bytes':max((b for a,b in loads),default=0)-min((a for a,b in loads),default=0),'interpreter':interpreter}
+    needed=[]
+    if dynamic:
+        strings=None;string_size=0;offsets=[]
+        for pos in range(dynamic[0],dynamic[0]+dynamic[1]-15,16):
+            tag=int.from_bytes(data[pos:pos+8],'little');value=int.from_bytes(data[pos+8:pos+16],'little')
+            if tag==0:break
+            if tag==1:offsets.append(value)
+            if tag==5:strings=value
+            if tag==10:string_size=value
+        if offsets:
+            table=next((off+strings-va for va,length,off in file_maps if strings is not None and va<=strings and strings-va+string_size<=length),None)
+            if table is None:raise ValueError('invalid dynamic string table')
+            for off in offsets:
+                end=data.find(b'\0',table+off,table+string_size)
+                if off>=string_size or end<0 or end-(table+off)>255:raise ValueError('invalid needed library name')
+                name=data[table+off:end].decode('ascii')
+                if '/' in name or not name:raise ValueError('unsupported needed library path')
+                needed.append(name)
+    return {'needed':needed,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'load_span_bytes':max((b for a,b in loads),default=0)-min((a for a,b in loads),default=0),'interpreter':interpreter}
 
 def trace_metrics(paths):
     calls=collections.Counter();max_fd=2;read_bytes=write_bytes=network_bytes=unparsed=0
@@ -64,12 +83,16 @@ def main(directory,output):
         text=(reference.stdout+reference.stderr).decode(errors='replace');expected=1 if target=='musl' else 0
         reference_ok=reference.returncode==expected and version in text
         metrics=trace_metrics(logs.glob(target+'-trace.*'));metrics.update(json.loads(usage.read_text()));metrics['supervised_wall_seconds']=elapsed
-        grants=[]
+        grants=[];libraries=[];pending=list(info['needed']);seen=set()
         if info['interpreter']:grants=['-x',info['interpreter']+'='+str(root/'lib/libc.so')]
-        # Explicit immutable library grants; live-directory grants never bypass mmap policy.
-        for lib in ('libz.so.1','libssl.so.3','libcrypto.so.3','libcurl.so.4'):
-            file=root/'usr/lib'/lib
-            if file.exists():grants+=['-x','/usr/lib/'+lib+'='+str(file)]
+        # Grant only the actual ELF dependency closure: unrelated large libraries
+        # must not make a static BusyBox admission probe fail before it starts.
+        while pending:
+            name=pending.pop(0)
+            if name in seen:continue
+            seen.add(name);file=next((root/base/name for base in ('lib','usr/lib','usr/local/lib') if (root/base/name).is_file()),None)
+            if file is None:raise ValueError('missing target dependency '+target+': '+name)
+            dep=elf_info(file.read_bytes());virtual='/'+str(file.relative_to(root));libraries.append({'path':virtual,**dep});grants+=['-x',virtual+'='+str(file)];pending.extend(dep['needed'])
         guest=subprocess.run([str(runner),'-r','-b','1048576',*grants,str(binary),*args],env=env,capture_output=True,timeout=30)
         (logs/(target+'-guest.stdout')).write_bytes(guest.stdout);(logs/(target+'-guest.stderr')).write_bytes(guest.stderr)
         result=re.search(rb'COMPACT_JOBS_RESULT status=([0-9]+) exited=([01]) exit=([0-9]+) steps=([0-9]+) syscalls=([0-9]+)',guest.stderr)
@@ -81,8 +104,11 @@ def main(directory,output):
         blockers=[]
         if info['bytes']>4*1024*1024:blockers.append('ELF exceeds current 4-MiB image ceiling')
         if info['load_span_bytes']+65536+4096>16*1024*1024:blockers.append('load span plus stack/guard exceeds current 16-MiB arena')
+        for library in libraries:
+            if library['bytes']>4*1024*1024:blockers.append(library['path']+' exceeds current 4-MiB grant image ceiling')
+        if len(grants)//2>16:blockers.append('dependency closure exceeds 16 executable/library grants')
         if not success:blockers.append('guest smoke failed: '+str(actual if actual else {'runner_exit':guest.returncode}))
-        records.append({'target':target,'version':version,'elf':info,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode,'guest_blockers':blockers,'full_target_workflows_qualified':False})
+        records.append({'target':target,'version':version,'elf':info,'startup_libraries':libraries,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode,'guest_blockers':blockers,'full_target_workflows_qualified':False})
     report={'schema':'compact-linux-target-profiles/v1','source_lock_sha256':build['source_lock_sha256'],'abi':build['abi'],'targets':records,'phase4_entry_ready':all(r['linux_reference_passed'] for r in records),'phase3_complete':False,'resource_qualified':False,'full_target_workflows_qualified':False,'limitations':['Reference smoke measurements are not full target workflow budgets','max_child_rss is not aggregate process-tree RAM','Target networking/certificate and PTY workflows remain unqualified','Guest failures are recorded, never promoted to successful measurements']}
     Path(output).write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'phase4_entry_ready':report['phase4_entry_ready'],'phase3_complete':False,'targets':[{k:r[k] for k in ('target','linux_reference_passed','guest_smoke_passed','guest_blockers')} for r in records]},indent=2))
     return 0 if report['phase4_entry_ready'] else 1

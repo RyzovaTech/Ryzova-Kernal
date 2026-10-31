@@ -45,7 +45,7 @@ class TargetLockTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    source=Path(d)/'x.c';binary=Path(d)/'x';source.write_text('int main(void){return 0;}')
    subprocess.run(['cc',str(source),'-o',str(binary)],check=True,capture_output=True)
-   info=elf_info(binary.read_bytes());self.assertEqual(info['bytes'],binary.stat().st_size);self.assertGreater(info['load_span_bytes'],0)
+   info=elf_info(binary.read_bytes());self.assertEqual(info['bytes'],binary.stat().st_size);self.assertGreater(info['load_span_bytes'],0);self.assertIn('libc.so.6',info['needed'])
  def test_trace_metrics_keep_reference_scope_and_count_returned_bytes(self):
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/'trace';p.write_text('openat(AT_FDCWD, "f", 0) = 9\nread(9</f>, "a", 5) = 1\nwrite(7<TCP:[x]>, "ab", 2) = 2\nwrite(1</dev/null>, "no", 2) = -1 EPIPE\n')

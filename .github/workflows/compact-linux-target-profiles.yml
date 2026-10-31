@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 concurrency:
   group: compact-target-profiles-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
