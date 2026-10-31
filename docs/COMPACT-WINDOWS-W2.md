@@ -23,8 +23,10 @@ the stack is not executable, and unmapped gaps/guard pages reject access. Guest
 addresses never become host instruction pointers. Per-access checks are stricter
 than page padding: section-tail padding is inaccessible.
 
-All nonempty data directories except base relocations are rejected, including
-imports, delay imports, exception/unwind, TLS, load config, debug and CLR. This is
+All nonempty data directories except base relocations and bounded, inert debug
+metadata are rejected, including imports, delay imports, exception/unwind, TLS,
+load config and CLR. Debug records and their payload must be backed and their
+RVA/raw file offsets must agree. No PDB, metadata path or external file is opened. This is
 a deliberately narrower executable profile than Windows. The old metadata
 planner remains unchanged for its research consumers; its acceptance must never
 be used to authorize execution. Six W1 audit variants are independently rejected

@@ -92,7 +92,9 @@ def qualify_reference(probe, image, receipt, output, base=0):
     if (native.get('schema') != 'compact-windows-w2-reference/v1' or
         native.get('executable_sha256') != actual_sha or native.get('source_sha256') != source_sha or
         native.get('native_reference_passed') is not True or native.get('exit_code') != 0x12345678 or
-        native.get('architecture') != 'X64' or native.get('stdout') != '' or native.get('stderr') != '' or
+        native.get('architecture') != 'X64' or
+        not isinstance(native.get('platform'), str) or not native['platform'].startswith('Microsoft Windows ') or
+        native.get('stdout') != '' or native.get('stderr') != '' or
         not expected_commit or native.get('source_commit') != expected_commit):
         raise ValueError('reference provenance/result mismatch')
     result = execute(probe, image, base)

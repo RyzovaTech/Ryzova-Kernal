@@ -75,9 +75,18 @@ class WindowsW2Tests(unittest.TestCase):
         self.denied(blob+bytes(4*1024*1024))
     def test_all_unsupported_data_directories_fail_closed(self):
         for i in range(16):
-            if i!=5:self.denied(self.mutate(0x98+112+i*8,'II',(0x1000,8)))
+            if i not in (5,6):self.denied(self.mutate(0x98+112+i*8,'II',(0x1000,8)))
         self.denied(self.mutate(0x98+108,'I',17))
         self.denied(self.mutate(0x98+112+5*8,'II',(0x1000,0)))
+    def test_bounded_inert_debug_metadata_matches_file_backing(self):
+        # One ordinary debug entry pointing at a four-byte payload in .data.
+        record=struct.pack('<IIHHIIII',0,0,0,0,13,4,0x2020,0x420)
+        blob=pe(b'\xc3',record+bytes(4)+b'ABCD')
+        blob=self.mutate(0x98+112+6*8,'II',(0x2000,28),blob)
+        self.assertEqual(self.admitted(blob)[0],0)
+        for off,fmt,value in [(0x98+112+6*8,'II',(0x2000,27)),(0x98+112+6*8,'II',(0x2000,28*33)),(0x400,'I',1),(0x400+16,'I',0xFFFFFFFF),(0x400+20,'I',0xFFFF0000),(0x400+24,'I',0x421)]:
+            self.denied(self.mutate(off,fmt,value,blob))
+
     def test_header_alignment_and_overflow(self):
         for offset, value in [(60,0xFFFFFFF0),(0x98+32,512),(0x98+36,1024*128),(0x98+56,0xFFFFFFFF),(0x98+56,64*1024*1024),(0x98+60,513),(0x188+8,0xFFFFFFFF),(0x188+16,0xFFFFFFFF),(0x188+20,0xFFFFFE00)]:self.denied(self.mutate(offset,'I',value))
     def test_entry_must_be_in_backed_executable_virtual_bytes(self):
@@ -169,10 +178,10 @@ class WindowsW2Tests(unittest.TestCase):
     def test_reference_comparison_rejects_wrong_source_image_commit_and_fake_result(self):
         image=self.directory/'reference.exe';image.write_bytes(pe(bytes.fromhex('b878563412c3')))
         receipt=self.directory/'reference.json';output=self.directory/'comparison.json'
-        native={'schema':'compact-windows-w2-reference/v1','executable_sha256':hashlib.sha256(image.read_bytes()).hexdigest(),'source_sha256':hashlib.sha256((ROOT/'tests/fixtures/windows_w2_reference.c').read_bytes()).hexdigest(),'source_commit':'a'*40,'native_reference_passed':True,'exit_code':0x12345678,'architecture':'X64','stdout':'','stderr':''}
+        native={'schema':'compact-windows-w2-reference/v1','executable_sha256':hashlib.sha256(image.read_bytes()).hexdigest(),'source_sha256':hashlib.sha256((ROOT/'tests/fixtures/windows_w2_reference.c').read_bytes()).hexdigest(),'source_commit':'a'*40,'native_reference_passed':True,'exit_code':0x12345678,'architecture':'X64','platform':'Microsoft Windows 10.0.20348','stdout':'','stderr':''}
         with patch.dict(os.environ,{'GITHUB_SHA':'a'*40}):
             receipt.write_text(json.dumps(native));self.assertTrue(qualify_reference(self.probe,image,receipt,output)['reference_match'])
-            for key,value in [('source_commit','b'*40),('executable_sha256','0'*64),('source_sha256','0'*64),('exit_code',37),('architecture','Arm64'),('native_reference_passed',False),('stdout','forged')]:
+            for key,value in [('source_commit','b'*40),('executable_sha256','0'*64),('source_sha256','0'*64),('exit_code',37),('architecture','Arm64'),('platform','Linux'),('native_reference_passed',False),('stdout','forged')]:
                 bad=dict(native);bad[key]=value;receipt.write_text(json.dumps(bad))
                 with self.assertRaises(ValueError):qualify_reference(self.probe,image,receipt,output)
             receipt.write_text(json.dumps(native));image.write_bytes(pe(bytes.fromhex('b825000000c3')))

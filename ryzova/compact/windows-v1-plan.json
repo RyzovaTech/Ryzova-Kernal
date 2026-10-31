@@ -53,7 +53,7 @@
       "depends_on": [
         "W1"
       ],
-      "state": "implemented-awaiting-cross-host-ci"
+      "state": "implemented"
     },
     {
       "id": "W3",

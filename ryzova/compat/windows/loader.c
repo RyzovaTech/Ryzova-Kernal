@@ -53,9 +53,27 @@ static int relocations(const unsigned char *f,const CwPlan *p,unsigned char *ima
     }
     return CW_OK;
 }
+/* Debug records are inert bytes: never load a PDB, follow a path or run code.
+   Both RVA and raw file location must agree on a bounded backed payload. */
+static int debug_metadata(const unsigned char *f,const CwPlan *p,uint32_t rva,uint32_t bytes) {
+    uint32_t i;int index;const unsigned char *table;
+    if(!bytes)return CW_OK;
+    if(bytes%28 || bytes>28U*32U)return CW_HEADER;
+    index=section_at(p,rva,bytes,1);if(index<0)return CW_HEADER;
+    table=f+p->sections[index].raw+(rva-p->sections[index].rva);
+    for(i=0;i<bytes;i+=28) {
+        uint32_t length=u32(table+i+16),at=u32(table+i+20),raw=u32(table+i+24);
+        if(u32(table+i))return CW_UNSUPPORTED;
+        if(!length){if(at || raw)return CW_HEADER;continue;}
+        index=section_at(p,at,length,1);
+        if(index<0 || (uint64_t)p->sections[index].raw+at-p->sections[index].rva!=raw)return CW_HEADER;
+    }
+    return CW_OK;
+}
 int cw_plan(const unsigned char *f,size_t size,uint64_t base,CwPlan *out) {
     CwPlan p;uint32_t pe,opt,table,alignment,file_alignment,dirs,i,j,entry_ok=0;
     uint16_t optional,count,characteristics;
+    uint32_t debug_rva=0,debug_bytes=0;
     if(out)memset(out,0,sizeof(*out));
     if(!f || !out || size>CW_MAX_FILE || !span(size,0,64) || f[0]!='M' || f[1]!='Z')return CW_HEADER;
     pe=u32(f+60);
@@ -84,8 +102,9 @@ int cw_plan(const unsigned char *f,size_t size,uint64_t base,CwPlan *out) {
         uint32_t rva=u32(f+opt+112+8*i),bytes=u32(f+opt+116+8*i);
         if(!rva && !bytes)continue;
         if(!rva || !bytes)return CW_HEADER;
-        if(i!=5)return CW_UNSUPPORTED; /* imports, unwind, TLS, debug, delay imports, CLR, etc. */
-        p.reloc_rva=rva;p.reloc_bytes=bytes;
+        if(i==5){p.reloc_rva=rva;p.reloc_bytes=bytes;}
+        else if(i==6){debug_rva=rva;debug_bytes=bytes;}
+        else return CW_UNSUPPORTED; /* imports, unwind, TLS, delay imports, CLR, etc. */
     }
     if(p.reloc_bytes && (characteristics&1))return CW_RELOCATION;
     for(i=0;i<count;i++) {
@@ -109,6 +128,7 @@ int cw_plan(const unsigned char *f,size_t size,uint64_t base,CwPlan *out) {
            span(virtual_size,p.entry-d->rva,1) && span(d->bytes,p.entry-d->rva,1))entry_ok=1;
     }
     if(!entry_ok)return CW_MAPPING;
+    i=(uint32_t)debug_metadata(f,&p,debug_rva,debug_bytes);if(i)return (int)i;
     i=(uint32_t)relocations(f,&p,NULL);if(i)return (int)i;
     *out=p;return CW_OK;
 }
