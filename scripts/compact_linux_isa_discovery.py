@@ -101,7 +101,10 @@ def create_report(root, profiles):
         result = {"target":name, "guest_smoke_passed":target.get("guest_smoke_passed") is True,
                   "guest_actual_result":target.get("guest_actual_result"), "candidate":None,
                   "limitations":"candidate bytes do not prove a decoded/failing ISA opcode"}
-        if type(rip_string) is str and re.fullmatch(r"[0-9a-f]{1,16}",rip_string):
+        # Never label an ordinary successful exit RIP as a failed opcode.
+        if (target.get("guest_smoke_passed") is not True
+                and type(rip_string) is str
+                and re.fullmatch(r"[0-9a-f]{1,16}",rip_string)):
             rip = int(rip_string,16)
             # Pin to exactly the measured executable basename, never use any
             # untrusted guest pathname or arbitrary path from a profile.
