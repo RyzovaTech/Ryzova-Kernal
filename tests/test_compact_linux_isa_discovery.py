@@ -68,6 +68,9 @@ class IsaDiscoveryTests(unittest.TestCase):
             self.assertEqual(result["reports"][0]["candidate"]["image"],"main")
             self.assertEqual(result["reports"][0]["candidate"]["candidate_bytes_hex"],
                              "0f57c0c3")
+            successful={**target,"guest_smoke_passed":True}
+            self.assertIsNone(create_report(root,{"targets":[successful]})
+                              ["reports"][0]["candidate"])
             wrong={**target,"elf":{"sha256":"0"*64}}
             with self.assertRaises(ValueError):
                 create_report(root,{"targets":[wrong]})
