@@ -22,7 +22,7 @@ class Launch(C.Structure):
 class Allocation(C.Structure):
     _fields_=[('first',C.c_uint32),('pages',C.c_uint32)]
 class Services(C.Structure):
-    _fields_=[('launch',Launch),('last_error',C.c_uint32),('output_bytes',C.c_uint32*2),('calls',C.c_uint32*9),('output',(C.c_ubyte*65536)*2),('command_bytes',C.c_ubyte*2048),('command_base',C.c_uint64),('heap_base',C.c_uint64),('heap',C.c_void_p),('heap_bytes',C.c_size_t),('owner',C.c_ubyte*256),('protection',C.c_ubyte*256),('allocations',Allocation*16),('owner',C.c_void_p)]
+    _fields_=[('launch',Launch),('last_error',C.c_uint32),('output_bytes',C.c_uint32*2),('calls',C.c_uint32*9),('output',(C.c_ubyte*65536)*2),('command_bytes',C.c_ubyte*2048),('command_base',C.c_uint64),('heap_base',C.c_uint64),('heap',C.c_void_p),('heap_bytes',C.c_size_t),('owner',C.c_ubyte*256),('protection',C.c_ubyte*256),('allocations',Allocation*16),('bound_machine',C.c_void_p)]
 
 def put_utf16(array,text):
     units=struct.unpack('<'+'H'*(len(text.encode('utf-16le'))//2),text.encode('utf-16le'))

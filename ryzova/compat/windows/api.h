@@ -28,7 +28,7 @@ typedef struct CwServices {
     size_t heap_bytes;
     unsigned char owner[CW_HEAP_LIMIT/4096], protection[CW_HEAP_LIMIT/4096];
     CwAllocation allocations[16];
-    CwMachine *owner;
+    CwMachine *bound_machine;
 } CwServices;
 /* Zero-initialize services before first attach; a service belongs to one machine.
    Trusted launcher attaches explicit policy/backing, never host env/DLLs. */
