@@ -56,3 +56,28 @@ relocations, FP/SIMD behavior and guest application workflows remain mandatory.
 The helper is a triage aid to determine which **original Ryzova-specific ISA
 implementation** should be built and tested next; it does NOT close 4B–4F,
 AMD64-ABI or any Compact Linux V1 application acceptance ID.
+
+## 4B bounded image buffers and non-overlapping initial loader
+
+The source-built CPython 3.12.10 target executable was measured at **27,726,864
+bytes**; the previous fixed 4-MiB ELF file cap rejected it before interpreting
+the image. The candidate upper bound is now **32 MiB per file** and **48 MiB
+across main + explicit executable/library grant image buffers**. These image
+buffers are **separate** from the existing maximum 16-MiB per-process address
+arena and nine-arena aggregate cap. The C API and host probe both reject
+oversized images and cumulative grants before allocation/dereference. A
+sparse-file test admits an ELF of the actual measured CPython byte length,
+while a 32-MiB+1 image and an over-48-MiB grant pair fail closed.
+
+The measured CPython PT_LOAD footprint exceeds the old 4-to-8-MiB gap between
+main PIE and the hard-coded musl interpreter. The loader now retains the
+historical 0x800000 interpreter bias for small programs but chooses a
+non-overlapping 2-MiB-aligned bias beyond the main's mapped high address for
+larger programs. A synthetic, valid AMD64 PIE spanning 6 MiB and a separate
+executable interpreter must complete a real Ryzova host VM run. Both the ELF
+input limit and loader placement remain bounded by original canonical address
+and 16-MiB arena admission checks.
+
+**This is not proof that CPython starts, imports modules, or supports required
+SSE2/FP instructions.** Real pinned guest CPython and full pipeline workloads
+must be separately demonstrated before CLX-04 or MEM-PROC/RESOURCE may close.

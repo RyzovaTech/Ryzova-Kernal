@@ -26,3 +26,5 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_compact_linux_isa_discovery.py' -v
           python -m py_compile scripts/compact_linux_isa_discovery.py
+      - name: Validate bounded ELF image/aggregate budgets and large PIE relocation
+        run: python -m unittest discover -s tests -p 'test_phase9_image_admission.py' -v

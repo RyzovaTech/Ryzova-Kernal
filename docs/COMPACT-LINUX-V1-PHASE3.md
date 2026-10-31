@@ -179,3 +179,13 @@ has a dependency overlap: measuring complete guest workloads requires their
 loader/ISA support, which is a Phase 4 exit. Resolving those actual failures is
 required before claiming Phase 3 fully complete; no acceptance criterion is
 removed to make the status green.
+
+## 3D measured image buffer ceiling (CLX-04 dependency)
+
+Current frozen CPython 3.12.10 build measures 27,726,864 ELF file bytes,
+above the earlier four-MiB image input limit. A bounded 32-MiB individual
+image buffer and 48-MiB cumulative main/grant buffer admission is implemented
+for target discovery. Arena allocation limits, source hashes, fault behavior
+and guest acceptance gates are unchanged; these figures are **not** complete
+RAM/RSS/process-tree consumption profiles. Runtime boot, CPython imports,
+futex and full workflow budget qualification remain pending.

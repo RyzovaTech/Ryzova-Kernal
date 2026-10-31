@@ -11,6 +11,7 @@ on:
       - 'ryzova/compact/linux-v1-plan.json'
       - 'ryzova/compat/linux/**'
       - 'tests/test_compact_linux_targets.py'
+      - 'tests/test_phase9_image_admission.py'
       - 'tests/fixtures/compact_git_config_probes.c'
       - '.github/workflows/compact-linux-target-profiles.yml'
   workflow_dispatch:
