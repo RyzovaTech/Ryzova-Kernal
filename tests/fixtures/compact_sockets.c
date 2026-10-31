@@ -15,23 +15,26 @@ static int waitchild(long pid){int status;return C(61,pid,&status,0)==pid && sta
 long app_main(long argc,char **argv,char **env)
 {
  int fds[2],status=0;long n,fd,child,server,client,accepted;unsigned int length;char data[32];
- unsigned char address[16]={2,0},peer[128]={0};U statbuf[18];
+ unsigned char address[32]={2,0},peer[128]={0};U statbuf[18];
  struct {int fd;unsigned short events,revents;} pollfd;
  (void)env;CHECK(argc==3);
  if(equal(argv[1],"pair")){
   CHECK(!pair(fds,0));CHECK(C(1,fds[0],"hello",5)==5 && C(0,fds[1],data,5)==5);
   CHECK(data[0]=='h' && data[4]=='o' && C(1,fds[1],"ok",2)==2 && C(0,fds[0],data,2)==2 && data[1]=='k');
   CHECK(!C(5,fds[0],statbuf,0) && (((unsigned int *)statbuf)[6]&0170000)==0140000);
- }else if(equal(argv[1],"unix") || equal(argv[1],"inet") || equal(argv[1],"accept-fault")){
-  int domain=equal(argv[1],"unix")?1:2;U unique=(U)C(39,0,0,0);
+ }else if(equal(argv[1],"unix") || equal(argv[1],"inet") || equal(argv[1],"inet6") || equal(argv[1],"accept-fault")){
+  int domain=equal(argv[1],"unix")?1:(equal(argv[1],"inet6")?10:2);
+  unsigned int addrsize=domain==10?28:16;
+  U unique=(U)C(39,0,0,0);
   address[0]=(unsigned char)domain;
   if(domain==1){unsigned int i;for(i=3;i<16;i++){address[i]=(unsigned char)(unique%26+'a');unique=unique/26+3;}}
+  else if(domain==10){address[23]=1;}
   else{address[4]=127;address[7]=1;}
-  server=C(41,domain,1,0);CHECK(server>=0 && !C(49,server,address,16) && !C(50,server,4,0));
-  length=16;CHECK(!C(51,server,address,&length) && length==16);
+  server=C(41,domain,1,0);CHECK(server>=0 && !C(49,server,address,addrsize) && !C(50,server,4,0));
+  length=addrsize;CHECK(!C(51,server,address,&length) && length==addrsize);
   child=C(57,0,0,0);CHECK(child>=0);
   if(!child){
-   client=C(41,domain,1,0);CHECK(client>=0 && !C(42,client,address,16));CHECK(C(1,client,"request",7)==7);
+   client=C(41,domain,1,0);CHECK(client>=0 && !C(42,client,address,addrsize));CHECK(C(1,client,"request",7)==7);
    CHECK(C(0,client,data,32)==5 && data[0]=='r' && data[4]=='y');CHECK(!C(48,client,1,0));CHECK(C(0,client,data,32)==0);return 0;
   }
   if(equal(argv[1],"accept-fault"))CHECK(C(43,server,1,&length)==-14);
@@ -77,9 +80,75 @@ long app_main(long argc,char **argv,char **env)
   client=C(41,2,1,0);CHECK(client>=0 && C(49,client,address,16)==-98);
   CHECK(!C(50,fd,1,0) && !C(3,fd,0,0) && !C(49,client,address,16));
  }else if(equal(argv[1],"errors")){
-  CHECK(C(41,10,1,0)==-97 && C(41,1,2,0)==-94 && C(41,2,1,17)==-93);
+  CHECK(C(41,999,1,0)==-97 && C(41,10,3,0)==-94 && C(41,1,2,0)==-94 && C(41,2,1,17)==-93);
   fd=C(41,2,1,0);CHECK(fd>=0);address[4]=127;address[7]=1;CHECK(C(42,fd,address,16)==-111);
   CHECK(C(48,fd,1,0)==-107 && C(49,fd,1,16)==-14 && C(43,1,0,0)==-88);
+ }else if(equal(argv[1],"port-sharing")){
+  /* Linux keeps TCP and UDP local-port namespaces independent. */
+  int udp,tcp,duplicate_udp,duplicate_tcp;
+  address[4]=127;address[7]=1;
+  udp=C(41,2,2,0);CHECK(udp>=0 && !C(49,udp,address,16));
+  length=16;CHECK(!C(51,udp,address,&length) && length==16 && (address[2] || address[3]));
+  tcp=C(41,2,1,0);CHECK(tcp>=0 && !C(49,tcp,address,16));
+  duplicate_udp=C(41,2,2,0);
+  CHECK(duplicate_udp>=0 && C(49,duplicate_udp,address,16)==-98);
+  duplicate_tcp=C(41,2,1,0);
+  CHECK(duplicate_tcp>=0 && C(49,duplicate_tcp,address,16)==-98);
+  CHECK(!C(3,udp,0,0) && !C(3,tcp,0,0));
+  CHECK(!C(49,duplicate_udp,address,16) && !C(49,duplicate_tcp,address,16));
+  CHECK(!C(3,duplicate_udp,0,0) && !C(3,duplicate_tcp,0,0));
+ }else if(equal(argv[1],"udp4") || equal(argv[1],"udp6")){
+  int domain=equal(argv[1],"udp6")?10:2;
+  int addrsize=domain==10?28:16;
+  unsigned int src_length;
+  address[0]=(unsigned char)domain;
+  if(domain==10)address[23]=1;
+  else{address[4]=127;address[7]=1;}
+  server=C(41,domain,2|04000,0);
+  CHECK(server>=0 && !C(49,server,address,addrsize));
+  length=addrsize;CHECK(!C(51,server,address,&length) && length==addrsize);
+  client=C(41,domain,2,0);CHECK(client>=0);
+  CHECK(call(44,client,(long)"packet",6,0,(long)address,addrsize)==6);
+  src_length=sizeof peer;
+  CHECK(call(45,server,(long)data,3,2,(long)peer,(long)&src_length)==3);
+  CHECK(data[0]=='p' && data[2]=='c' && src_length==addrsize && peer[0]==domain);
+  src_length=sizeof peer;
+  CHECK(call(45,server,(long)data,32,0,(long)peer,(long)&src_length)==6);
+  CHECK(data[0]=='p' && data[5]=='t' && src_length==addrsize);
+  CHECK(call(45,server,(long)data,32,0,0,0)==-11);
+  CHECK(!C(42,client,address,addrsize) && C(1,client,"last",4)==4);
+  CHECK(C(0,server,data,2)==2 && data[0]=='l' && data[1]=='a');
+  CHECK(C(0,server,data,32)==-11);
+  CHECK(C(50,server,1,0)==-95 && C(43,server,0,0)==-95);
+ }else if(equal(argv[1],"udp-quota")){
+  int i;
+  address[0]=2;address[4]=127;address[7]=1;
+  server=C(41,2,2|04000,0);
+  CHECK(server>=0 && !C(49,server,address,16));
+  length=16;CHECK(!C(51,server,address,&length) && length==16);
+  client=C(41,2,2|04000,0);CHECK(client>=0);
+  CHECK(call(44,client,1,1,0,(long)address,16)==-14);
+  for(i=0;i<4;i++)CHECK(call(44,client,(long)"x",1,0,(long)address,16)==1);
+  CHECK(call(44,client,(long)"y",1,0,(long)address,16)==-11);
+  CHECK(C(0,server,data,1)==1 && data[0]=='x');
+  CHECK(call(44,client,(long)"z",1,0,(long)address,16)==1);
+  for(i=0;i<3;i++)CHECK(C(0,server,data,1)==1 && data[0]=='x');
+  CHECK(C(0,server,data,1)==1 && data[0]=='z');
+  CHECK(C(0,server,data,1)==-11);
+  CHECK(call(44,client,(long)big,sizeof big+1,0,(long)address,16)==-90);
+ }else if(equal(argv[1],"udp-deny")){
+  unsigned char offlink[28]={2,0};
+  fd=C(41,2,2,0);CHECK(fd>=0);
+  offlink[4]=10;offlink[7]=2;
+  CHECK(call(44,fd,(long)"x",1,0,(long)offlink,16)==-101);
+  CHECK(C(42,fd,offlink,16)==-101);
+  CHECK(!C(3,fd,0,0));
+ }else if(equal(argv[1],"ipv6-deny")){
+  unsigned char offlink[28]={10,0};
+  fd=C(41,10,1,0);CHECK(fd>=0);
+  offlink[8]=0x20;offlink[23]=1;
+  CHECK(C(42,fd,offlink,28)==-101 && C(49,fd,offlink,28)==-101);
+  CHECK(!C(3,fd,0,0));
  }else if(equal(argv[1],"fd-limit")){
   int i,opened[16];for(i=0;i<13;i++){opened[i]=(int)C(41,1,1,0);CHECK(opened[i]>=0);}
   CHECK(C(41,1,1,0)==-24 && pair(fds,0)==-24);

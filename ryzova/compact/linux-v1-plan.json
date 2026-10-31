@@ -173,8 +173,8 @@
         "Interactive ash job control through a PTY"
       ],
       "qualification": "pending-v1-workflows",
-      "source_lock_status": "pending-source-and-transitive-build-lock",
-      "release_binary_sha256": null,
+      "source_lock_status": "verified-two-GitHub-CI-source-builds",
+      "release_binary_sha256": "af302fcea7588067c6c2eefaa594a0f1a713a2e411f3a1f3a5d689ca032db577",
       "baseline_binary_sha256": "6e123e7f3202a8c1e9b1f94d8941580a25135382b99e8d3e34fb858bba311348",
       "build_configuration": "Version-identical unmodified source; explicit applet and ash job-control config. Existing published binary remains the regression fixture."
     },
@@ -190,8 +190,8 @@
         "Authorized DNS/socket/ssl exchange with positive and negative certificate tests"
       ],
       "qualification": "pending-v1-workflows",
-      "source_lock_status": "pending-source-and-transitive-build-lock",
-      "release_binary_sha256": null,
+      "source_lock_status": "verified-two-GitHub-CI-source-builds",
+      "release_binary_sha256": "051ab464898df8360a8ce6334e0786e97c8e27c82adbea7506e659de8a3863b5",
       "required_modules": [
         "json",
         "pathlib",
@@ -217,8 +217,8 @@
         "Reject an untrusted certificate and an ungranted destination"
       ],
       "qualification": "pending-v1-workflows",
-      "source_lock_status": "pending-source-and-transitive-build-lock",
-      "release_binary_sha256": null,
+      "source_lock_status": "verified-two-GitHub-CI-source-builds",
+      "release_binary_sha256": "33c49dde0c6f21012d214abbf7e140112030ff7e50cd1d14632c96779a42c100",
       "build_configuration": "C command-line tools with HTTPS remote helpers; GUI/Tcl/Perl integrations are outside v1."
     },
     {
@@ -233,8 +233,8 @@
         "Build and load a small shared library"
       ],
       "qualification": "pending-v1-workflows",
-      "source_lock_status": "pending-source-and-transitive-build-lock",
-      "release_binary_sha256": null,
+      "source_lock_status": "verified-two-GitHub-CI-source-builds",
+      "release_binary_sha256": "213bc7fef14e2b62e5bc45d871d215b0e74842f1469fae613ac83afaf365ce5c",
       "build_configuration": "C language, x86-64 baseline/SSE2, generic tuning, no AVX requirement; no C++/Fortran/Go claim."
     },
     {
@@ -247,8 +247,8 @@
         "Assemble/link C build outputs; inspect ELF/symbols with readelf/nm"
       ],
       "qualification": "pending-v1-workflows",
-      "source_lock_status": "pending-source-and-transitive-build-lock",
-      "release_binary_sha256": null
+      "source_lock_status": "verified-two-GitHub-CI-source-builds",
+      "release_binary_sha256": "1ececdfb0c98469ba1c9e8c5b41c948793116b5a4dfe8960c81b0a70a533cf3b"
     },
     {
       "id": "make",
@@ -260,8 +260,8 @@
         "Clean build and incremental rebuild of the C project using guest processes"
       ],
       "qualification": "pending-v1-workflows",
-      "source_lock_status": "pending-source-and-transitive-build-lock",
-      "release_binary_sha256": null
+      "source_lock_status": "verified-two-GitHub-CI-source-builds",
+      "release_binary_sha256": "d7e659b06520443304bb6e888aeedd6a1cea4113afbfcd84b0e9aba43940288c"
     },
     {
       "id": "musl",
@@ -273,8 +273,8 @@
         "Dynamic/static target application startup, TLS, stdio, allocation and pthread behavior"
       ],
       "qualification": "pending-v1-workflows",
-      "source_lock_status": "pending-source-and-transitive-build-lock",
-      "release_binary_sha256": null,
+      "source_lock_status": "verified-two-GitHub-CI-source-builds",
+      "release_binary_sha256": "dca4c0d98f94213c20eb616ca7e43684d3a00a629ec9459db18d161b899be3c8",
       "source_sha256": "d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a"
     }
   ],
@@ -424,8 +424,10 @@
         "musl"
       ],
       "acceptance": "Source checksums, complete transitive dependencies, build configs/tool versions and final binary hashes are pinned and recorded.",
-      "state": "pending",
-      "evidence": null
+      "state": "passed",
+      "evidence": "docs/validation/compact-linux-v1-binary-locks.json",
+      "progress": "Seven pinned release ELF hashes matched on two independent GitHub Actions runs; exact-head artifact and source-lock checking required; app/native V1 qualification separately open",
+      "progress_document": "docs/COMPACT-LINUX-V1-PHASE3.md"
     },
     {
       "id": "NATIVE-EVIDENCE",

@@ -150,3 +150,80 @@ result counts and measured arena peaks. The driver only exits on the new final
 marker; old runtime markers cannot terminate it early. Missing/mutated evidence
 fails. MEM-PROC remains partial until its declared profile is qualified and wider
 required-call scope is resolved; RESOURCE and Phase 3 remain open.
+
+## Named-target build and Phase 4 handoff
+
+`linux-target-sources.json` now freezes all seven target source releases plus
+GMP, MPC, MPFR, Linux headers, zlib, OpenSSL and curl. Each download is checked
+with SHA256/SHA512 before data-filtered extraction. The build driver is an exact
+musl-cross-make Git commit; its litecross Makefile is used without source patches.
+The cross bootstrap includes C++ for building GCC itself; the native guest GCC
+has only the declared C language frontend. Host compiler/kernel details, build
+commands and hashes/sizes of produced files are recorded, not represented as a
+hermetic or bit-for-bit reproducibility guarantee.
+
+`compact-linux-target-profiles.yml` builds real x86_64-musl executables and their
+libraries, runs Linux-reference smoke measurements in a disposable chroot, then
+runs a separate bounded Flex admission probe. The report distinguishes image/load
+span, reference RSS/time/syscalls/I/O, and actual guest result/steps. Reference
+RSS is a maximum child measurement, not aggregate tree RAM; observed descriptor
+numbers are not live-FD peaks. Smoke workloads do not replace the full frozen
+application/network/certificate/PTY workflows. Build logs and measurement JSON
+are retained; no new binary release is published.
+
+Phase 4 entry is ready only if all seven version-identical Linux-reference
+smokes pass and the generated artifact manifest matches the measured executables.
+A source lock alone cannot pass this gate. Guest failures are explicit inputs to
+Phase 4; they cannot close RESOURCE or Phase 3. The original Phase 3/4 ordering
+has a dependency overlap: measuring complete guest workloads requires their
+loader/ISA support, which is a Phase 4 exit. Resolving those actual failures is
+required before claiming Phase 3 fully complete; no acceptance criterion is
+removed to make the status green.
+
+## 3D measured image buffer ceiling (CLX-04 dependency)
+
+Current frozen CPython 3.12.10 build measures 27,726,864 ELF file bytes,
+above the earlier four-MiB image input limit. A bounded 32-MiB individual
+image buffer and 48-MiB cumulative main/grant buffer admission is implemented
+for target discovery. Arena allocation limits, source hashes, fault behavior
+and guest acceptance gates are unchanged; these figures are **not** complete
+RAM/RSS/process-tree consumption profiles. Runtime boot, CPython imports,
+futex and full workflow budget qualification remain pending.
+
+## 3E strict final acceptance gate and first Python code-execution proof
+
+The prior seven version/startup smokes now PASS, but the planned native
+CPython application/stdlib project is not implied by a `--version` exit.
+The profile runner now additionally attempts `python3.12 -c
+'print("CLX_PYTHON_CODE_OK")'` as a **separate** guest code-execution probe.
+It preserves genuine stdout, guest status, last RIP and denied syscall
+number without changing `guest_smoke_passed` or setting
+`full_target_workflows_qualified`. A failure remains a failure.
+
+`scripts/compact_linux_v1_gate.py` and
+`.github/workflows/compact-linux-v1-final-gate.yml` explicitly fail the
+final merge acceptance while any of 17 reviewed requirements, CLX-02–08
+phases, seven frozen final-binary hashes or documented final native
+QEMU evidence are missing. The final gate is **expected to be red during
+development**; older source/regression jobs can be green even while
+Linux V1 qualification is incomplete. This is metadata consistency and
+review support, not substitute native acceptance or permission to merge.
+
+## 3E independently recorded guest I/O counters
+
+The bounded C emulator result now returns invocation-local guest-world
+`network_bytes`, `resource_bytes` and `output_bytes` totals **before**
+resource cleanup. `jobs_probe` emits a separate `COMPACT_GUEST_IO` line
+without changing the existing `COMPACT_JOBS_RESULT` and
+`COMPACT_RESOURCE_STATS` parsing contracts. The frozen-target
+`target-profiles.json` records these counters for each version smoke
+and the independently assessed CPython `-c` probe.
+
+These are **logical guest-model counters** representing accepted operations
+under their existing quotas, not physical NIC transfers, host RSS,
+true concurrent file-descriptor high-water marks, total process-tree memory
+or production kernel resource accounting. Source-built Linux-vs-Ryzova
+network-differential fixtures and null-I/O negative tests check the
+recording. The `RESOURCE` acceptance gate remains open until actual
+per-application budgets for each required full guest workflow,
+aggregate accounting and independent native evidence pass.

@@ -338,7 +338,7 @@ static int valid_path(const char *path,size_t length)
 int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *arena,size_t capacity,
     RyzLinuxFiles *files,const RyzProcessArgs *args,const RyzJobConfig *config,RyzLinuxWrite output,void *opaque,RyzVmResult *result)
 {
-    Jobs *jobs;Task *root;uint64_t entry,stack;unsigned int i,j,q;size_t n;int status,progress;
+    Jobs *jobs;Task *root;uint64_t entry,stack;unsigned int i,j,q;size_t n,total_image_bytes;int status,progress;
     if(result)memset(result,0,sizeof(*result));
     if(config && config->filesystem){
         RyzFilesystemResources *fs=config->filesystem;fs->output_size=0;
@@ -359,10 +359,15 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
             for(j=0;j<i;j++)if(g->port==net->grants[j].port && !memcmp(g->address,net->grants[j].address,4))return RYZ_VM_BAD_INPUT;
         }
     }
+    /* Account image buffers separately from the finite per-process arenas. */
+    if(!image || length==0 || length>RYZ_PROCESS_IMAGE_MAX)return RYZ_VM_BAD_INPUT;
+    total_image_bytes=length;
     for(i=0;i<config->exec_count;i++){
         if(!config->execs[i].path || config->execs[i].path[0]!='/')return RYZ_VM_BAD_INPUT;
         for(n=0;n<=256 && config->execs[i].path[n];n++);
-        if(!valid_path(config->execs[i].path,n) || !config->execs[i].image || config->execs[i].size==0 || config->execs[i].size>RYZ_PROCESS_IMAGE_MAX)return RYZ_VM_BAD_INPUT;
+        if(!valid_path(config->execs[i].path,n) || !config->execs[i].image || config->execs[i].size==0 || config->execs[i].size>RYZ_PROCESS_IMAGE_MAX ||
+           config->execs[i].size>RYZ_PROCESS_IMAGE_TOTAL_MAX-total_image_bytes)return RYZ_VM_BAD_INPUT;
+        total_image_bytes+=config->execs[i].size;
         for(j=0;j<i;j++)if(strcmp(config->execs[j].path,config->execs[i].path)==0)return RYZ_VM_BAD_INPUT;
     }
     result->instruction_limit=config->max_steps;
@@ -440,6 +445,10 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     if(jobs->world.network_failed)status=RYZ_JOB_NETWORK_LIMIT;
     result->pipe_bytes=jobs->world.pipe_bytes;
     result->arena_peak_bytes=jobs->arena_peak;result->shared_peak_pages=jobs->world.shared_peak;
+    /* Snapshot before closing descriptors/tearing down the guest world. */
+    result->network_bytes=jobs->world.network_bytes;
+    result->resource_bytes=jobs->world.resource_bytes;
+    result->output_bytes=jobs->world.output_bytes;
     for(i=0;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state!=FREE){futex_clear(&jobs->tasks[i]);ryz_world_close(&jobs->tasks[i].process,0);}
     for(i=0;i<RYZ_JOB_TASKS;i++)mm_release(jobs,&jobs->tasks[i]);
     if(config->filesystem && config->filesystem->output)fs_export(&jobs->world,config->filesystem);

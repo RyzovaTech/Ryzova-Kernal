@@ -4,7 +4,10 @@
 #include "subset_vm.h"
 #include "elf64.h"
 #define RYZ_PROCESS_MAX_SPAN (16U * 1024U * 1024U)
-#define RYZ_PROCESS_IMAGE_MAX (4U * 1024U * 1024U)
+/* 27,726,864-byte measured CPython 3.12.10 ELF needs bounded headroom. */
+#define RYZ_PROCESS_IMAGE_MAX (32U * 1024U * 1024U)
+/* Main image + explicitly granted executable/library buffers, separately from arena. */
+#define RYZ_PROCESS_IMAGE_TOTAL_MAX (48U * 1024U * 1024U)
 #define RYZ_PROCESS_STACK 65536U
 #define RYZ_PROCESS_STEPS 262144U
 #define RYZ_PROCESS_ARGS 16U

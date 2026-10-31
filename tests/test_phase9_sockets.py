@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 import os
+import re
 from pathlib import Path
 import signal
 import subprocess
@@ -29,6 +30,15 @@ class SocketTests(unittest.TestCase):
         finally:
             try:os.killpg(process.pid,signal.SIGKILL)
             except ProcessLookupError:pass
+    def test_udp_guest_network_transfer_counter_measured_not_inferred(self):
+        out=self.vm('udp4')
+        self.assertEqual(out.returncode,0,out.stderr)
+        match=re.search(rb'COMPACT_GUEST_IO network_bytes=([0-9]+) resource_bytes=([0-9]+) output_bytes=([0-9]+)',out.stderr)
+        self.assertIsNotNone(match,out.stderr)
+        self.assertGreaterEqual(int(match.group(1)),10)
+        self.assertEqual(int(match.group(2)),0)
+        self.assertEqual(out.stdout,b'FLEX_SOCKETS_OK udp4\nchallenge\n')
+
     def test_linux_differential_streams_http_primitives_and_byte_order(self):
         for mode in net.DIFFERENTIAL:
             with self.subTest(mode=mode):

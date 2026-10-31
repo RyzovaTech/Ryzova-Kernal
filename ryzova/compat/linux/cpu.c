@@ -118,6 +118,93 @@ static void vector_xor(Cpu *c, Operand o, unsigned int reg)
     }
     for(i=0;i<16;i++)c->xmm[reg][i]^=data[i];
 }
+/* SSE2 POR is a 128-bit bitwise union. No EFLAGS are modified. */
+static void vector_or(Cpu *c, Operand o, unsigned int reg)
+{
+    unsigned char data[16];
+    uint64_t at;
+    unsigned int i;
+    if(c->fault)return;
+    if(o.reg>=0)memcpy(data,c->xmm[o.reg],16);
+    else{
+        at=address(c,o)+c->segment;
+        /* Legacy SSE2 POR m128 requires a 16-byte aligned operand.
+         * Linux raises #GP on misalignment; the VM must fail closed. */
+        if(at&15U){c->fault=1;return;}
+        if(!ryz_memory_access(c->m,at,16,RYZ_READ)){c->fault=1;return;}
+        memcpy(data,c->m->bytes+(size_t)(at-c->m->base),16);
+    }
+    for(i=0;i<16;i++)c->xmm[reg][i]|=data[i];
+}
+/* IEEE-754 binary32 conversion for the *default RN-even mode* of CVTSI2SS.
+ * No host floating point, x87 host rounding or fabricated target output.
+ * x86 MXCSR modifications are unsupported by this finite interpreter,
+ * so non-default guest rounding/exception behavior is NOT qualified. */
+static uint32_t convert_signed_binary32(uint64_t raw,unsigned int width)
+{
+    uint64_t magnitude,kept,lost,half,parts;
+    unsigned int sign,bit,drop,exponent;
+    raw&=mask(width);
+    sign=(unsigned int)(raw>>(width*8U-1U));
+    magnitude=sign?((~raw)&mask(width))+1U:raw;
+    if(!magnitude)return 0;
+    bit=0;
+    {uint64_t v=magnitude;while(v>>=1U)bit++;}
+    exponent=bit+127U;
+    if(bit<=23U)kept=magnitude<<(23U-bit);
+    else{
+        drop=bit-23U;
+        kept=magnitude>>drop;
+        parts=(UINT64_C(1)<<drop)-1U;
+        lost=magnitude&parts;
+        half=UINT64_C(1)<<(drop-1U);
+        if(lost>half || (lost==half && (kept&1U)))kept++;
+        if(kept==(UINT64_C(1)<<24U)){kept>>=1;exponent++;}
+    }
+    return ((uint32_t)sign<<31U)|((uint32_t)exponent<<23U)|
+           ((uint32_t)kept&UINT32_C(0x7fffff));
+}
+/* Default RN-even scalar binary32 division via integer mantissas.
+ * Does not use host FP; non-default MXCSR/exception flags unqualified. */
+static uint32_t divide_binary32(uint32_t left,uint32_t right)
+{
+    uint32_t sign=(left^right)&UINT32_C(0x80000000);
+    unsigned int ea=(left>>23U)&255U,eb=(right>>23U)&255U;
+    uint32_t ma=left&UINT32_C(0x7fffff),mb=right&UINT32_C(0x7fffff);
+    int expa,expb,exponent,shift;
+    uint64_t numerator,denominator,q,r;
+    if(ea==255U && ma)return left|UINT32_C(0x00400000);
+    if(eb==255U && mb)return right|UINT32_C(0x00400000);
+    if((ea==255U && eb==255U) ||
+       (ea==0U && ma==0U && eb==0U && mb==0U))
+        return UINT32_C(0xffc00000);
+    if(ea==255U || (eb==0U && mb==0U))
+        return sign|UINT32_C(0x7f800000);
+    if((ea==0U && ma==0U) || eb==255U)return sign;
+    expa=ea?(int)ea-127:-126;
+    expb=eb?(int)eb-127:-126;
+    if(ea)ma|=UINT32_C(1)<<23U;
+    if(eb)mb|=UINT32_C(1)<<23U;
+    while(ma<(UINT32_C(1)<<23U)){ma<<=1U;expa--;}
+    while(mb<(UINT32_C(1)<<23U)){mb<<=1U;expb--;}
+    exponent=expa-expb;
+    if(ma<mb){ma<<=1U;exponent--;}
+    numerator=(uint64_t)ma<<23U;
+    if(exponent>=-126){
+        denominator=mb;q=numerator/denominator;r=numerator%denominator;
+        if(r*2U>denominator || (r*2U==denominator && (q&1U)))q++;
+        if(q==(UINT64_C(1)<<24U)){q>>=1U;exponent++;}
+        if(exponent>127)return sign|UINT32_C(0x7f800000);
+        return sign|((uint32_t)(exponent+127)<<23U)|((uint32_t)q&UINT32_C(0x7fffff));
+    }
+    shift=-126-exponent;
+    if(shift>=32)return sign;
+    denominator=(uint64_t)mb<<(unsigned int)shift;
+    q=numerator/denominator;r=numerator%denominator;
+    if(r*2U>denominator || (r*2U==denominator && (q&1U)))q++;
+    if(q>=(UINT64_C(1)<<23U))return sign|UINT32_C(0x00800000);
+    return sign|(uint32_t)q;
+}
 static uint64_t resultflags(Cpu *c,uint64_t v,unsigned int size)
 {
     unsigned int parity=0, i;
@@ -228,6 +315,29 @@ static int guest_syscall(Cpu *c)
     RyzLinuxRegs r;
     uint64_t nr=c->r[0], value;
     int64_t answer;
+    if(nr==98){
+        /* Linux x86_64 getrusage (RUSAGE_SELF only). This is logical
+         * *virtual guest* CPU accounting, not physical host timing/RSS.
+         * 1 executed guest instruction = 1 virtual nanosecond; all
+         * unmeasured counters stay zero instead of inventing host use.
+         * Do not forward any resource query to the host kernel. */
+        answer=-22; /* EINVAL for unsupported who */
+        if(c->r[7]==0){
+            if(!ryz_memory_access(c->m,c->r[6],144,RYZ_WRITE|256U))
+                answer=-14; /* EFAULT without partial guest writes */
+            else{
+                unsigned char *out=c->m->bytes+(size_t)(c->r[6]-c->m->base);
+                uint64_t usec=(uint64_t)c->result->executed_steps/1000U;
+                memset(out,0,144);
+                store(c,c->r[6],8,usec/1000000U);
+                store(c,c->r[6]+8,8,usec%1000000U);
+                answer=c->fault?-14:0;
+            }
+        }
+        c->r[1]=c->cur;c->r[11]=c->flags;c->r[0]=(uint64_t)answer;
+        c->result->syscall_count++;
+        return RYZ_VM_OK;
+    }
     if(nr==158 || nr==218){
         answer=-22;
         if(nr==218){
@@ -254,7 +364,10 @@ static int guest_syscall(Cpu *c)
         int state=c->p->job_call(c->p->job_context,c,&r,&answer);
         if(state==RYZ_CPU_BLOCKED)return state;
         if(state==RYZ_CPU_EXECUTED){c->result->syscall_count++;return RYZ_VM_OK;}
-        if(state!=RYZ_VM_OK)return state;
+        if(state!=RYZ_VM_OK){
+            if(state==RYZ_VM_SYSCALL_UNSUPPORTED){c->result->unsupported_syscall_nr=nr;c->result->unsupported_syscall_valid=1;}
+            return state;
+        }
         c->r[1]=c->cur;c->r[11]=c->flags;c->r[0]=(uint64_t)answer;c->result->syscall_count++;return RYZ_VM_OK;
     }
     if((nr==22 || nr==293) && c->p->world){
@@ -264,7 +377,7 @@ static int guest_syscall(Cpu *c)
     }
     if(!(c->p->world && (nr==21 || nr==26 || nr==74 || nr==75 || nr==76 || nr==77 || nr==81 || nr==82 || nr==83 || nr==84 || nr==86 || nr==265 || nr==87 || nr==88 || nr==89 || nr==266 || nr==267 || nr==90 || nr==91 || nr==95 || nr==217 || nr==258 || nr==263 || nr==280 || nr==228 || nr==229 || nr==201 || nr==318 || nr==324 || nr==19 || (c->p->world->resources && (nr==17 || nr==18 || (nr==157 && r.rdi==RYZ_FS_RESTRICT))) || (nr>=41 && nr<=55) || nr==288)) && nr!=7 && nr!=32 && nr!=33 && nr!=292 && nr!=40 && nr!=2 && nr!=8 && nr!=80 && nr!=63 && nr!=79 && nr!=105 && nr!=106 && nr!=117 && nr!=119 && nr!=13 && nr!=14 && nr!=110 && nr!=111 && nr!=4 && nr!=5 && nr!=6 && nr!=262 && nr!=107 && nr!=108 && nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
        nr!=16 && nr!=20 && nr!=72 && nr!=39 && nr!=60 && nr!=102 && nr!=104 && nr!=186 && nr!=231 && nr!=257)
-        return RYZ_VM_SYSCALL_UNSUPPORTED;
+        {c->result->unsupported_syscall_nr=nr;c->result->unsupported_syscall_valid=1;return RYZ_VM_SYSCALL_UNSUPPORTED;}
     r.rax=nr; r.rdi=c->r[7]; r.rsi=c->r[6]; r.rdx=c->r[2];
     r.r10=c->r[10]; r.r8=c->r[8]; r.r9=c->r[9];
     answer=ryz_linux_syscall(c->p,&r);
@@ -499,11 +612,130 @@ static int step(Cpu *c)
             if(c->operand16 && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
             vector_move(c,rm,reg,op2==0x7f);
         }
+        else if(op2==0x5e && c->repeat==0xf3 && !c->operand16){
+            /* F3 0F 5E /r DIVSS xmm, xmm/m32; upper XMM & flags unchanged. */
+            uint32_t a=0,b=0,q;unsigned int k;
+            rm=decode(c,&reg,&group,4);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            for(k=0;k<4;k++)a|=(uint32_t)c->xmm[reg][k]<<(8U*k);
+            if(rm.reg>=0){
+                for(k=0;k<4;k++)b|=(uint32_t)c->xmm[rm.reg][k]<<(8U*k);
+            }else{
+                v=get(c,rm,4);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+                b=(uint32_t)v;
+            }
+            q=divide_binary32(a,b);
+            for(k=0;k<4;k++)c->xmm[reg][k]=(unsigned char)(q>>(8U*k));
+        }
+        else if(op2==0x2a && c->repeat==0xf3 && !c->operand16){
+            /* F3 [REX.W] 0F 2A /r CVTSI2SS xmm, r/m32|r/m64.
+             * Signed conversion, default nearest ties-to-even. Preserve
+             * destination XMM[127:32] exactly and leave EFLAGS unchanged. */
+            unsigned int i,width=(c->rex&8U)?8U:4U;
+            uint32_t scalar;
+            rm=decode(c,&reg,&group,width);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            v=get(c,rm,width);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            scalar=convert_signed_binary32(v,width);
+            for(i=0;i<4;i++)c->xmm[reg][i]=(unsigned char)(scalar>>(8U*i));
+        }
+        else if(op2==0x70 && c->operand16 && !c->repeat){
+            /* 66 0F 70 /r ib: PSHUFD xmm, xmm/m128, imm8.
+             * Each destination dword i comes from source dword
+             * (imm8 >> (i*2)) & 3. Copy the source first for self-alias.
+             * Like other legacy SSE2 m128 forms, memory must be aligned.
+             * This instruction leaves EFLAGS unchanged. */
+            unsigned char source[16],out[16];
+            unsigned int shuffle,i,selector;
+            uint64_t at;
+            rm=decode(c,&reg,&group,16);
+            shuffle=(unsigned int)fetch(c,1);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(rm.reg>=0)memcpy(source,c->xmm[rm.reg],16);
+            else{
+                at=address(c,rm)+c->segment;
+                if((at&15U) || !ryz_memory_access(c->m,at,16,RYZ_READ))
+                    return RYZ_VM_MAP_ERROR;
+                memcpy(source,c->m->bytes+(size_t)(at-c->m->base),16);
+            }
+            for(i=0;i<4;i++){
+                selector=(shuffle>>(i*2))&3U;
+                memcpy(out+i*4,source+selector*4,4);
+            }
+            memcpy(c->xmm[reg],out,16);
+        }
+        else if(op2==0x62 && c->operand16 && !c->repeat){
+            /* 66 0F 62 /r PUNPCKLDQ xmm, xmm/m128:
+             * [old dst dword0, src dword0, old dst dword1, src dword1].
+             * Copy both inputs before writing, including xmmN,xmmN alias.
+             * Legacy SSE2 memory operands must be 16-byte aligned.
+             * EFLAGS are unaffected; unsupported prefix forms still deny. */
+            unsigned char dst[8],src[8],out[16];
+            uint64_t at;
+            rm=decode(c,&reg,&group,16);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            memcpy(dst,c->xmm[reg],8);
+            if(rm.reg>=0)memcpy(src,c->xmm[rm.reg],8);
+            else{
+                at=address(c,rm)+c->segment;
+                if((at&15U) || !ryz_memory_access(c->m,at,16,RYZ_READ))
+                    return RYZ_VM_MAP_ERROR;
+                memcpy(src,c->m->bytes+(size_t)(at-c->m->base),8);
+            }
+            memcpy(out,dst,4);
+            memcpy(out+4,src,4);
+            memcpy(out+8,dst+4,4);
+            memcpy(out+12,src+4,4);
+            memcpy(c->xmm[reg],out,16);
+        }
         else if(op2==0x6c && c->operand16 && !c->repeat){
             unsigned char bytes[8];rm=decode(c,&reg,&group,16);
             if(rm.reg>=0)memcpy(bytes,c->xmm[rm.reg],8);
             else{v=load(c,address(c,rm)+c->segment,8,RYZ_READ);for(count=0;count<8;count++)bytes[count]=(unsigned char)(v>>(count*8));}
             if(!c->fault)memcpy(c->xmm[reg]+8,bytes,8);
+        }
+        else if((op2==0x16 || op2==0x17) && !c->operand16 && !c->repeat){
+            /* 0F 16 /r: MOVHPS from memory, MOVLHPS from XMM register.
+             * 0F 17 /r: MOVHPS store to memory only (reg form invalid).
+             * Low half of the destination XMM is unchanged. */
+            rm=decode(c,&reg,&group,8);
+            if(op2==0x16){
+                if(rm.reg>=0)memcpy(c->xmm[reg]+8,c->xmm[rm.reg],8);
+                else{
+                    v=get(c,rm,8);
+                    if(!c->fault)for(count=0;count<8;count++)
+                        c->xmm[reg][8+count]=(unsigned char)(v>>(count*8));
+                }
+            }else{
+                if(rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED;
+                v=0;
+                for(count=0;count<8;count++)v|=(uint64_t)c->xmm[reg][8+count]<<(count*8);
+                store(c,address(c,rm)+c->segment,8,v);
+            }
+        }
+        else if(op2==0x73 && c->operand16 && !c->repeat){
+            /* 66 0F 73 /3 ib PSRLDQ, /7 ib PSLLDQ, register-only.
+             * Shift is in bytes; counts >=16 produce all zero bytes. */
+            unsigned char previous[16],shifted[16];
+            unsigned int i,amount;
+            rm=decode(c,&reg,&group,16);
+            if(rm.reg<0 || (group!=3 && group!=7))return RYZ_VM_OPCODE_UNSUPPORTED;
+            amount=(unsigned int)fetch(c,1);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            memcpy(previous,c->xmm[rm.reg],16);
+            for(i=0;i<16;i++){
+                shifted[i]=(unsigned char)(amount>=16?0:
+                    (group==3?(i+amount<16?previous[i+amount]:0):
+                     (i>=amount?previous[i-amount]:0)));
+            }
+            memcpy(c->xmm[rm.reg],shifted,16);
+        }
+        else if(op2==0xeb && c->operand16 && !c->repeat){
+            /* 66 0F EB /r POR xmm, xmm/m128, no EFLAGS changes. */
+            rm=decode(c,&reg,&group,16);
+            vector_or(c,rm,reg);
         }
         else if(op2==0xef || op2==0x57){
             if((op2==0xef && size!=2) || c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
