@@ -16,6 +16,8 @@ typedef struct RyzVmResult {
     uint32_t syscall_count;
     uint32_t forks,execs,peak_tasks,blocked_syscalls;
     uint64_t last_rip,pipe_bytes;
+    uint64_t arena_peak_bytes;
+    uint32_t shared_peak_pages;
     int exited;
     uint8_t exit_status;
 } RyzVmResult;

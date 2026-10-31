@@ -136,7 +136,7 @@ does not qualify application workflows or complete V1.
 | --- | --- | --- |
 | Root/live filesystem profile qualified; 32 slots and 64-KiB files still need measured developer budgets | syscall_vfs.h, filesystem_state.h | CLX-03 |
 | Native live directory profile has explicit POSIX/durability limits; new filesystem requirements reopen its gate | COMPACT-LINUX-V1-PHASE2.md | CLX-02 if required by a target |
-| Private-file COW increment implemented; shared anonymous memory/shared futex keys and aggregate profiles remain pending | COMPACT-LINUX-V1-PHASE3.md | CLX-03 |
+| Private COW, shared anonymous/futex, declared session/limit APIs and aggregate arena enforcement implemented; named-target profiles remain pending | COMPACT-LINUX-V1-PHASE3.md | CLX-03 |
 | 4-MiB images, 16-MiB address span, bounded steps/fds/tasks | process.h, jobs.h, namespace.h | CLX-03/04 |
 | Integer/selected vector interpreter; unsupported instructions fail closed | cpu.c | CLX-04 |
 | Exact IPv4 TCP grants; no guest DNS/UDP/IPv6 or external listeners | syscall_net.h, network_plan9.h | CLX-05 |

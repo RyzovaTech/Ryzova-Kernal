@@ -61,6 +61,7 @@ main(int argc, char **argv)
         else if(strcmp(argv[argi],"-K")==0 && argi+1<argc && !resources->control){resources->control=argv[argi+1];argi+=2;}
         else if(strcmp(argv[argi],"-r")==0){config.root_tree=1;jobsmode=processmode=1;argi++;}
         else if(strcmp(argv[argi],"-j")==0){jobsmode=processmode=1;argi++;}
+        else if(strcmp(argv[argi],"-B")==0 && argi+1<argc){char *end;ulong n=strtoul(argv[argi+1],&end,10);if(!n || n>150994944 || *end)sysfatal("invalid aggregate arena budget");config.arena_bytes_max=n;argi+=2;}
         else if(strcmp(argv[argi],"-b")==0 && argi+1<argc){
             char *end;ulong n=strtoul(argv[argi+1],&end,10);if(!n || n>16777216 || *end)sysfatal("invalid instruction budget");config.max_steps=(uint32_t)n;argi+=2;
         }else if(strcmp(argv[argi],"-n")==0 && argi+1<argc && network.count<RYZ_NETWORK_GRANTS){
@@ -78,8 +79,8 @@ main(int argc, char **argv)
         }else if(strcmp(argv[argi],"--")==0){ argi++; break; }
         else break;
     }
-    if(argi>=argc || (network.wall_milliseconds && !network.count) || ((config.exec_count || config.max_steps || stateinpath || stateoutpath || network.count || network.wall_milliseconds) && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
-        fprint(2, "usage: compact-linux [-r [-M rights:guest=host-dir] [-A guest-exec:read-mask:write-mask] [-K revoke-control]] [-p | -j [-x guest-path[=host-ELF]]] [-n guest-IP:port=tcp!host!port] [-t network-ms] [-R snapshot-in] [-W new-snapshot-out] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
+    if(argi>=argc || (network.wall_milliseconds && !network.count) || ((config.exec_count || config.max_steps || config.arena_bytes_max || stateinpath || stateoutpath || network.count || network.wall_milliseconds) && !jobsmode) || (!processmode && (argc-argi!=1 || args.envc!=0))){
+        fprint(2, "usage: compact-linux [-r [-M rights:guest=host-dir] [-A guest-exec:read-mask:write-mask] [-K revoke-control]] [-p | -j [-x guest-path[=host-ELF]] [-B aggregate-arena-bytes]] [-n guest-IP:port=tcp!host!port] [-t network-ms] [-R snapshot-in] [-W new-snapshot-out] [-e KEY=VALUE] [-i input-file] ELF [args...]\n");
         exits("usage");
     }
     if(rfork(RFNAMEG|RFENVG) < 0)
@@ -158,6 +159,7 @@ main(int argc, char **argv)
         status, result.exited, (uint)result.exit_status,
         (uint)result.executed_steps, (uint)result.syscall_count);
     if(jobsmode)fprint(2,"COMPACT_JOBS_STATS forks=%ud execs=%ud peak=%ud blocked=%ud pipebytes=%llud\n",(uint)result.forks,(uint)result.execs,(uint)result.peak_tasks,(uint)result.blocked_syscalls,(uvlong)result.pipe_bytes);
+    if(jobsmode)fprint(2,"COMPACT_RESOURCE_STATS arena_peak=%llud shared_peak=%ud\n",(uvlong)result.arena_peak_bytes,(uint)result.shared_peak_pages);
     if(processmode && status != RYZ_VM_OK)
         fprint(2,"COMPACT_PROCESS_FAULT rip=%llux\n",result.last_rip);
     resource_cli_close(resources);free(resources);

@@ -19,8 +19,9 @@
 typedef struct RyzFilePage {
     uint64_t page, offset;
     unsigned int vnode, maywrite, borrowed,dirty_start,dirty_end;
-    unsigned int private_map,detached;
+    unsigned int private_map,detached,anonymous_id;
 } RyzFilePage;
+typedef struct RyzFutexKey {void *memory;uint64_t identity,offset;unsigned int kind,index;} RyzFutexKey;
 typedef struct RyzLinuxMemory {
     unsigned char *bytes;
     uint64_t base, size, heap, brk, stack;
@@ -57,6 +58,8 @@ int ryz_cpu_tick(RyzCpu *);
 int ryz_prepare_job(const unsigned char *,size_t,unsigned char *,size_t,const RyzProcessArgs *,RyzLinuxWorld *,RyzLinuxMemory *,uint64_t *,uint64_t *);
 int ryz_prepare_process(const unsigned char *,size_t,unsigned char *,size_t,
     const RyzProcessArgs *,RyzLinuxMemory *,uint64_t *,uint64_t *);
+int ryz_memory_futex_key(RyzLinuxMemory *,uint64_t,int,RyzFutexKey *);
+void ryz_memory_key_ref(RyzLinuxWorld *,const RyzFutexKey *,int);
 int ryz_memory_access(RyzLinuxMemory *, uint64_t, uint64_t, unsigned int);
 int64_t ryz_memory_call(void *, const RyzLinuxRegs *);
 void ryz_memory_commit(RyzLinuxMemory *,int);

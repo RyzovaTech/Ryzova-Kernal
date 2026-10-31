@@ -24,7 +24,7 @@ static int timer_interrupt(Task *task)
         if(!ryz_memory_access(task->cpu.m,task->sleep_remaining,16,RYZ_WRITE))error=14;
         else timer_write(task,task->sleep_remaining,left,0);
     }
-    task->futex_waiting=task->futex_woken=0;task->futex_deadline=0;
+    futex_clear(task);task->futex_woken=0;task->futex_deadline=0;
     task->poll_active=0;task->sleep_kind=0;task->sleep_deadline=task->sleep_remaining=0;return error;
 }
 static void timer_poll(Jobs *jobs,Task *task)

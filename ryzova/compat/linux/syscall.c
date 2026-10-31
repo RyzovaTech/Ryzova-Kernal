@@ -63,7 +63,8 @@ int ryz_linux_process_init(RyzLinuxProcess *p, uint32_t namespace_id,
         guest_base > UINT64_MAX - (uint64_t)guest_size)
         return -L_EINVAL;
     memset(p, 0, sizeof(*p));
-    p->ns.pid = pid;p->group_pid=p->tgid=pid;p->fd_shares=1;
+    p->ns.pid = pid;p->group_pid=p->tgid=pid;p->session_pid=1;
+    p->file_limit=p->file_hard=RYZ_LINUX_FD_MAX;p->nproc_limit=p->nproc_hard=8;p->address_limit=p->address_hard=16U*1024U*1024U;p->fd_shares=1;
     p->ns.uid = uid;
     p->ns.gid = gid;
     p->ns.namespace_id = namespace_id;
@@ -185,15 +186,15 @@ static void set_offset(RyzLinuxProcess *p, uint64_t fd, size_t offset)
 }
 static int64_t duplicate(RyzLinuxProcess *p, uint64_t old, uint64_t target, int cloexec)
 {
-    if(old>=RYZ_LINUX_FD_MAX || !p->fds[old].open || target>=RYZ_LINUX_FD_MAX)return -L_EBADF;
+    if(old>=RYZ_LINUX_FD_MAX || !p->fds[old].open || target>=p->file_limit)return -L_EBADF;
     p->fds[target]=p->fds[old];p->fds[target].cloexec=cloexec;return (int64_t)target;
 }
 static int64_t duplicate_min(RyzLinuxProcess *p, uint64_t old, uint64_t minimum, int cloexec)
 {
     unsigned int i;
     if(old>=RYZ_LINUX_FD_MAX || !p->fds[old].open)return -L_EBADF;
-    if(minimum>=RYZ_LINUX_FD_MAX)return -L_EINVAL;
-    for(i=(unsigned int)minimum;i<RYZ_LINUX_FD_MAX;i++)
+    if(minimum>=p->file_limit)return -L_EINVAL;
+    for(i=(unsigned int)minimum;i<p->file_limit;i++)
         if(!p->fds[i].open)return duplicate(p,old,i,cloexec);
     return -L_EMFILE;
 }
@@ -424,7 +425,7 @@ static int64_t do_openat(RyzLinuxProcess *p, uint64_t dirfd,
     access = (unsigned int)(flags & L_O_ACCMODE);
     if (access > L_O_RDWR || (access == L_O_RDWR && (!p->world || (kind!=RYZ_NS_DEV_NULL && kind!=RYZ_NS_DEV_ZERO))))
         return -L_EINVAL;
-    for (fd = p->world?0:3; fd < (int)RYZ_LINUX_FD_MAX; ++fd)
+    for (fd = p->world?0:3; fd < (int)p->file_limit; ++fd)
         if (!p->fds[fd].open) {
             p->fds[fd].description=new_description(p);
             if(!p->fds[fd].description)return -L_EMFILE;
@@ -451,7 +452,7 @@ static int64_t do_pipe(RyzLinuxProcess *p,uint64_t at,uint64_t flags)
     if(!p->world)return -L_ENOSYS;
     if(flags & ~(uint64_t)(L_O_CLOEXEC|04000U))return -L_EINVAL;
     if(!guest_range(p,at,8,&out) || (p->memory_write && !p->memory_write(p->memory_context,at,8)))return -L_EFAULT;
-    for(i=0;i<RYZ_LINUX_FD_MAX && found<2;i++)if(!p->fds[i].open)fds[found++]=i;
+    for(i=0;i<p->file_limit && found<2;i++)if(!p->fds[i].open)fds[found++]=i;
     if(found<2)return -L_EMFILE;
     for(i=0;i<RYZ_WORLD_PIPES;i++)if(!p->world->pipes[i].used)break;
     if(i==RYZ_WORLD_PIPES)return -L_EMFILE;
