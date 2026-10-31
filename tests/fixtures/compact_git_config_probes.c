@@ -19,7 +19,7 @@ int main(int argc,char **argv)
         if(converter==(iconv_t)-1)return 2;
         if(iconv(converter,&in,&in_size,&out,&out_size)==(size_t)-1){iconv_close(converter);return 2;}
         iconv_close(converter);
-        return (unsigned char)output[0]+(unsigned char)output[1]!=0xfe+0xff;
+        return (unsigned char)output[0]+(unsigned char)output[1]!=0xfe + 0xff;
     }
     if(!strcmp(argv[1],"directory")){
         FILE *file=fopen(".","r");if(file){fclose(file);return 1;}return 0;

@@ -81,7 +81,7 @@ class TargetLockTests(unittest.TestCase):
   import subprocess
   with tempfile.TemporaryDirectory() as d:
    binary=Path(d)/'probe'
-   subprocess.run(['cc',str(ROOT/'tests/fixtures/compact_git_config_probes.c'),'-o',str(binary)],check=True,capture_output=True)
+   subprocess.run(['cc',str(ROOT/'tests/fixtures/compact_git_config_probes.c'),'-o',str(binary)],check=True)
    for mode in ('iconv','directory','snprintf'):
     result=subprocess.run([str(binary),mode],capture_output=True,timeout=5);self.assertIn(result.returncode,(0,1))
    self.assertEqual(subprocess.run([str(binary),'unknown'],capture_output=True).returncode,64)
