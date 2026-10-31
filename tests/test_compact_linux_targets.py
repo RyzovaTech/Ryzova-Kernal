@@ -93,7 +93,7 @@ class TargetLockTests(unittest.TestCase):
     git_make_command(invalid)
  def test_busybox_help_and_version_config_is_actual_required_build_option(self):
   from compact_linux_targets import require_busybox_help_config
-  options=('CONFIG_LONG_OPTS=y','CONFIG_SHOW_USAGE=y',
+  options=('CONFIG_BUSYBOX=y','CONFIG_LONG_OPTS=y','CONFIG_SHOW_USAGE=y',
            'CONFIG_FEATURE_VERBOSE_USAGE=y')
   self.assertTrue(require_busybox_help_config('\n'.join(options)+'\n'))
   for item in options:
