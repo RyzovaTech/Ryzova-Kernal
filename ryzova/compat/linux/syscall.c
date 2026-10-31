@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Virtual Linux syscalls through caller-owned bounded resources. */
 #include "syscall.h"
+#include "process.h" /* Shared finite RYZ_PROCESS_IMAGE_MAX. */
 
 /* Linux AMD64 syscall and errno numbers (ABI constants). */
 #define L_READ 0U
@@ -649,7 +650,11 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
         if(regs->rdx>2)return -L_EINVAL;
         base=regs->rdx==0?0:(regs->rdx==1?fd->offset:end);
         if(delta>>63){delta=-delta;if(delta>base)return -L_EINVAL;position=base-delta;}
-        else{if(delta>(fd->node==RYZ_NS_EXEC?4U*1024U*1024U:RYZ_LINUX_FILE_MAX) || base>(fd->node==RYZ_NS_EXEC?4U*1024U*1024U:RYZ_LINUX_FILE_MAX)-delta)return -L_EINVAL;position=base+delta;}
+        else{
+            uint64_t limit=fd->node==RYZ_NS_EXEC?RYZ_PROCESS_IMAGE_MAX:RYZ_LINUX_FILE_MAX;
+            if(delta>limit || base>limit-delta)return -L_EINVAL;
+            position=base+delta;
+        }
         set_offset(p,regs->rdi,(size_t)position);return (int64_t)position;
     }
     case 110:return p->parent_pid?p->parent_pid:1;

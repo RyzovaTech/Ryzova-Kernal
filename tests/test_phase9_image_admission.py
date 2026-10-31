@@ -109,6 +109,58 @@ class ImageAdmissionTests(unittest.TestCase):
         self.assertIn(b'COMPACT_JOBS_RESULT status=5',out.stderr)
         self.assertIn(b'unsupported_syscall=999 unsupported_syscall_valid=1',out.stderr)
 
+    def test_executable_grant_lseek_tracks_measured_image_ceiling(self):
+        # A 6-MiB explicitly granted image must be seekable/readable beyond
+        # the old 4-MiB cap, without extending the 32-MiB finite ABI bound.
+        large=self.d/'large-grant-image'
+        with large.open('wb') as stream:
+            stream.write(executable())
+            stream.truncate(6*1024*1024)
+        asm=r"""
+.intel_syntax noprefix
+.section .text
+.global _start
+_start:
+    mov eax, 2
+    lea rdi, [rip + resource]
+    xor esi, esi
+    syscall
+    test eax, eax
+    js fail
+    mov ebx, eax
+    mov edi, ebx
+    mov eax, 8
+    mov esi, 5242880
+    xor edx, edx
+    syscall
+    cmp rax, 5242880
+    jne fail
+    mov edi, ebx
+    mov eax, 8
+    mov esi, 33554433
+    xor edx, edx
+    syscall
+    cmp rax, -22
+    jne fail
+    mov eax, 60
+    xor edi, edi
+    syscall
+fail:
+    mov eax, 60
+    mov edi, 51
+    syscall
+.section .rodata
+resource: .asciz "/lib/large-grant.so"
+"""
+        source=self.d/'lseek-elf.S'
+        binary=self.d/'lseek-elf'
+        source.write_text(asm)
+        subprocess.run(['cc','-nostdlib','-static','-no-pie',str(source),'-o',str(binary)],
+                       capture_output=True,check=True,timeout=30)
+        out=self.invoke('-x','/lib/large-grant.so='+str(large),binary)
+        self.assertEqual(out.returncode,0,out.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',out.stderr)
+
     def test_budgets_match_host_profile_configuration(self):
         from importlib.util import spec_from_file_location,module_from_spec
         path=ROOT/'scripts/compact_linux_target_profiles.py'

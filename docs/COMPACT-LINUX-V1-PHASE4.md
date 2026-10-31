@@ -126,3 +126,17 @@ invalid-who and invalid-pointer results on both host Linux and
 the original Ryzova guest interpreter, without comparing their
 inherently different time/RSS values. This does not qualify the
 full Binutils assembler workflow or CLX-03 RESOURCE budgets.
+
+## 4D seek/read over declared larger executable-resource file buffers
+
+The finite per-file image admission cap was raised to a **measured 32 MiB**
+because the frozen CPython ELF is 27,726,864 bytes. A separate legacy
+4-MiB hard-coded `lseek` limit for explicitly granted executable/library
+read-only fds prevented seeking into newly admitted files. The original
+syscall implementation now uses the common `RYZ_PROCESS_IMAGE_MAX` for
+`RYZ_NS_EXEC` descriptors; normal bounded 64-KiB file-descriptor
+limits and independent 48-MiB aggregate image buffer limits remain.
+A real Ryzova C guest opens a 6-MiB explicit read-only image and seeks
+to byte 5,242,880; seeking beyond 32 MiB must return Linux EINVAL,
+without affecting another host resource. This **does not** imply general
+large-file VFS support or full ELF/stdlib compatibility.
