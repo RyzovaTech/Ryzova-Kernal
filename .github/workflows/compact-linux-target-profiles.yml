@@ -64,6 +64,15 @@ jobs:
         run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 4 --stage apps
       - name: Discover actual resource use and guest admission blockers
         run: python scripts/compact_linux_target_profiles.py --directory artifacts/targets --output artifacts/targets/target-profiles.json
+      - name: Attribute candidate failing instruction bytes without changing acceptance
+        if: always()
+        run: |
+          if test -f artifacts/targets/target-profiles.json; then
+            python scripts/compact_linux_isa_discovery.py \
+              --root artifacts/targets/root \
+              --profiles artifacts/targets/target-profiles.json \
+              --output artifacts/targets/target-isa-candidates.json
+          fi
       - uses: actions/cache/save@v4
         if: always() && steps.cache-sources.outputs.cache-hit != 'true' && hashFiles('artifacts/targets/sources/gcc-14.2.0.tar.xz') != ''
         with:
@@ -89,5 +98,6 @@ jobs:
             artifacts/targets/logs/*
             artifacts/targets/target-build.json
             artifacts/targets/target-profiles.json
+            artifacts/targets/target-isa-candidates.json
           if-no-files-found: error
           retention-days: 30
