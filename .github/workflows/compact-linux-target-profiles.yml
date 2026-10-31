@@ -11,6 +11,9 @@ on:
       - 'ryzova/compact/linux-v1-plan.json'
       - 'ryzova/compat/linux/**'
       - 'tests/test_compact_linux_targets.py'
+      - 'scripts/compact_linux_binary_locks.py'
+      - 'tests/test_compact_linux_binary_locks.py'
+      - 'docs/validation/compact-linux-v1-binary-locks.json'
       - 'tests/test_phase9_image_admission.py'
       - 'tests/fixtures/compact_git_config_probes.c'
       - '.github/workflows/compact-linux-target-profiles.yml'
@@ -67,6 +70,10 @@ jobs:
         run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 4 --stage apps
       - name: Discover actual resource use and guest admission blockers
         run: python scripts/compact_linux_target_profiles.py --directory artifacts/targets --output artifacts/targets/target-profiles.json
+      - name: Verify immutable source and seven release ELF hash locks
+        run: |
+          python -m unittest discover -s tests -p test_compact_linux_binary_locks.py -v
+          python scripts/compact_linux_binary_locks.py --root . --profiles artifacts/targets/target-profiles.json
       - name: Attribute candidate failing instruction bytes without changing acceptance
         if: always()
         run: |

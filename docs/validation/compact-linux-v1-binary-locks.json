@@ -1,0 +1,83 @@
+{
+  "schema": "compact-linux-v1-binary-locks/v1",
+  "acceptance": {
+    "LOCKS": "passed"
+  },
+  "abi": "x86_64-linux-musl",
+  "source_lock_sha256": "3dca16c6b5d52252dceb83d0f10b1f4b9abf24fcb94252f8d1099c114718dc33",
+  "binaries": {
+    "busybox": {
+      "version": "1.35.0",
+      "sha256": "af302fcea7588067c6c2eefaa594a0f1a713a2e411f3a1f3a5d689ca032db577",
+      "bytes": 267944
+    },
+    "python": {
+      "version": "3.12.10",
+      "sha256": "051ab464898df8360a8ce6334e0786e97c8e27c82adbea7506e659de8a3863b5",
+      "bytes": 27726864
+    },
+    "git": {
+      "version": "2.49.0",
+      "sha256": "33c49dde0c6f21012d214abbf7e140112030ff7e50cd1d14632c96779a42c100",
+      "bytes": 4113376
+    },
+    "gcc": {
+      "version": "14.2.0",
+      "sha256": "213bc7fef14e2b62e5bc45d871d215b0e74842f1469fae613ac83afaf365ce5c",
+      "bytes": 2323968
+    },
+    "binutils": {
+      "version": "2.43.1",
+      "sha256": "1ececdfb0c98469ba1c9e8c5b41c948793116b5a4dfe8960c81b0a70a533cf3b",
+      "bytes": 2111504
+    },
+    "make": {
+      "version": "4.4.1",
+      "sha256": "d7e659b06520443304bb6e888aeedd6a1cea4113afbfcd84b0e9aba43940288c",
+      "bytes": 284224
+    },
+    "musl": {
+      "version": "1.2.6",
+      "sha256": "dca4c0d98f94213c20eb616ca7e43684d3a00a629ec9459db18d161b899be3c8",
+      "bytes": 804584
+    }
+  },
+  "independent_ci_builds": [
+    {
+      "run_id": 41203829847,
+      "head_sha": "87a8b4196740924bbc7416bc3153ae7cf7d6c4cb",
+      "conclusion": "success",
+      "source_lock_sha256": "3dca16c6b5d52252dceb83d0f10b1f4b9abf24fcb94252f8d1099c114718dc33",
+      "binary_sha256": {
+        "busybox": "af302fcea7588067c6c2eefaa594a0f1a713a2e411f3a1f3a5d689ca032db577",
+        "python": "051ab464898df8360a8ce6334e0786e97c8e27c82adbea7506e659de8a3863b5",
+        "git": "33c49dde0c6f21012d214abbf7e140112030ff7e50cd1d14632c96779a42c100",
+        "gcc": "213bc7fef14e2b62e5bc45d871d215b0e74842f1469fae613ac83afaf365ce5c",
+        "binutils": "1ececdfb0c98469ba1c9e8c5b41c948793116b5a4dfe8960c81b0a70a533cf3b",
+        "make": "d7e659b06520443304bb6e888aeedd6a1cea4113afbfcd84b0e9aba43940288c",
+        "musl": "dca4c0d98f94213c20eb616ca7e43684d3a00a629ec9459db18d161b899be3c8"
+      }
+    },
+    {
+      "run_id": 41205390485,
+      "head_sha": "d454704a7f23c85eb2c6852c9d17c70fe5be7249",
+      "conclusion": "success",
+      "source_lock_sha256": "3dca16c6b5d52252dceb83d0f10b1f4b9abf24fcb94252f8d1099c114718dc33",
+      "binary_sha256": {
+        "busybox": "af302fcea7588067c6c2eefaa594a0f1a713a2e411f3a1f3a5d689ca032db577",
+        "python": "051ab464898df8360a8ce6334e0786e97c8e27c82adbea7506e659de8a3863b5",
+        "git": "33c49dde0c6f21012d214abbf7e140112030ff7e50cd1d14632c96779a42c100",
+        "gcc": "213bc7fef14e2b62e5bc45d871d215b0e74842f1469fae613ac83afaf365ce5c",
+        "binutils": "1ececdfb0c98469ba1c9e8c5b41c948793116b5a4dfe8960c81b0a70a533cf3b",
+        "make": "d7e659b06520443304bb6e888aeedd6a1cea4113afbfcd84b0e9aba43940288c",
+        "musl": "dca4c0d98f94213c20eb616ca7e43684d3a00a629ec9459db18d161b899be3c8"
+      }
+    }
+  ],
+  "evidence_type": "two independent GitHub-hosted CI source builds; no claim of independent hardware or general OS release",
+  "limitations": [
+    "Binary content hashes only; does not prove native guest application workflows",
+    "Runner OS/toolchain environment independent of this static JSON must be verified by current exact-head CI",
+    "All 17 gates and final native/release approval remain independent"
+  ]
+}
