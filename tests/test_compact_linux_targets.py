@@ -77,6 +77,20 @@ class TargetLockTests(unittest.TestCase):
    with patch('compact_linux_targets.subprocess.check_output',return_value=b.lock['build_driver']['commit']):
     b.toolchain(src);b.run.reset_mock();b.toolchain(src);b.run.assert_not_called();self.assertEqual(b.reused_stages,['cross'])
     (b.cross/'bin/cc').write_bytes(b'corrupt');b.toolchain(src);self.assertTrue(b.run.called)
+ def test_git_musl_regex_compatibility_required_for_make_and_install(self):
+  from compact_linux_targets import git_make_command
+  build=git_make_command(4)
+  install=git_make_command(4,'/isolated/guest/root')
+  for command in (build,install):
+   self.assertEqual(command.count('NO_REGEX=NeedsStartEnd'),1)
+   self.assertIn('NO_GETTEXT=YesPlease',command)
+   self.assertIn('NO_PYTHON=YesPlease',command)
+   self.assertNotIn('NO_CURL=YesPlease',command)
+  self.assertEqual(build[:2],['make','-j4'])
+  self.assertEqual(install[:3],['make','install','DESTDIR=/isolated/guest/root'])
+  for invalid in (0,5,-1,True,1.5):
+   with self.subTest(invalid=invalid),self.assertRaises(ValueError):
+    git_make_command(invalid)
  def test_libc_configure_probes_report_real_results_and_reject_unknown_modes(self):
   import subprocess
   with tempfile.TemporaryDirectory() as d:
