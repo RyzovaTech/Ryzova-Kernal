@@ -1,0 +1,141 @@
+{
+  "schema": "compact-windows-plan/v1",
+  "environment": "compact/windows",
+  "abi": "windows-amd64-pe32plus-v1",
+  "profile": "console-win32-v1",
+  "baseline_commit": "a1802327bf8790e03fd6d04c45196b910a53f3d1",
+  "windows_execution_qualified": false,
+  "general_windows_compatibility_claim": false,
+  "limits": {
+    "pe_file_bytes": 4194304,
+    "mapped_image_bytes": 67108864,
+    "aggregate_image_buffers_bytes": 16777216,
+    "guest_memory_bytes": 67108864,
+    "stack_bytes": 65536,
+    "handles": 32,
+    "imports": 32,
+    "modules": 4,
+    "threads": 1,
+    "processes": 1,
+    "instructions": 262144,
+    "io_bytes_per_call": 65536,
+    "file_bytes": 65536
+  },
+  "limits_status": "proposed ceilings; manifest validation only, not runtime enforcement",
+  "planned_apis": {
+    "kernel32.dll!GetStdHandle": "W3",
+    "kernel32.dll!WriteFile": "W3",
+    "kernel32.dll!ExitProcess": "W3",
+    "kernel32.dll!GetLastError": "W3",
+    "kernel32.dll!SetLastError": "W3",
+    "kernel32.dll!GetCommandLineW": "W3",
+    "kernel32.dll!GetEnvironmentVariableW": "W3",
+    "kernel32.dll!VirtualAlloc": "W3",
+    "kernel32.dll!VirtualFree": "W3",
+    "kernel32.dll!CreateFileW": "W4",
+    "kernel32.dll!ReadFile": "W4",
+    "kernel32.dll!CloseHandle": "W4",
+    "kernel32.dll!SetFilePointerEx": "W4",
+    "kernel32.dll!GetFileSizeEx": "W4",
+    "kernel32.dll!FlushFileBuffers": "W4"
+  },
+  "phases": [
+    {
+      "id": "W1",
+      "goal": "Contract, metadata audit and Windows reference fixture",
+      "depends_on": [],
+      "state": "contract-implemented-awaiting-ci"
+    },
+    {
+      "id": "W2",
+      "goal": "PE64 loader and Windows AMD64 execution ABI",
+      "depends_on": [
+        "W1"
+      ],
+      "state": "pending"
+    },
+    {
+      "id": "W3",
+      "goal": "Explicit imports, console and memory APIs",
+      "depends_on": [
+        "W2"
+      ],
+      "state": "pending"
+    },
+    {
+      "id": "W4",
+      "goal": "Handles and namespace-backed file APIs",
+      "depends_on": [
+        "W3"
+      ],
+      "state": "pending"
+    },
+    {
+      "id": "W5",
+      "goal": "Named compiler/CRT workloads and runtime errors",
+      "depends_on": [
+        "W4"
+      ],
+      "state": "pending"
+    },
+    {
+      "id": "W6",
+      "goal": "Resource enforcement and native Flex qualification",
+      "depends_on": [
+        "W5"
+      ],
+      "state": "pending"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "PE-LOAD",
+      "state": "pending",
+      "acceptance": "Validated sections, relocations and entry execute in Flex"
+    },
+    {
+      "id": "WIN64-ABI",
+      "state": "pending",
+      "acceptance": "Independent ABI fixtures verify registers, stack and nonvolatile state"
+    },
+    {
+      "id": "IMPORTS-CONSOLE",
+      "state": "pending",
+      "acceptance": "Declared API thunks produce exact output and full DWORD exit"
+    },
+    {
+      "id": "NS-FILES",
+      "state": "pending",
+      "acceptance": "Opaque grants enforce rights and deny traversal and cross-environment access"
+    },
+    {
+      "id": "RUNTIME",
+      "state": "pending",
+      "acceptance": "Named compiler/CRT fixtures have a frozen supported API and instruction inventory"
+    },
+    {
+      "id": "RESOURCES",
+      "state": "pending",
+      "acceptance": "Measured allocation, instruction and handle ceilings fail closed"
+    },
+    {
+      "id": "NATIVE-EVIDENCE",
+      "state": "pending",
+      "acceptance": "Source-identified Flex QEMU execution receipts and regression jobs pass"
+    }
+  ],
+  "exclusions": [
+    "x86",
+    "ARM64",
+    "WoW64",
+    "GUI",
+    "DirectX",
+    "kernel drivers",
+    ".NET",
+    "COM",
+    "services",
+    "registry",
+    "arbitrary networking",
+    "general Windows compatibility"
+  ]
+}

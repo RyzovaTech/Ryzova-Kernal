@@ -1,0 +1,65 @@
+name: Compact Windows W1
+on:
+  pull_request:
+    paths:
+      - 'ryzova/compat/windows/**'
+      - 'ryzova/compact/windows-v1-plan.json'
+      - 'tests/test_compact_windows_w1.py'
+      - 'tests/test_phase5_5_pe.py'
+      - 'tests/fixtures/windows_w1_reference.c'
+      - 'scripts/compact_windows*'
+      - 'docs/COMPACT-WINDOWS*'
+      - 'docs/validation/compact-windows*'
+      - '.github/workflows/compact-windows-w1.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Existing PE boundary regression
+        env:
+          PHASE5_SANITIZE: '1'
+        run: python -m unittest discover -s tests -p test_phase5_5_pe.py -v
+      - name: Windows contract and reproducible audit
+        run: python -m unittest discover -s tests -p test_compact_windows_w1.py -v
+      - run: python scripts/compact_windows_w1.py --output artifacts/compact-windows/w1-audit.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w1-metadata-audit
+          path: artifacts/compact-windows/*.json
+  windows-reference:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - name: Preserve source bytes for receipt hashes
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          # Git validates even excluded index paths; none are materialized below.
+          git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          # Plan 9 source contains Windows-reserved names such as con.scat.
+          # This reference job only needs these two Windows-compatible files.
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_reference.ps1
+            /tests/fixtures/windows_w1_reference.c
+      - name: Build and run the freestanding AMD64 Windows reference
+        shell: pwsh
+        run: ./scripts/compact_windows_reference.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-w1-native-reference
+          path: |
+            artifacts/compact-windows/*.json
+            artifacts/compact-windows/*.log
+            artifacts/compact-windows/*.txt
