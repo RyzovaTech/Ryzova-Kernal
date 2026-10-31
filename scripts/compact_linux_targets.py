@@ -13,6 +13,22 @@ ROOT=Path(__file__).resolve().parents[1]
 LOCK=ROOT/'ryzova/compact/linux-target-sources.json'
 TRIPLE='x86_64-linux-musl'
 
+# Git 2.49 requires REG_STARTEND, which the pinned musl libc lacks.
+# Use Git's own bundled regex compatibility implementation for this target.
+# Keep the same make variables for build and install to avoid reconfiguration.
+GIT_MUSL_MAKE_FLAGS=(
+    'NO_GETTEXT=YesPlease', 'NO_TCLTK=YesPlease',
+    'NO_PERL=YesPlease', 'NO_PYTHON=YesPlease',
+    'NO_REGEX=NeedsStartEnd',
+)
+
+def git_make_command(jobs, install_root=None):
+    if type(jobs) is not int or not 1 <= jobs <= 4:
+        raise ValueError('bounded Git build job count required')
+    command=['make', '-j'+str(jobs)] if install_root is None else [
+        'make', 'install', 'DESTDIR='+str(install_root)]
+    return command+list(GIT_MUSL_MAKE_FLAGS)
+
 def validate(lock):
     errors=[];sources=lock.get('sources',[]);ids=[s.get('id') for s in sources]
     if lock.get('schema')!='compact-linux-target-sources/v1' or len(ids)!=len(set(ids)):errors.append('invalid lock/schema')
@@ -150,8 +166,8 @@ class Build:
         self.run('git-config',['./configure',*common,'--with-openssl='+str(self.root/'usr'),'--with-curl='+str(self.root/'usr'),'--with-zlib='+str(self.root/'usr'),'--without-tcltk'],src['git'],genv)
         configuration=(src['git']/'config.mak.autogen').read_text()
         if any(line.startswith('NO_CURL') and '=' in line and line.split('=',1)[1].strip() for line in configuration.splitlines()):raise RuntimeError('Git HTTPS support unexpectedly disabled')
-        self.run('git-make',['make','-j'+str(self.jobs),'NO_GETTEXT=YesPlease','NO_TCLTK=YesPlease','NO_PERL=YesPlease','NO_PYTHON=YesPlease'],src['git'],genv)
-        self.run('git-install',['make','install','DESTDIR='+str(self.root),'NO_GETTEXT=YesPlease','NO_TCLTK=YesPlease','NO_PERL=YesPlease','NO_PYTHON=YesPlease'],src['git'],genv)
+        self.run('git-make',git_make_command(self.jobs),src['git'],genv)
+        self.run('git-install',git_make_command(self.jobs,self.root),src['git'],genv)
         if not (self.root/'usr/libexec/git-core/git-remote-https').is_file():raise RuntimeError('required Git HTTPS helper missing')
         self.app('make',src['make'],[*common,'--without-guile','--disable-nls'],env)
         self.run('busybox-config',['make','allnoconfig'],src['busybox'],env)
