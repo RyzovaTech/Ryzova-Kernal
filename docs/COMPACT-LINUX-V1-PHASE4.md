@@ -203,3 +203,18 @@ native Linux and the Ryzova VM. The F2 DIVSD form remains unsupported.
 MXCSR nondefault rounding, precise FP exceptions/signalling NaN effects,
 IEEE status flags and the full CPython workflow are **not** qualified;
 guest code acceptance requires a new actual target-profile result.
+
+## 4F CPython COMISS scalar flag semantics research increment
+
+Frozen CPython 3.12.10 -c reached \`0F 2F\` (COMISS). In the Ryzova
+interpreter, default masked-invalid-operation COMISS now compares
+binary32 bit patterns using integer logic. It updates CF/PF/ZF for
+ordered less, greater and equality (including ±0), sets all three
+for unordered quiet NaN, clears OF/SF/AF, and leaves all other flags
+unchanged. It does not use host FP or host syscall forwarding. A
+source-built real AMD64 Linux binary captures masked EFLAGS and is
+compared byte-for-byte to the same ELF under the bounded Ryzova
+interpreter, with reg/m32 operands and negative tests for unsupported
+UCOMISS. SSE MXCSR signaling NaNs, trapping and exception/status
+semantics remain unqualified. This does NOT yet prove Python -c or
+full stdlib workflows until a new target-profiles run succeeds.

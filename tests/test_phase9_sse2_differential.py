@@ -211,6 +211,67 @@ unaligned: .long -42
         self.assertEqual(guest.stdout,expected)
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
 
+    def test_comiss_flag_results_float_order_unordered_and_signed_zero(self):
+        # Frozen CPython -c next candidate: 0F 2F /r COMISS. Native Linux
+        # and Ryzova guest must agree on exact CF/PF/ZF/AF/SF/OF bits.
+        cases=[
+            (0x3f800000,0x40000000,0x001,'reg'), # 1 < 2
+            (0x40000000,0x3f800000,0x000,'reg'), # 2 > 1
+            (0x80000000,0x00000000,0x040,'reg'), # -0 == +0
+            (0x7fc00000,0x3f800000,0x045,'reg'), # unordered quiet NaN
+            (0xc0000000,0xbf800000,0x001,'reg'), # -2 < -1
+            (0xbf800000,0xc0000000,0x000,'reg'), # -1 > -2
+            (0x7f800000,0x7f7fffff,0x000,'reg'), # +inf > max
+            (0xff800000,0xff800000,0x040,'reg'), # -inf == -inf
+            (0x00000001,0x00000000,0x000,'memory'), # subnormal > 0
+            (0x80000001,0x00000000,0x001,'memory'), # negative subnormal < 0
+        ]
+        asm=['.intel_syntax noprefix','.section .text',
+             '.global _start','_start:']
+        for i,(_,__,___,kind) in enumerate(cases):
+            asm.extend([
+                f'movdqu xmm0, XMMWORD PTR [rip + left{i}]',
+                f'movdqu xmm1, XMMWORD PTR [rip + right{i}]',
+                f'comiss xmm0, '+(
+                    f'DWORD PTR [rip + right{i}]' if kind=='memory' else 'xmm1'),
+                'pushfq','pop rax','and eax, 0x8d5',
+                f'mov QWORD PTR [rip + out{i}], rax',
+            ])
+        asm.extend(['mov eax,1','mov edi,1','lea rsi,[rip + out0]',
+                    f'mov edx,{8*len(cases)}','syscall',
+                    'mov eax,60','xor edi,edi','syscall',
+                    '.section .data','.balign 16'])
+        for i in range(len(cases)):
+            asm.append(f'out{i}: .zero 8')
+        for i,(left,right,_,__) in enumerate(cases):
+            for label,value in ((f'left{i}',left),(f'right{i}',right)):
+                asm.append(f'{label}: .long {value}')
+                asm.append('  .byte '+','.join(str(x) for x in range(160,172)))
+        source=self.root/'comiss.S'
+        binary=self.root/'comiss'
+        source.write_text('\n'.join(asm)+'\n')
+        subprocess.run(['cc','-nostdlib','-static','-no-pie',
+                        str(source),'-o',str(binary)],
+                       check=True,capture_output=True,timeout=30)
+        native=subprocess.run([str(binary)],capture_output=True,timeout=5)
+        guest=subprocess.run([str(self.runner),str(binary)],capture_output=True,timeout=25)
+        self.assertEqual(native.returncode,0,native.stderr)
+        self.assertEqual(guest.returncode,0,guest.stderr)
+        self.assertEqual(guest.stdout,native.stdout)
+        import struct
+        want=b''.join(struct.pack('<Q',expected) for _,__,expected,___ in cases)
+        self.assertEqual(guest.stdout,want)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
+
+    def test_ucomiss_remains_unsupported_without_false_acceptance(self):
+        from test_phase9_image_admission import executable
+        bad=self.root/'unsupported-ucomiss.elf'
+        bad.write_bytes(executable(code=bytes([0x0f,0x2e,0xc1])))
+        out=subprocess.run([str(self.runner),str(bad)],
+                           capture_output=True,timeout=15)
+        self.assertEqual(out.returncode,2,out.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=3',out.stderr)
+
     def test_divss_scalar_ieee754_linux_differential(self):
         # CPython -c candidate F3 0F 5E C1. Preserve full destination XMM
         # upper 96 bits; test exact default round-to-nearest-even results.

@@ -612,6 +612,39 @@ static int step(Cpu *c)
             if(c->operand16 && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
             vector_move(c,rm,reg,op2==0x7f);
         }
+        else if(op2==0x2f && !c->operand16 && !c->repeat){
+            /* 0F 2F /r COMISS xmm, xmm/m32: compare bit-patterns of
+             * binary32 without using the host FP unit. Default masked
+             * invalid-operation semantics only; MXCSR exceptions not
+             * emulated. On unordered set ZF|PF|CF; greater clears them;
+             * less sets CF; equal sets ZF. OF/SF/AF always clear. */
+            uint32_t a=0,b=0,ab,bb;
+            unsigned int k,unordered,less,equal;
+            rm=decode(c,&reg,&group,4);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            for(k=0;k<4;k++)a|=(uint32_t)c->xmm[reg][k]<<(k*8U);
+            if(rm.reg>=0){
+                for(k=0;k<4;k++)b|=(uint32_t)c->xmm[rm.reg][k]<<(k*8U);
+            }else{
+                v=get(c,rm,4);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+                b=(uint32_t)v;
+            }
+            ab=a&UINT32_C(0x7fffffff);
+            bb=b&UINT32_C(0x7fffffff);
+            unordered=((ab>UINT32_C(0x7f800000)) ||
+                       (bb>UINT32_C(0x7f800000)));
+            equal=(a==b || (!ab && !bb));
+            less=0;
+            if(!unordered && !equal){
+                if((a^b)&UINT32_C(0x80000000))less=(a>>31U)!=0U;
+                else less=(a>>31U)?a>b:a<b;
+            }
+            c->flags&=~(uint64_t)(CF|PF|AF|ZF|SF|OF);
+            if(unordered)c->flags|=CF|PF|ZF;
+            else if(equal)c->flags|=ZF;
+            else if(less)c->flags|=CF;
+        }
         else if(op2==0x5e && c->repeat==0xf3 && !c->operand16){
             /* F3 0F 5E /r DIVSS xmm, xmm/m32; upper XMM & flags unchanged. */
             uint32_t a=0,b=0,q;unsigned int k;
