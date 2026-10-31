@@ -148,6 +148,78 @@ out2: .zero 16
                                 0,1,2,3,0,1,2,3,4,5,6,7,4,5,6,7]))
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
 
+    def test_cvtsi2ss_integer_precision_sign_rounding_and_upper_xmm(self):
+        # Genuine CPython -c failure: F3 48 0F 2A C1. Test strict default
+        # RN-even rounding at 24-bit precision and signed 32/64 conversion.
+        asm=r"""
+.intel_syntax noprefix
+.section .text
+.global _start
+_start:
+    movdqu xmm0, XMMWORD PTR [rip + sentinel]
+    mov rcx, 16777217
+    cvtsi2ss xmm0, rcx
+    movdqu XMMWORD PTR [rip + out0], xmm0
+    movdqu xmm1, XMMWORD PTR [rip + sentinel]
+    mov ecx, -16777217
+    cvtsi2ss xmm1, ecx
+    movdqu XMMWORD PTR [rip + out1], xmm1
+    movdqu xmm2, XMMWORD PTR [rip + sentinel]
+    mov rcx, 0x7fffffffffffffff
+    cvtsi2ss xmm2, rcx
+    movdqu XMMWORD PTR [rip + out2], xmm2
+    movdqu xmm3, XMMWORD PTR [rip + sentinel]
+    mov rcx, 0x8000000000000000
+    cvtsi2ss xmm3, rcx
+    movdqu XMMWORD PTR [rip + out3], xmm3
+    movdqu xmm4, XMMWORD PTR [rip + sentinel]
+    cvtsi2ss xmm4, DWORD PTR [rip + unaligned]
+    movdqu XMMWORD PTR [rip + out4], xmm4
+    mov eax, 1
+    mov edi, 1
+    lea rsi, [rip + out0]
+    mov edx, 80
+    syscall
+    mov eax, 60
+    xor edi, edi
+    syscall
+.section .data
+.balign 16
+sentinel: .byte 160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175
+out0: .zero 16
+out1: .zero 16
+out2: .zero 16
+out3: .zero 16
+out4: .zero 16
+unaligned_pad: .byte 55
+unaligned: .long -42
+"""
+        source=self.root/'cvtsi2ss.S'
+        binary=self.root/'cvtsi2ss'
+        source.write_text(asm)
+        subprocess.run(['cc','-nostdlib','-static','-no-pie',str(source),'-o',str(binary)],
+                       check=True,capture_output=True,timeout=30)
+        native=subprocess.run([str(binary)],capture_output=True,timeout=5)
+        guest=subprocess.run([str(self.runner),str(binary)],capture_output=True,timeout=25)
+        self.assertEqual(native.returncode,0,native.stderr)
+        self.assertEqual(guest.returncode,0,guest.stderr)
+        self.assertEqual(guest.stdout,native.stdout)
+        import struct
+        vals=[16777216.,-16777216.,float(2**63),-float(2**63),-42.]
+        sentinel=bytes(range(160,176))
+        expected=b''.join(struct.pack('<f',v)+sentinel[4:] for v in vals)
+        self.assertEqual(guest.stdout,expected)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
+
+    def test_unimplemented_scalar_double_form_still_fails_closed(self):
+        from test_phase9_image_admission import executable
+        bad=self.root/'unsupported-cvtsi2sd.elf'
+        bad.write_bytes(executable(code=bytes([0xf2,0x48,0x0f,0x2a,0xc1])))
+        actual=subprocess.run([str(self.runner),str(bad)],
+                              capture_output=True,timeout=15)
+        self.assertEqual(actual.returncode,2,actual.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=3',actual.stderr)
+
     def test_pshufd_register_memory_and_self_alias_linux_differential(self):
         # CPython 3.12.10 now reaches 66 0F 70 E8 E5.
         asm=r"""

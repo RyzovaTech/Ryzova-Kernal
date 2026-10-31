@@ -136,6 +136,34 @@ static void vector_or(Cpu *c, Operand o, unsigned int reg)
     }
     for(i=0;i<16;i++)c->xmm[reg][i]|=data[i];
 }
+/* IEEE-754 binary32 conversion for the *default RN-even mode* of CVTSI2SS.
+ * No host floating point, x87 host rounding or fabricated target output.
+ * x86 MXCSR modifications are unsupported by this finite interpreter,
+ * so non-default guest rounding/exception behavior is NOT qualified. */
+static uint32_t convert_signed_binary32(uint64_t raw,unsigned int width)
+{
+    uint64_t magnitude,kept,lost,half,parts;
+    unsigned int sign,bit,drop,exponent;
+    raw&=mask(width);
+    sign=(unsigned int)(raw>>(width*8U-1U));
+    magnitude=sign?((~raw)&mask(width))+1U:raw;
+    if(!magnitude)return 0;
+    bit=0;
+    {uint64_t v=magnitude;while(v>>=1U)bit++;}
+    exponent=bit+127U;
+    if(bit<=23U)kept=magnitude<<(23U-bit);
+    else{
+        drop=bit-23U;
+        kept=magnitude>>drop;
+        parts=(UINT64_C(1)<<drop)-1U;
+        lost=magnitude&parts;
+        half=UINT64_C(1)<<(drop-1U);
+        if(lost>half || (lost==half && (kept&1U)))kept++;
+        if(kept==(UINT64_C(1)<<24U)){kept>>=1;exponent++;}
+    }
+    return ((uint32_t)sign<<31U)|((uint32_t)exponent<<23U)|
+           ((uint32_t)kept&UINT32_C(0x7fffff));
+}
 static uint64_t resultflags(Cpu *c,uint64_t v,unsigned int size)
 {
     unsigned int parity=0, i;
@@ -542,6 +570,19 @@ static int step(Cpu *c)
             rm=decode(c,&reg,&group,16);
             if(c->operand16 && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
             vector_move(c,rm,reg,op2==0x7f);
+        }
+        else if(op2==0x2a && c->repeat==0xf3 && !c->operand16){
+            /* F3 [REX.W] 0F 2A /r CVTSI2SS xmm, r/m32|r/m64.
+             * Signed conversion, default nearest ties-to-even. Preserve
+             * destination XMM[127:32] exactly and leave EFLAGS unchanged. */
+            unsigned int i,width=(c->rex&8U)?8U:4U;
+            uint32_t scalar;
+            rm=decode(c,&reg,&group,width);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            v=get(c,rm,width);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            scalar=convert_signed_binary32(v,width);
+            for(i=0;i<4;i++)c->xmm[reg][i]=(unsigned char)(scalar>>(8U*i));
         }
         else if(op2==0x70 && c->operand16 && !c->repeat){
             /* 66 0F 70 /r ib: PSHUFD xmm, xmm/m128, imm8.

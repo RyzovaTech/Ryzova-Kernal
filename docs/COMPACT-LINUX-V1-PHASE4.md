@@ -173,3 +173,19 @@ The source-hash-bounded ISA discovery now reports a separate
 convert version-only success into APP-PYTHON completion or guess an opcode
 from the RIP alone. The first actual executable-byte evidence is required
 before an original instruction implementation is selected.
+
+## 4F measured Python code-execution conversion increment
+
+An independent source-built CPython 3.12.10 `python -c` probe advances
+past version startup but stops with host-reported candidate bytes
+`F3 48 0F 2A C1` at RIP `0x58af90`, the legacy SSE scalar signed
+64-bit integer to binary32 conversion `CVTSI2SS`. The Ryzova interpreter
+implements signed 32/64-bit variants in deterministic integer arithmetic,
+**nearest ties-to-even** rounding to a 24-bit binary significand,
+including negative values, INT64_MIN and precision-boundary ties. XMM
+high 96 bits and EFLAGS remain untouched. A host-Linux-vs-original
+interpreter ELF differential test checks exact bytes and misaligned r/m32
+fetch; unimplemented scalar-double instruction remains denied. MXCSR
+nondefault rounding and floating exception flags are NOT implemented or
+claimed. All frozen Python stdlib, process/thread and TLS acceptance
+criteria remain pending independent actual guest evidence.
