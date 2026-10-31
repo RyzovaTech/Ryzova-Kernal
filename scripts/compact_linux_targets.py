@@ -136,9 +136,33 @@ class Build:
         (self.logs/'git-runtime-probes.json').write_text(json.dumps({'scope':'actual static musl programs on Linux reference','results':evidence},indent=2)+'\n')
         print('MUSL_GIT_CONFIG_PROBES '+json.dumps(evidence),flush=True)
         return cache
-    def app(self,name,source,args,env,install='install'):
+    @staticmethod
+    def isolate_cross_python_build(makefile):
+        """Prevent host build-Python loading foreign musl .so via PYTHONPATH.
+
+        CPython 3.12's generated PYTHON_FOR_BUILD includes the target build/lib
+        path. On AMD64 glibc -> AMD64 musl, extension module tags can match and
+        the host Python may import target ELF modules in checksharedmods.
+        Change only that generated make variable, NOT upstream source, target
+        feature checks or the checksharedmods recipe.
+        """
+        path=Path(makefile)
+        body=path.read_text()
+        needle='PYTHONPATH=$(shell test -f pybuilddir.txt && echo $(abs_builddir)/`cat pybuilddir.txt`:)$(srcdir)/Lib'
+        rows=body.splitlines(keepends=True)
+        selected=[i for i,row in enumerate(rows)
+                  if row.startswith('PYTHON_FOR_BUILD=') and needle in row]
+        if len(selected)!=1 or body.count(needle)!=1:
+            raise RuntimeError('unexpected CPython cross-build host path; no unsafe override')
+        index=selected[0]
+        rows[index]=rows[index].replace(needle,'PYTHONPATH=$(srcdir)/Lib')
+        path.write_text(''.join(rows))
+    def app(self,name,source,args,env,install='install',cross_python=False):
         build=self.out/('build-'+name);build.mkdir(exist_ok=True)
         self.run(name+'-configure',[source/'configure',*args],build,env)
+        if cross_python:
+            if name!='python':raise ValueError('cross-Python fix only allowed for pinned CPython target')
+            self.isolate_cross_python_build(build/'Makefile')
         self.run(name+'-make',['make','-j'+str(self.jobs)],build,env)
         self.run(name+'-install',['make',install,'DESTDIR='+str(self.root)],build,env)
         shutil.rmtree(build)
@@ -198,7 +222,7 @@ class Build:
         self.run('host-python-config',[src['python']/'configure','--prefix='+str(host/'install'),'--without-ensurepip','--disable-test-modules'],host,self.env)
         self.run('host-python-make',['make','-j'+str(self.jobs)],host,self.env)
         penv=dict(env,ac_cv_file__dev_ptmx='no',ac_cv_file__dev_ptc='no',ac_cv_buggy_getaddrinfo='no')
-        self.app('python',src['python'],[*common,'--with-build-python='+str(host/'python'),'--without-ensurepip','--disable-test-modules','--with-openssl='+str(self.root/'usr'),'--with-openssl-rpath=no'],penv)
+        self.app('python',src['python'],[*common,'--with-build-python='+str(host/'python'),'--without-ensurepip','--disable-test-modules','--with-openssl='+str(self.root/'usr'),'--with-openssl-rpath=no'],penv,cross_python=True)
         (self.root/'tmp').mkdir(exist_ok=True);(self.root/'tmp').chmod(0o1777)
         (self.root/'dev').mkdir(exist_ok=True)
         self.run('dev-null',['sudo','mknod','-m','666',str(self.root/'dev/null'),'c','1','3'],self.out)
