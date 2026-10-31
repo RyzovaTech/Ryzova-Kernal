@@ -143,10 +143,10 @@ static void net_output(RyzLinuxProcess *p,uint64_t address,uint64_t length,const
     if(count){buffer(p,address,count,1,&out);memcpy(out,value,count);}
     encode(size,n,4);
 }
-static int net_bound(RyzLinuxWorld *w,int domain,const unsigned char *address,unsigned int length,int skip)
+static int net_bound(RyzLinuxWorld *w,int domain,int type,const unsigned char *address,unsigned int length,int skip)
 {
     unsigned int i;
-    for(i=0;i<RYZ_NET_SOCKETS;i++)if((int)i!=skip && w->sockets[i].used && w->sockets[i].bound && !w->sockets[i].connected && w->sockets[i].domain==domain){
+    for(i=0;i<RYZ_NET_SOCKETS;i++)if((int)i!=skip && w->sockets[i].used && w->sockets[i].bound && !w->sockets[i].connected && w->sockets[i].domain==domain && w->sockets[i].type==type){
         RyzLinuxSocket *s=&w->sockets[i];
         if(domain==1){if(length==s->local_length && !memcmp(s->local,address,length))return (int)i;}
         else if(domain==10){
@@ -163,7 +163,7 @@ static int net_autobind(RyzLinuxWorld *w,RyzLinuxSocket *s)
     if(s->domain==1)return 0;
     for(attempt=0;attempt<RYZ_NET_SOCKETS+1;attempt++){
         port=40000+(w->next_port++%20000);s->local[2]=(unsigned char)(port>>8);s->local[3]=(unsigned char)port;
-        if(net_bound(w,s->domain,s->local,s->local_length,(int)(s-w->sockets))<0){s->bound=1;return 0;}
+        if(net_bound(w,s->domain,s->type,s->local,s->local_length,(int)(s-w->sockets))<0){s->bound=1;return 0;}
     }
     return -98;
 }
@@ -416,7 +416,7 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
             if(s->domain==2 && address[4]!=0 && address[4]!=127)return -101;
             if(s->domain==2 && !address[4] && (address[5] || address[6] || address[7]))return -101;
             if(s->bound || s->connected)return -22;
-            if(net_bound(w,s->domain,address,length,-1)>=0)return -98;
+            if(net_bound(w,s->domain,s->type,address,length,-1)>=0)return -98;
             memcpy(s->local,address,length);s->local_length=length;
             if((s->domain==2 || s->domain==10) && !address[2] && !address[3])return net_autobind(w,s);
             s->bound=1;return 0;
@@ -451,7 +451,7 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         }
         if(s->domain==2 && address[4]!=127)return -101;
         if(s->domain==10 && address[23]!=1)return -101;
-        other=net_bound(w,s->domain,address,length,-1);
+        other=net_bound(w,s->domain,s->type,address,length,-1);
         if(other<0 || !w->sockets[other].listening)return -111;
         peer=&w->sockets[other];
         if(peer->pending_count>=peer->backlog)return p->fds[r->rdi].nonblock?-11:RYZ_LINUX_BLOCKED;

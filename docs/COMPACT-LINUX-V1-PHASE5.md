@@ -16,3 +16,14 @@ and byte-for-byte compares local responses to native Linux. Local
 UDP loopback is NOT a real separate-peer UDP exchange. DNS, remote
 IPv6, complete UDP error/ICMP behavior, unmodified Python/Git TLS,
 and CLX-05's NET-PEERS/TLS-GUEST gates are still OPEN.
+
+## CLX-05 — TCP/UDP port namespaces
+
+Bound local TCP and UDP sockets now use **separate**, type-specific port
+occupancy checks, matching Linux's independently allocated transport port
+spaces while retaining duplicate-bind rejection within the same protocol.
+A source-built unmodified AMD64 socket fixture verifies both directions
+(native Linux and the Ryzova interpreter), plus denial of duplicate TCP/UDP
+binds and post-close reuse. This preserves the prohibition on off-link
+transmission and does not qualify DNS, real inter-node UDP, guest TLS, or
+CLX-05 release acceptance.

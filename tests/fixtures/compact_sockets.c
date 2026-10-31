@@ -83,6 +83,20 @@ long app_main(long argc,char **argv,char **env)
   CHECK(C(41,999,1,0)==-97 && C(41,10,3,0)==-94 && C(41,1,2,0)==-94 && C(41,2,1,17)==-93);
   fd=C(41,2,1,0);CHECK(fd>=0);address[4]=127;address[7]=1;CHECK(C(42,fd,address,16)==-111);
   CHECK(C(48,fd,1,0)==-107 && C(49,fd,1,16)==-14 && C(43,1,0,0)==-88);
+ }else if(equal(argv[1],"port-sharing")){
+  /* Linux keeps TCP and UDP local-port namespaces independent. */
+  int udp,tcp,duplicate_udp,duplicate_tcp;
+  address[4]=127;address[7]=1;
+  udp=C(41,2,2,0);CHECK(udp>=0 && !C(49,udp,address,16));
+  length=16;CHECK(!C(51,udp,address,&length) && length==16 && (address[2] || address[3]));
+  tcp=C(41,2,1,0);CHECK(tcp>=0 && !C(49,tcp,address,16));
+  duplicate_udp=C(41,2,2,0);
+  CHECK(duplicate_udp>=0 && C(49,duplicate_udp,address,16)==-98);
+  duplicate_tcp=C(41,2,1,0);
+  CHECK(duplicate_tcp>=0 && C(49,duplicate_tcp,address,16)==-98);
+  CHECK(!C(3,udp,0,0) && !C(3,tcp,0,0));
+  CHECK(!C(49,duplicate_udp,address,16) && !C(49,duplicate_tcp,address,16));
+  CHECK(!C(3,duplicate_udp,0,0) && !C(3,duplicate_tcp,0,0));
  }else if(equal(argv[1],"udp4") || equal(argv[1],"udp6")){
   int domain=equal(argv[1],"udp6")?10:2;
   int addrsize=domain==10?28:16;
