@@ -5,7 +5,7 @@ application environment එකයි. මෙහි V1 completion එක නම�
 workflows සහ acceptance gates මඟින් තීරණය වේ. Test ගණන හෝ අනුමාන
 ප්‍රතිශතයක් completion ලෙස භාවිත නොකරයි.
 
-Status: **CLX-01 and CLX-02 complete; CLX-03 is next; V1 is incomplete.** The machine
+Status: **CLX-01 and CLX-02 complete; CLX-03 in progress; V1 is incomplete.** The machine
 source of truth is [linux-v1-plan.json](../ryzova/compact/linux-v1-plan.json).
 New CLX phase numbers are distinct from historical Phase 9.1–9.16 PR numbering.
 
@@ -136,7 +136,7 @@ does not qualify application workflows or complete V1.
 | --- | --- | --- |
 | Root/live filesystem profile qualified; 32 slots and 64-KiB files still need measured developer budgets | syscall_vfs.h, filesystem_state.h | CLX-03 |
 | Native live directory profile has explicit POSIX/durability limits; new filesystem requirements reopen its gate | COMPACT-LINUX-V1-PHASE2.md | CLX-02 if required by a target |
-| Mutable-file private maps/shared anonymous memory/file futex keys unsupported | memory.c, jobs_threads.h | CLX-03 |
+| Private-file COW increment implemented; shared anonymous memory/shared futex keys and aggregate profiles remain pending | COMPACT-LINUX-V1-PHASE3.md | CLX-03 |
 | 4-MiB images, 16-MiB address span, bounded steps/fds/tasks | process.h, jobs.h, namespace.h | CLX-03/04 |
 | Integer/selected vector interpreter; unsupported instructions fail closed | cpu.c | CLX-04 |
 | Exact IPv4 TCP grants; no guest DNS/UDP/IPv6 or external listeners | syscall_net.h, network_plan9.h | CLX-05 |
@@ -188,3 +188,5 @@ No new Linux compatibility feature belongs to this phase. Phase 2 starts with
 FS-ROOT/FS-ISOLATION/FS-PERSIST, using the frozen application probes to expose real
 filesystem blockers. A remaining gate gets an owner and evidence; it is not
 replaced by another open-ended feature list.
+
+[CLX-03 progress](COMPACT-LINUX-V1-PHASE3.md) tracks the four finite memory/process/profile increments. Passing 3A alone does not complete that phase.

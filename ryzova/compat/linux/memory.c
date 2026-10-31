@@ -68,11 +68,10 @@ static int64_t dynamic_memory(RyzLinuxMemory *m,const RyzLinuxRegs *r)
             if(p->fds[r->r8].mode==1)return -13;
             if(p->fds[r->r8].node==RYZ_NS_EXEC){if(shared)return -13;file=&p->world->execs[p->fds[r->r8].vnode];}
             else if(p->fds[r->r8].node==RYZ_NS_VFS){
-                if(!shared)return -95;
                 vnode=RYZ_VFS_INDEX(p->world,p->fds[r->r8].vnode);node=&p->world->nodes[vnode];
                 if(node->directory)return -19;
                 if(prot&4)return -1;
-                if((prot&2) && p->fds[r->r8].mode!=2)return -13;
+                if(shared && (prot&2) && p->fds[r->r8].mode!=2)return -13;
             }else return -19;
         }
         minimum=alignpage(m->brk);lo=r->rdi;
@@ -91,7 +90,7 @@ static int64_t dynamic_memory(RyzLinuxMemory *m,const RyzLinuxRegs *r)
         if(node){
             kept=m->file_count;for(i=0;i<m->file_count;i++)if(m->filepages[i].page>=lo && m->filepages[i].page<hi)kept--;
             if(size/RYZ_PAGE>RYZ_FILEMAP_PAGES-kept)return -12;
-            if(!m->file_baseline){m->file_baseline=malloc(RYZ_FILEMAP_PAGES*RYZ_PAGE);if(!m->file_baseline)return -12;}
+            if(shared && !m->file_baseline){m->file_baseline=malloc(RYZ_FILEMAP_PAGES*RYZ_PAGE);if(!m->file_baseline)return -12;}
         }
         file_unbind(m,lo,hi);
         flags=RYZ_MAP|16|((prot&1)?RYZ_READ:0)|((prot&2)?RYZ_WRITE:0)|((prot&4)?RYZ_EXEC:0);
@@ -102,7 +101,7 @@ static int64_t dynamic_memory(RyzLinuxMemory *m,const RyzLinuxRegs *r)
         mark(m,lo,hi,flags);
         if(node)for(i=0;i<size;i+=RYZ_PAGE){
             RyzFilePage *binding=&m->filepages[m->file_count++];memset(binding,0,sizeof(*binding));
-            binding->page=lo+i;binding->offset=offset+i;binding->vnode=vnode;binding->maywrite=p->fds[r->r8].mode==2;m->world->mapped_nodes[vnode]++;
+            binding->page=lo+i;binding->offset=offset+i;binding->vnode=vnode;binding->private_map=!shared;binding->maywrite=!shared || p->fds[r->r8].mode==2;m->world->mapped_nodes[vnode]++;
         }
         if(file){
             uint64_t valid=offset<file->size?alignpage(file->size-offset):0;
