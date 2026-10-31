@@ -5,6 +5,9 @@ W2 adds a separate execution-admission loader and bounded C interpreter under
 metadata planner, or shared Compact negotiation. W1 PR #83 is an unmerged
 prerequisite; this PR is stacked on its branch.
 
+W3 extends this phase baseline with explicit imports and bounded APIs; see
+`COMPACT-WINDOWS-W3.md` for the current additional behavior.
+
 ## Implemented boundary
 
 `cw_plan` accepts only executable AMD64 PE32+ console images with explicit

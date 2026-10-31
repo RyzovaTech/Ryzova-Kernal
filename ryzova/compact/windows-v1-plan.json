@@ -61,7 +61,7 @@
       "depends_on": [
         "W2"
       ],
-      "state": "pending"
+      "state": "implemented"
     },
     {
       "id": "W4",
@@ -140,5 +140,17 @@
     "general Windows compatibility"
   ],
   "hosted_windows_subset_available": true,
-  "hosted_scope": "Import-free bounded PE execution; native Flex kernel qualification remains W6"
+  "hosted_scope": "Import-free bounded PE execution; native Flex kernel qualification remains W6",
+  "hosted_api_subset": [
+    "kernel32.dll!GetStdHandle",
+    "kernel32.dll!WriteFile",
+    "kernel32.dll!ExitProcess",
+    "kernel32.dll!GetLastError",
+    "kernel32.dll!SetLastError",
+    "kernel32.dll!GetCommandLineW",
+    "kernel32.dll!GetEnvironmentVariableW",
+    "kernel32.dll!VirtualAlloc",
+    "kernel32.dll!VirtualFree"
+  ],
+  "native_kernel_qualified": false
 }

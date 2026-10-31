@@ -22,7 +22,7 @@ LIMITS={
     'io_bytes_per_call':65536,
     'file_bytes':65536,
 }
-# This is a planned allowlist, NOT an implemented export table.
+# Contract allowlist across phases; runtime exports are defined separately in api.c.
 APIS={
     'kernel32.dll!GetStdHandle':'W3',
     'kernel32.dll!WriteFile':'W3',
