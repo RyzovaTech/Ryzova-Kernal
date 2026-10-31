@@ -44,7 +44,8 @@
       "id": "W1",
       "goal": "Contract, metadata audit and Windows reference fixture",
       "depends_on": [],
-      "state": "contract-implemented-awaiting-ci"
+      "state": "implemented",
+      "ci_evidence": "https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41207001547"
     },
     {
       "id": "W2",
@@ -52,7 +53,7 @@
       "depends_on": [
         "W1"
       ],
-      "state": "pending"
+      "state": "implemented-awaiting-cross-host-ci"
     },
     {
       "id": "W3",
@@ -137,5 +138,7 @@
     "registry",
     "arbitrary networking",
     "general Windows compatibility"
-  ]
+  ],
+  "hosted_windows_subset_available": true,
+  "hosted_scope": "Import-free bounded PE execution; native Flex kernel qualification remains W6"
 }
