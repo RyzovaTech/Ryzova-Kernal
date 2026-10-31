@@ -40,7 +40,10 @@ jobs:
     steps:
       - name: Preserve source bytes for receipt hashes
         shell: pwsh
-        run: git config --global core.autocrlf false
+        run: |
+          git config --global core.autocrlf false
+          # Git validates even excluded index paths; none are materialized below.
+          git config --global core.protectNTFS false
       - uses: actions/checkout@v4
         with:
           # Plan 9 source contains Windows-reserved names such as con.scat.
