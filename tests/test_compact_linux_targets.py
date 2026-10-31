@@ -19,6 +19,12 @@ class TargetLockTests(unittest.TestCase):
   for key,value in [('digest','x'*64),('archive','Python-3.99.tar.xz'),('urls',['http://example.com/source'])]:
    d=copy.deepcopy(lock);d['sources'][1][key]=value;self.assertTrue(validate(d))
   lock['sources'].append(lock['sources'][0]);self.assertTrue(validate(lock))
+ def test_expected_nonzero_reference_exit_keeps_time_metrics_parseable(self):
+  import subprocess
+  with tempfile.TemporaryDirectory() as d:
+   path=Path(d)/'usage.json'
+   result=subprocess.run(['/usr/bin/time','-q','-f','{"rss":%M}','-o',str(path),'sh','-c','exit 1'],capture_output=True)
+   self.assertEqual(result.returncode,1);self.assertGreaterEqual(json.loads(path.read_text())['rss'],0)
  def test_build_subprocess_pwd_matches_actual_make_directory(self):
   from compact_linux_targets import Build
   import os

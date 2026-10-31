@@ -77,7 +77,7 @@ def main(directory,output):
         entry=next((x for x in build['files'] if x['path']==resolved),None)
         if not entry or entry['sha256']!=info['sha256'] or entry['bytes']!=info['bytes']:raise ValueError('artifact manifest mismatch '+target)
         trace=logs/(target+'-trace');usage=logs/(target+'-usage.json')
-        command=['sudo','-n','/usr/bin/time','-f','{"elapsed_seconds":%e,"max_child_rss_kib":%M,"user_seconds":%U,"system_seconds":%S}','-o',str(usage),'strace','-ff','-qq','-yy','-o',str(trace),'chroot',str(root),path,*args]
+        command=['sudo','-n','/usr/bin/time','-q','-f','{"elapsed_seconds":%e,"max_child_rss_kib":%M,"user_seconds":%U,"system_seconds":%S}','-o',str(usage),'strace','-ff','-qq','-yy','-o',str(trace),'chroot',str(root),path,*args]
         start=time.monotonic();reference=subprocess.run(command,env=env,capture_output=True,timeout=120)
         elapsed=time.monotonic()-start;(logs/(target+'-reference.stdout')).write_bytes(reference.stdout);(logs/(target+'-reference.stderr')).write_bytes(reference.stderr)
         text=(reference.stdout+reference.stderr).decode(errors='replace');expected=1 if target=='musl' else 0
