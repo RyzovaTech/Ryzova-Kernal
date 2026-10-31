@@ -77,6 +77,14 @@ class TargetLockTests(unittest.TestCase):
    with patch('compact_linux_targets.subprocess.check_output',return_value=b.lock['build_driver']['commit']):
     b.toolchain(src);b.run.reset_mock();b.toolchain(src);b.run.assert_not_called();self.assertEqual(b.reused_stages,['cross'])
     (b.cross/'bin/cc').write_bytes(b'corrupt');b.toolchain(src);self.assertTrue(b.run.called)
+ def test_libc_configure_probes_report_real_results_and_reject_unknown_modes(self):
+  import subprocess
+  with tempfile.TemporaryDirectory() as d:
+   binary=Path(d)/'probe'
+   subprocess.run(['cc',str(ROOT/'tests/fixtures/compact_git_config_probes.c'),'-o',str(binary)],check=True,capture_output=True)
+   for mode in ('iconv','directory','snprintf'):
+    result=subprocess.run([str(binary),mode],capture_output=True,timeout=5);self.assertIn(result.returncode,(0,1))
+   self.assertEqual(subprocess.run([str(binary),'unknown'],capture_output=True).returncode,64)
  def test_elf_admission_measurement_rejects_malformed_headers(self):
   with self.assertRaises(ValueError):elf_info(b'\x7fELF')
   import subprocess

@@ -108,6 +108,18 @@ class Build:
         checkpoint.write_text(json.dumps({'signature':signature,'files':records},indent=2)+'\n')
         if native:self.restore_native_root(output)
         shutil.rmtree(build)
+    def git_runtime_probes(self,env):
+        probe=self.out/'git-config-probe'
+        self.run('git-probe-compile',[env['CC'],'-O2','-static',ROOT/'tests/fixtures/compact_git_config_probes.c','-o',probe],self.out,env)
+        cache={};evidence=[]
+        for mode,key in [('iconv','ac_cv_iconv_omits_bom'),('directory','ac_cv_fread_reads_directories'),('snprintf','ac_cv_snprintf_returns_bogus')]:
+            result=subprocess.run([str(probe),mode],cwd=self.out,env=self.env,capture_output=True,timeout=10)
+            if result.returncode not in (0,1):raise RuntimeError('musl configure probe failed '+mode+': '+str(result.returncode))
+            cache[key]='yes' if result.returncode else 'no'
+            evidence.append({'mode':mode,'exit':result.returncode,'cache_key':key,'cache_value':cache[key]})
+        (self.logs/'git-runtime-probes.json').write_text(json.dumps({'scope':'actual static musl programs on Linux reference','results':evidence},indent=2)+'\n')
+        print('MUSL_GIT_CONFIG_PROBES '+json.dumps(evidence),flush=True)
+        return cache
     def app(self,name,source,args,env,install='install'):
         build=self.out/('build-'+name);build.mkdir(exist_ok=True)
         self.run(name+'-configure',[source/'configure',*args],build,env)
@@ -123,7 +135,7 @@ class Build:
         if stage=='native':return
         (self.root/'usr').mkdir(exist_ok=True)
         shutil.copytree(self.root/'include',self.root/'usr/include',dirs_exist_ok=True,symlinks=True)
-        env=dict(self.env,PATH=str(self.cross/'bin')+os.pathsep+self.env['PATH'],CC=TRIPLE+'-gcc',CXX=TRIPLE+'-g++',AR=TRIPLE+'-ar',RANLIB=TRIPLE+'-ranlib',CFLAGS='-O2 -march=x86-64 -mtune=generic',CPPFLAGS='-I'+str(self.root/'usr/include'),LDFLAGS='-L'+str(self.root/'usr/lib'),PKG_CONFIG='/bin/false')
+        env=dict(self.env,PATH=str(self.cross/'bin')+os.pathsep+self.env['PATH'],CC=TRIPLE+'-gcc',CXX=TRIPLE+'-g++',AR=TRIPLE+'-ar',RANLIB=TRIPLE+'-ranlib',CFLAGS='-O2 -march=x86-64 -mtune=generic',CPPFLAGS='-I'+str(self.root/'usr/include'),LDFLAGS='-L'+str(self.root/'usr/lib')+' -Wl,-rpath-link,'+str(self.root/'usr/lib'),PKG_CONFIG='/bin/false')
         # Packages are built against the pinned musl cross sysroot and explicit dependencies.
         self.run('zlib-configure',['./configure','--prefix=/usr'],src['zlib'],env)
         self.run('zlib-make',['make','-j'+str(self.jobs)],src['zlib'],env)
@@ -133,11 +145,14 @@ class Build:
         self.run('openssl-install',['make','install_sw','DESTDIR='+str(self.root)],src['openssl'],env)
         common=['--build='+subprocess.check_output([str(src['gcc']/'config.guess')],text=True).strip(),'--host='+TRIPLE,'--prefix=/usr']
         self.app('curl',src['curl'],[*common,'--with-openssl='+str(self.root/'usr'),'--with-zlib='+str(self.root/'usr'),'--disable-ldap','--disable-ldaps','--disable-manual','--without-libpsl','--without-brotli','--without-zstd','--without-libidn2','--without-nghttp2','--without-librtmp','--without-libssh2','--enable-shared','--disable-static'],env)
-        genv=dict(env,NO_GETTEXT='YesPlease',NO_TCLTK='YesPlease',NO_PERL='YesPlease',NO_PYTHON='YesPlease',CURL_CONFIG=str(self.root/'usr/bin/curl-config'))
+        genv=dict(env,NO_GETTEXT='YesPlease',NO_TCLTK='YesPlease',NO_PERL='YesPlease',NO_PYTHON='YesPlease',CURL_CONFIG=str(self.root/'usr/bin/curl-config'),**self.git_runtime_probes(env))
         self.run('git-configure',['make','configure'],src['git'],genv)
         self.run('git-config',['./configure',*common,'--with-openssl='+str(self.root/'usr'),'--with-curl='+str(self.root/'usr'),'--with-zlib='+str(self.root/'usr'),'--without-tcltk'],src['git'],genv)
+        configuration=(src['git']/'config.mak.autogen').read_text()
+        if any(line.startswith('NO_CURL') and '=' in line and line.split('=',1)[1].strip() for line in configuration.splitlines()):raise RuntimeError('Git HTTPS support unexpectedly disabled')
         self.run('git-make',['make','-j'+str(self.jobs),'NO_GETTEXT=YesPlease','NO_TCLTK=YesPlease','NO_PERL=YesPlease','NO_PYTHON=YesPlease'],src['git'],genv)
         self.run('git-install',['make','install','DESTDIR='+str(self.root),'NO_GETTEXT=YesPlease','NO_TCLTK=YesPlease','NO_PERL=YesPlease','NO_PYTHON=YesPlease'],src['git'],genv)
+        if not (self.root/'usr/libexec/git-core/git-remote-https').is_file():raise RuntimeError('required Git HTTPS helper missing')
         self.app('make',src['make'],[*common,'--without-guile','--disable-nls'],env)
         self.run('busybox-config',['make','allnoconfig'],src['busybox'],env)
         config=src['busybox']/'.config';text=config.read_text()
