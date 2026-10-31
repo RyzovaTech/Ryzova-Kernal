@@ -316,7 +316,7 @@
       "acceptance": "Private COW, shared anonymous maps, shared futex and required process/session calls pass Linux references, failure and lifetime tests.",
       "state": "partial",
       "evidence": null,
-      "progress": "3A private managed-file mappings implemented; shared anonymous/futex and process/session acceptance remain pending",
+      "progress": "3A merged; shared anonymous/futex keys and declared session/limit APIs implemented; exact-head qualification in associated PR, wider required-call discovery remains open",
       "progress_document": "docs/COMPACT-LINUX-V1-PHASE3.md"
     },
     {
@@ -324,8 +324,10 @@
       "phase": "CLX-03",
       "targets": [],
       "acceptance": "Every target has explicit measured image/memory/steps/time/fd/filesystem/network budgets and aggregate enforcement; no unlimited default.",
-      "state": "pending",
-      "evidence": null
+      "state": "partial",
+      "evidence": null,
+      "progress": "Aggregate arena cap and fixture peak measurements implemented; all seven named-target image/RAM/steps/time/fd/storage/network qualification remains pending; five targets lack locked runnable artifacts",
+      "progress_document": "docs/COMPACT-LINUX-V1-PHASE3.md"
     },
     {
       "id": "AMD64-ABI",

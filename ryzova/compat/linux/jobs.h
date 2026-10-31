@@ -23,6 +23,7 @@ typedef struct RyzJobConfig {
     RyzFilesystemResources *filesystem;
     const RyzNetworkResources *network;
     const RyzFsResources *resources;
+    uint64_t arena_bytes_max; /* 0: fixed nine-arena ceiling, including exec staging. */
     unsigned int root_tree; /* 0: historical /tmp, 1: isolated guest root. */
 } RyzJobConfig;
 int ryz_vm_run_jobs_elf(const unsigned char *,size_t,unsigned char *,size_t,

@@ -250,7 +250,7 @@ static int guest_syscall(Cpu *c)
         return RYZ_VM_OK;
     }
     r.rax=nr;r.rdi=c->r[7];r.rsi=c->r[6];r.rdx=c->r[2];r.r10=c->r[10];r.r8=c->r[8];r.r9=c->r[9];
-    if((nr==7 || nr==56 || nr==202 || nr==273 || nr==274 || nr==24 || nr==60 || nr==231 || nr==15 || nr==35 || nr==36 || nr==37 || nr==38 || nr==128 || nr==230 || nr==34 || nr==57 || nr==58 || nr==59 || nr==61 || nr==62 || nr==127 || nr==130 || nr==131 || nr==200 || nr==234) && c->p->job_call){
+    if((nr==97 || nr==160 || nr==302 || nr==109 || nr==112 || nr==121 || nr==124 || nr==7 || nr==56 || nr==202 || nr==273 || nr==274 || nr==24 || nr==60 || nr==231 || nr==15 || nr==35 || nr==36 || nr==37 || nr==38 || nr==128 || nr==230 || nr==34 || nr==57 || nr==58 || nr==59 || nr==61 || nr==62 || nr==127 || nr==130 || nr==131 || nr==200 || nr==234) && c->p->job_call){
         int state=c->p->job_call(c->p->job_context,c,&r,&answer);
         if(state==RYZ_CPU_BLOCKED)return state;
         if(state==RYZ_CPU_EXECUTED){c->result->syscall_count++;return RYZ_VM_OK;}

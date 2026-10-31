@@ -88,8 +88,8 @@ static int net_slot(RyzLinuxWorld *w)
 static int net_fd(RyzLinuxProcess *p,unsigned int socket,uint64_t flags)
 {
     unsigned int i,id;
-    for(i=0;i<RYZ_LINUX_FD_MAX;i++)if(!p->fds[i].open)break;
-    if(i==RYZ_LINUX_FD_MAX)return -24;
+    for(i=0;i<p->file_limit;i++)if(!p->fds[i].open)break;
+    if(i==p->file_limit)return -24;
     id=new_description(p);if(!id)return -24;
     memset(&p->fds[i],0,sizeof p->fds[i]);p->fds[i].open=1;p->fds[i].mode=2;
     p->fds[i].node=RYZ_NS_SOCKET;p->fds[i].socket=socket;p->fds[i].description=id;

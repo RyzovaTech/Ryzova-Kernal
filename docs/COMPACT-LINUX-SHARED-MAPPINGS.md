@@ -55,18 +55,18 @@ POPF preserve their destination register/flags in the saved signal context.
 
 `msync` validates flags/range and completes guest cache synchronization. It does
 not promise native disk durability, live host mounts, or crash-atomic snapshots.
-Existing private immutable image mappings remain supported. MAP_PRIVATE of
-writable guest VFS files, shared anonymous maps, interprocess file-backed futex
-keys, remap, locking and huge pages remain unsupported. Non-private futex calls
-on file-backed maps explicitly return EOPNOTSUPP; private futex keys retain their
-existing address-space behavior.
+Private immutable image and managed-file COW mappings are supported. Shared
+anonymous backing and inode/offset shared futex keys are described in
+[the Phase 3 profile](COMPACT-LINUX-V1-PHASE3.md). Private futex keys retain their
+MM/address behavior. Resource fds, remap, locking and huge pages remain outside
+this profile; executable mutable guest files remain denied.
 
 ## Verification
 
 Compiled workloads are compared with Linux for aliases, fork, close/unlink,
 partial pages, offsets, fixed replacement, syscall I/O, msync, truncation, SIGBUS
 recovery, alternate signal stacks and fault contexts. Policy tests cover read-only
-ceilings, mapping quotas, unsupported output aliases and file-backed futexes.
+ceilings, mapping quotas, unsupported output aliases and shared/private futex policies.
 Allocation failure injection covers mapping, fork and exec cleanup; ASan/UBSan
 and CI leak checks cover the same paths.
 

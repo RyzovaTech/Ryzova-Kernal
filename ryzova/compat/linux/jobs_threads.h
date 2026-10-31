@@ -1,16 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Cooperative shared-mm threads. No native clone/futex/thread forwarding. */
-static int futex_wake(Jobs *jobs,Task *caller,uint64_t address,uint32_t count,uint32_t mask)
-{
-    unsigned int i;uint32_t woke=0;
-    for(i=0;i<RYZ_JOB_TASKS && woke<count;i++){
-        Task *t=&jobs->tasks[i];
-        if(t->state!=FREE && t->state!=ZOMBIE && t->cpu.m==caller->cpu.m && t->futex_waiting && t->futex_address==address && (t->futex_mask&mask)){
-            t->futex_waiting=0;t->futex_woken=1;t->futex_deadline=0;woke++;
-        }
-    }
-    return (int)woke;
-}
 static void robust_one(Jobs *jobs,Task *task,uint64_t node,int64_t offset)
 {
     uint64_t at;uint32_t value;
@@ -48,7 +37,7 @@ static int64_t clone_thread(Jobs *jobs,Task *parent,const RyzLinuxRegs *r)
     if((r->rdi&0x100000) && !ryz_memory_access(parent->cpu.m,r->rdx,4,RYZ_WRITE))return -14;
     if((r->rdi&(0x200000|0x1000000)) && !ryz_memory_access(parent->cpu.m,r->r10,4,RYZ_WRITE))return -14;
     if((r->rdi&0x80000) && r->r8 && !ryz_memory_access(parent->cpu.m,r->r8,1,RYZ_READ))return -14;
-    if(jobs->forks>=RYZ_JOB_FORKS || parent->vfork_parent>=0)return -11;
+    if(!process_admit(jobs,parent) || jobs->forks>=RYZ_JOB_FORKS || parent->vfork_parent>=0)return -11;
     for(i=1;i<RYZ_JOB_TASKS;i++)if(jobs->tasks[i].state==FREE)break;
     if(i==RYZ_JOB_TASKS)return -11;
     leader=group_leader(jobs,parent);child=&jobs->tasks[i];memset(child,0,sizeof(*child));
@@ -95,35 +84,39 @@ static int thread_call(Jobs *jobs,Task *task,const RyzLinuxRegs *r,int64_t *answ
     }
     if((operation & ~(uint32_t)(127|128|256)) || (command!=0 && command!=1 && command!=3 && command!=4 && command!=9 && command!=10) || ((operation&256) && command!=9)){*answer=-38;return RYZ_VM_OK;}
     if((command==0 || command==9) && task->futex_woken){task->futex_woken=0;*answer=0;return RYZ_VM_OK;}
-    if((at&3) || !ryz_memory_access(c->m,at,4,RYZ_READ)){*answer=(at&3)?-22:-14;return RYZ_VM_OK;}
-    if(!(operation&128)){
-        unsigned int page;for(page=0;page<c->m->file_count;page++)if(!c->m->filepages[page].private_map && at>=c->m->filepages[page].page && at-c->m->filepages[page].page<RYZ_PAGE){*answer=-95;return RYZ_VM_OK;}
-    }
+    if((command==0 || command==9) && task->futex_waiting)goto still_waiting;
+    {RyzFutexKey key;error=ryz_memory_futex_key(c->m,at,(operation&128)!=0,&key);if(error){*answer=error;return RYZ_VM_OK;}}
     if(command==3 || command==4){
-        unsigned int i;uint32_t moved=0;int woke;
-        if((r->r8&3) || !ryz_memory_access(c->m,r->r8,4,RYZ_READ)){*answer=(r->r8&3)?-22:-14;return RYZ_VM_OK;}
-        if((int32_t)r->rdx<0 || (int32_t)r->r10<0){*answer=-22;return RYZ_VM_OK;}
+        unsigned int i;uint32_t moved=0;int woke;RyzFutexKey from,to;
+        error=ryz_memory_futex_key(c->m,at,(operation&128)!=0,&from);if(!error)error=ryz_memory_futex_key(c->m,r->r8,(operation&128)!=0,&to);
+        if(error){*answer=error;return RYZ_VM_OK;}
+        if(futex_equal(&from,&to) || (int32_t)r->rdx<0 || (int32_t)r->r10<0){*answer=-22;return RYZ_VM_OK;}
         if(command==4 && little(c->m->bytes+(size_t)(at-c->m->base),4)!=(uint32_t)r->r9){*answer=-11;return RYZ_VM_OK;}
-        woke=futex_wake(jobs,task,at,(uint32_t)r->rdx,0xffffffffU);
+        woke=futex_wake_key(jobs,&from,(uint32_t)r->rdx,0xffffffffU);
         for(i=0;i<RYZ_JOB_TASKS && moved<(uint32_t)r->r10;i++){
             Task *other=&jobs->tasks[i];
-            if(other->state!=FREE && other->futex_waiting && other->cpu.m==c->m && other->futex_address==at){other->futex_address=r->r8;moved++;}
+            if(other->state!=FREE && other->futex_waiting && futex_equal(&other->futex_key,&from)){
+                ryz_memory_key_ref(&jobs->world,&to,1);ryz_memory_key_ref(&jobs->world,&other->futex_key,-1);other->futex_key=to;moved++;
+            }
         }
         *answer=woke+moved;return RYZ_VM_OK;
     }
     if(command==9 || command==10){mask=(uint32_t)r->r9;if(!mask){*answer=-22;return RYZ_VM_OK;}}
-    if(command==1 || command==10){uint32_t count=(int32_t)r->rdx<=0?1:(uint32_t)r->rdx;*answer=futex_wake(jobs,task,at,count,mask);return RYZ_VM_OK;}
-        if(!task->futex_waiting){
-        value=(uint32_t)little(c->m->bytes+(size_t)(at-c->m->base),4);
-        if(value!=(uint32_t)r->rdx){*answer=-11;return RYZ_VM_OK;}
-        if(task->futex_restart.active && task->futex_restart.ip==c->ip && task->futex_restart.address==at){
-            task->futex_deadline=task->futex_restart.deadline;task->futex_restart.active=0;
-        }else{
-            if(r->r10){error=timer_duration(c,r->r10,0,&duration);if(error || (command==0 && duration>UINT64_MAX-now)){*answer=error?error:-22;return RYZ_VM_OK;}}
-            task->futex_deadline=r->r10?(command==9?duration:now+duration):0;
-        }
-        task->futex_waiting=1;task->futex_address=at;task->futex_mask=mask;
+    if(command==1 || command==10){
+        RyzFutexKey key;uint32_t count=(int32_t)r->rdx<=0?1:(uint32_t)r->rdx;
+        error=ryz_memory_futex_key(c->m,at,(operation&128)!=0,&key);*answer=error?error:futex_wake_key(jobs,&key,count,mask);return RYZ_VM_OK;
     }
-    if(r->r10 && now>=task->futex_deadline){task->futex_waiting=0;task->futex_deadline=0;*answer=-110;return RYZ_VM_OK;}
+    value=(uint32_t)little(c->m->bytes+(size_t)(at-c->m->base),4);
+    if(value!=(uint32_t)r->rdx){*answer=-11;return RYZ_VM_OK;}
+    if(task->futex_restart.active && task->futex_restart.ip==c->ip && task->futex_restart.address==at){
+        task->futex_deadline=task->futex_restart.deadline;task->futex_restart.active=0;
+    }else if(r->r10){
+        error=timer_duration(c,r->r10,0,&duration);if(error || (command==0 && duration>UINT64_MAX-now)){*answer=error?error:-22;return RYZ_VM_OK;}
+        task->futex_deadline=command==9?duration:now+duration;
+    }else task->futex_deadline=0;
+    error=ryz_memory_futex_key(c->m,at,(operation&128)!=0,&task->futex_key);if(error){*answer=error;return RYZ_VM_OK;}
+    ryz_memory_key_ref(&jobs->world,&task->futex_key,1);task->futex_waiting=1;task->futex_address=at;task->futex_mask=mask;
+ still_waiting:
+    if(r->r10 && now>=task->futex_deadline){futex_clear(task);task->futex_deadline=0;*answer=-110;return RYZ_VM_OK;}
     *answer=RYZ_LINUX_BLOCKED;return RYZ_CPU_BLOCKED;
 }

@@ -395,8 +395,8 @@ static int64_t vfs_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *handle
         if((flags & 0200000) && index>=0 && !p->world->nodes[index].directory)return -20;
         if(index<0 && (flags & 0200000))return -20;
         if((flags & 01000) && !(flags & 3))return -22;
-        for(i=0;i<RYZ_LINUX_FD_MAX;i++)if(!p->fds[i].open)break;
-        if(i==RYZ_LINUX_FD_MAX)return -24;
+        for(i=0;i<p->file_limit;i++)if(!p->fds[i].open)break;
+        if(i==p->file_limit)return -24;
         slot=-1;
         if(index<0){slot=vfs_slot(p->world);if(slot<0)return slot;}
         id=new_description(p);if(!id)return -24;

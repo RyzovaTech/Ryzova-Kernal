@@ -8,7 +8,7 @@ Linux and public-binary release gates remain separate.
 | Area | Implemented scope | Remaining for a general environment |
 | --- | --- | --- |
 | Loading | Selected static ELF, PIE, explicit musl interpreter/library grants | More loaders, libraries, relocation and ISA workloads |
-| Processes | Fork/vfork/exec/wait, pipes, bounded process groups | Broader process/session/resource APIs |
+| Processes | Fork/vfork/exec/wait, pipes, namespace groups/sessions; bounded NOFILE/NPROC/AS and aggregate arena limits | Wider required APIs and named-target resource qualification |
 | Threads | Cooperative shared-memory clone, musl pthreads, TLS, selected futex/robust operations | More clone profiles, priority inheritance, broader concurrency workloads |
 | Signals/time | Guest frames, masks, pending queues, selected logical timers | More timer APIs and synchronous exception coverage |
 | Files | Managed root, explicit live directory capabilities, per-app views/revocation, FLEXFS4 persistence; guest symlinks, hardlinks and shared file maps | Broader POSIX semantics on native mounts, metadata, durability and measured developer budgets |
@@ -52,5 +52,7 @@ Linux V1 is still incomplete; CLX-03 memory/process/budget work is next. Native
 live mounts retain the documented POSIX and durability limitations.
 
 CLX-03 has started with [private managed-file COW mappings](COMPACT-LINUX-V1-PHASE3.md).
-Shared anonymous memory, shared futex objects, required process/session APIs and
-measured per-target/aggregate developer profiles remain open Phase 3 work.
+Shared anonymous backing, shared futex keys/lifetimes, the declared session/resource
+API profile and aggregate arena admission/peak measurement are now implemented.
+Qualification is recorded against the associated PR head. Full named-target
+measurements and wider required-call discovery remain open Phase 3 work.

@@ -245,8 +245,8 @@ static int64_t resource_dispatch(RyzLinuxProcess *p,const RyzLinuxRegs *r,int *h
         if((flags&01000) && !(flags&3))return -22;
         if(flags & ~(uint64_t)(3|0100|0200|01000|02000|04000|0100000|0200000|0400000|02000000) || (flags&3)==3)return -22;
         rights=(flags&3) || (flags&(0100|01000))?3:1;error=resource_rights(p,(unsigned int)i,rights);if(error)return error;
-        for(k=0;k<RYZ_LINUX_FD_MAX && p->fds[k].open;k++);
-        if(k==RYZ_LINUX_FD_MAX)return -24;
+        for(k=0;k<p->file_limit && p->fds[k].open;k++);
+        if(k==p->file_limit)return -24;
         c.operation=RYZ_FS_STAT;result=resource_call(p,(unsigned int)i,rights,&c);
         if(result==-2){
             if(!(flags&0100))return -2;

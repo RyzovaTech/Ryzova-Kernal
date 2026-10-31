@@ -103,7 +103,7 @@ long app_main(long argc,char **argv,char **env)
   v[0]=(U)a;v[1]=1;v[2]=(U)b+8;v[3]=1;CHECK(C(1,pipes[1],"XY",2)==2 && C(19,pipes[0],v,2)==-14 && a[0]==0 && b[8]==0);
  }else if(eq(argv[2],"futex-policy")){
   fd=make(4096);CHECK(fd>=0);a=mapping(fd,4096,0,3);CHECK((long)a>0);
-  CHECK(call(202,(long)a,1,1,0,0,0)==-95 && call(202,(long)a,129,1,0,0,0)==0);
+  CHECK(call(202,(long)a,1,1,0,0,0)==0 && call(202,(long)a,129,1,0,0,0)==0);
  }else if(eq(argv[2],"release")){
   for(i=0;i<40;i++){
    fd=make(4096);CHECK(fd>=0);a=mapping(fd,4096,0,3);CHECK((long)a>0 && !C(87,"file",0,0) && !C(3,fd,0,0));a[0]='R';

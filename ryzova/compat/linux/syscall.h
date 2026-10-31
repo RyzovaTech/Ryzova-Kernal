@@ -93,7 +93,12 @@ typedef struct RyzLinuxSocket {
     unsigned char bytes[RYZ_NET_BUFFER];
 } RyzLinuxSocket;
 typedef int64_t (*RyzLinuxRandom)(void *,unsigned char *,size_t);
+#define RYZ_SHARED_ANON_PAGES 64U
+typedef struct RyzSharedPage {uint64_t identity;unsigned int refs;unsigned char bytes[4096];} RyzSharedPage;
 typedef struct RyzLinuxWorld {
+    RyzSharedPage shared_pages[RYZ_SHARED_ANON_PAGES];
+    uint64_t shared_next;
+    unsigned int shared_live,shared_peak;
     RyzLinuxRandom random;
     void *random_context;
     RyzVnode nodes[RYZ_VFS_NODES];
@@ -131,7 +136,9 @@ typedef struct RyzLinuxProcess {
     int cwd,barrier_registered;
     unsigned int vfs_cwd, file_umask,fs_read_mask,fs_write_mask;
     char resource_cwd[RYZ_NS_PATH_MAX];
-    uint32_t parent_pid,group_pid,tgid;
+    uint32_t parent_pid,group_pid,tgid,session_pid;
+    unsigned int file_limit,nproc_limit,file_hard,nproc_hard;
+    uint64_t address_limit,address_hard;
     struct RyzLinuxProcess *fd_owner,*action_owner,*fs_owner;
     unsigned int fd_shares,memory_index;
     int fd_detached;

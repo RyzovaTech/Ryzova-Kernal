@@ -104,7 +104,7 @@ static int signal_frame(Task *task,SignalEvent *event)
             FutexRestart *saved=&task->futex_frames[task->signal_depth];
             saved->active=1;saved->frame=sp;saved->ip=c->ip;saved->address=c->r[7];saved->deadline=task->futex_deadline;
         }
-        task->futex_waiting=0;task->futex_deadline=0;
+        futex_clear(task);task->futex_deadline=0;
     }
     save_mask=task->suspended?task->suspend_mask:task->process.signal_mask;
     if(task->blocked){
