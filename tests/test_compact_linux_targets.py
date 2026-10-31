@@ -19,6 +19,19 @@ class TargetLockTests(unittest.TestCase):
   for key,value in [('digest','x'*64),('archive','Python-3.99.tar.xz'),('urls',['http://example.com/source'])]:
    d=copy.deepcopy(lock);d['sources'][1][key]=value;self.assertTrue(validate(d))
   lock['sources'].append(lock['sources'][0]);self.assertTrue(validate(lock))
+ def test_toolchain_checkpoint_reuse_verifies_file_hashes(self):
+  from compact_linux_targets import Build
+  from unittest.mock import patch,Mock
+  with tempfile.TemporaryDirectory() as d:
+   out=Path(d)/'out';driver=Path(d)/'driver';(driver/'litecross').mkdir(parents=True);(driver/'litecross/Makefile').write_text('all:\n')
+   b=Build(out,driver,2);src={s['id']:Path(d)/s['id'] for s in b.lock['sources']}
+   def fake(name,argv,cwd,env=None):
+    if name=='cross-install':
+     (b.cross/'bin').mkdir(parents=True);(b.cross/'bin/cc').write_bytes(b'compiled-test-compiler')
+   b.run=Mock(side_effect=fake)
+   with patch('compact_linux_targets.subprocess.check_output',return_value=b.lock['build_driver']['commit']):
+    b.toolchain(src);b.run.reset_mock();b.toolchain(src);b.run.assert_not_called();self.assertEqual(b.reused_stages,['cross'])
+    (b.cross/'bin/cc').write_bytes(b'corrupt');b.toolchain(src);self.assertTrue(b.run.called)
  def test_elf_admission_measurement_rejects_malformed_headers(self):
   with self.assertRaises(ValueError):elf_info(b'\x7fELF')
   import subprocess

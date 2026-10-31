@@ -20,7 +20,7 @@ TARGETS={
  'musl':('/lib/libc.so',[],'1.2.6')}
 
 def elf_info(data):
-    if data[:6]!=b'\x7fELF\x02\x01':raise ValueError('not little-endian ELF64')
+    if data[:6]!=b'\x7fELF\x02\x01' or len(data)<64 or int.from_bytes(data[18:20],'little')!=62:raise ValueError('not little-endian AMD64 ELF64')
     phoff=int.from_bytes(data[32:40],'little');size=int.from_bytes(data[54:56],'little');count=int.from_bytes(data[56:58],'little')
     if size!=56 or count>128 or phoff+size*count>len(data):raise ValueError('invalid program headers')
     loads=[];interpreter=None
@@ -32,18 +32,19 @@ def elf_info(data):
     return {'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'load_span_bytes':max((b for a,b in loads),default=0)-min((a for a,b in loads),default=0),'interpreter':interpreter}
 
 def trace_metrics(paths):
-    calls=collections.Counter();max_fd=2;read_bytes=write_bytes=network_bytes=0
+    calls=collections.Counter();max_fd=2;read_bytes=write_bytes=network_bytes=unparsed=0
     for path in paths:
         for line in path.read_text(errors='replace').splitlines():
             match=re.search(r'\b([a-zA-Z_][a-zA-Z_0-9]*)\((.*)\)\s+=\s+(-?[0-9]+)',line)
-            if not match:continue
+            if not match:
+                unparsed+=1;continue
             name,args,value=match.groups();value=int(value);calls[name]+=1
             if name in ('open','openat','creat','dup','dup2','dup3','socket','accept','accept4') and value>=0:max_fd=max(max_fd,value)
             if value>0:
                 if name in ('read','readv','pread64'):read_bytes+=value
                 if name in ('write','writev','pwrite64'):write_bytes+=value
                 if name in ('sendto','sendmsg','recvfrom','recvmsg') or (name in ('read','write','readv','writev') and ('<TCP:' in args or '<UDP:' in args)):network_bytes+=value
-    return {'observed_syscalls':dict(sorted(calls.items())),'max_observed_fd':max_fd,'returned_read_bytes':read_bytes,'returned_write_bytes':write_bytes,'returned_network_bytes':network_bytes,'fd_metric':'largest descriptor returned by traced operations; not live-fd peak','scope':'Linux reference including chroot launcher; not Flex guest counters'}
+    return {'observed_syscalls':dict(sorted(calls.items())),'unparsed_trace_lines':unparsed,'trace_metric':'completed parseable records; unfinished/resumed lines are not inferred','max_observed_fd':max_fd,'returned_read_bytes':read_bytes,'returned_write_bytes':write_bytes,'returned_network_bytes':network_bytes,'fd_metric':'largest descriptor returned by traced operations; not live-fd peak','scope':'Linux reference including chroot launcher; not Flex guest counters'}
 
 def main(directory,output):
     directory=Path(directory).resolve();root=directory/'root';build=json.loads((directory/'target-build.json').read_text());logs=directory/'logs';records=[]
@@ -72,6 +73,9 @@ def main(directory,output):
         (logs/(target+'-guest.stdout')).write_bytes(guest.stdout);(logs/(target+'-guest.stderr')).write_bytes(guest.stderr)
         result=re.search(rb'COMPACT_JOBS_RESULT status=([0-9]+) exited=([01]) exit=([0-9]+) steps=([0-9]+) syscalls=([0-9]+)',guest.stderr)
         actual={key:int(value) for key,value in zip(('status','exited','exit','steps','syscalls'),result.groups())} if result else None
+        if actual:
+            rip=re.search(rb' rip=([0-9a-f]+)',guest.stderr)
+            actual['last_rip_hex']=rip.group(1).decode() if rip else None
         success=bool(actual and actual['status']==0 and actual['exited'] and actual['exit']==expected and version.encode() in guest.stdout+guest.stderr)
         blockers=[]
         if info['bytes']>4*1024*1024:blockers.append('ELF exceeds current 4-MiB image ceiling')

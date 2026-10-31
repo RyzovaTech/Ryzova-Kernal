@@ -10,6 +10,9 @@ on:
       - 'tests/test_compact_linux_targets.py'
       - '.github/workflows/compact-linux-target-profiles.yml'
   workflow_dispatch:
+concurrency:
+  group: compact-target-profiles-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -29,15 +32,51 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/cache/restore@v4
+        id: cache-sources
+        with:
+          path: artifacts/targets/sources
+          key: compact-linux-sources-v1-${{ hashFiles('ryzova/compact/linux-target-sources.json') }}
+      - uses: actions/cache/restore@v4
+        id: cache-cross
+        with:
+          path: artifacts/targets/cross
+          key: compact-linux-cross-v1-${{ hashFiles('ryzova/compact/linux-target-sources.json') }}
+      - uses: actions/cache/restore@v4
+        id: cache-native
+        with:
+          path: artifacts/targets/native-toolchain
+          key: compact-linux-native-v1-${{ hashFiles('ryzova/compact/linux-target-sources.json') }}
       - name: Install bounded build and measurement prerequisites
         run: sudo apt-get update && sudo apt-get install -y build-essential bison flex texinfo lzip rsync strace time pkg-config
       - name: Validate source lock and build selected target releases for musl
         run: |
           python scripts/compact_linux_targets.py --check-lock
           python -m unittest discover -s tests -p test_compact_linux_targets.py -v
-          python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 2
+          python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 2 --stage sources
+      - name: Build or verify pinned bootstrap cross compiler
+        run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 2 --stage cross
+      - name: Build or verify native musl GCC and binutils
+        run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 2 --stage native
+      - name: Build named applications and dependency closure
+        run: python scripts/compact_linux_targets.py --output artifacts/targets --driver artifacts/build-driver --jobs 2 --stage apps
       - name: Discover actual resource use and guest admission blockers
         run: python scripts/compact_linux_target_profiles.py --directory artifacts/targets --output artifacts/targets/target-profiles.json
+      - uses: actions/cache/save@v4
+        if: always() && steps.cache-sources.outputs.cache-hit != 'true' && hashFiles('artifacts/targets/sources/gcc-14.2.0.tar.xz') != ''
+        with:
+          path: artifacts/targets/sources
+          key: compact-linux-sources-v1-${{ hashFiles('ryzova/compact/linux-target-sources.json') }}
+      - uses: actions/cache/save@v4
+        if: always() && steps.cache-cross.outputs.cache-hit != 'true' && hashFiles('artifacts/targets/cross/toolchain-stage.json') != ''
+        with:
+          path: artifacts/targets/cross
+          key: compact-linux-cross-v1-${{ hashFiles('ryzova/compact/linux-target-sources.json') }}
+      - uses: actions/cache/save@v4
+        if: always() && steps.cache-native.outputs.cache-hit != 'true' && hashFiles('artifacts/targets/native-toolchain/toolchain-stage.json') != ''
+        with:
+          path: artifacts/targets/native-toolchain
+          key: compact-linux-native-v1-${{ hashFiles('ryzova/compact/linux-target-sources.json') }}
       - name: Preserve source locks, build logs and honest qualification evidence
         if: always()
         uses: actions/upload-artifact@v4
