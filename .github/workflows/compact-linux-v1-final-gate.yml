@@ -1,0 +1,30 @@
+name: Compact Linux V1 final release acceptance (blocked until qualified)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/compact/linux-v1-plan.json'
+      - 'ryzova/compact/linux-target-sources.json'
+      - 'docs/validation/**'
+      - 'scripts/compact_linux_v1_gate.py'
+      - 'tests/test_compact_linux_v1_gate.py'
+      - 'ryzova/compat/linux/**'
+      - '.github/workflows/compact-linux-v1-final-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-v1-evidence-required:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test acceptance inventory rejects forged and missing gates
+        run: python -m unittest discover -s tests -p 'test_compact_linux_v1_gate.py' -v
+      - name: Block merge until all 17 reviewed V1 acceptance gates pass
+        run: python scripts/compact_linux_v1_gate.py --root . --require-complete

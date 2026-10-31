@@ -189,3 +189,22 @@ for target discovery. Arena allocation limits, source hashes, fault behavior
 and guest acceptance gates are unchanged; these figures are **not** complete
 RAM/RSS/process-tree consumption profiles. Runtime boot, CPython imports,
 futex and full workflow budget qualification remain pending.
+
+## 3E strict final acceptance gate and first Python code-execution proof
+
+The prior seven version/startup smokes now PASS, but the planned native
+CPython application/stdlib project is not implied by a `--version` exit.
+The profile runner now additionally attempts `python3.12 -c
+'print("CLX_PYTHON_CODE_OK")'` as a **separate** guest code-execution probe.
+It preserves genuine stdout, guest status, last RIP and denied syscall
+number without changing `guest_smoke_passed` or setting
+`full_target_workflows_qualified`. A failure remains a failure.
+
+`scripts/compact_linux_v1_gate.py` and
+`.github/workflows/compact-linux-v1-final-gate.yml` explicitly fail the
+final merge acceptance while any of 17 reviewed requirements, CLX-02–08
+phases, seven frozen final-binary hashes or documented final native
+QEMU evidence are missing. The final gate is **expected to be red during
+development**; older source/regression jobs can be green even while
+Linux V1 qualification is incomplete. This is metadata consistency and
+review support, not substitute native acceptance or permission to merge.

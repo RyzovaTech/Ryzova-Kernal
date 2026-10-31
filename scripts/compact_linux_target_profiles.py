@@ -116,8 +116,34 @@ def main(directory,output):
         if info['bytes']+sum(library['bytes'] for library in libraries)>IMAGE_TOTAL_BYTES:
             blockers.append('main image plus transitive library images exceed bounded 48-MiB aggregate ceiling')
         if len(grants)//2>16:blockers.append('dependency closure exceeds 16 executable/library grants')
+        # First *actual code execution* probe for frozen CPython, separate
+        # from the limited --version smoke. Never relabel as full stdlib V1.
+        python_code_probe=None
+        if target=='python':
+            command=[str(runner),'-r','-b','1048576',*grants,str(binary),
+                     '-c','print("CLX_PYTHON_CODE_OK")']
+            attempt=subprocess.run(command,env=env,capture_output=True,timeout=30)
+            (logs/'python-guest-code.stdout').write_bytes(attempt.stdout)
+            (logs/'python-guest-code.stderr').write_bytes(attempt.stderr)
+            record=re.search(rb'COMPACT_JOBS_RESULT status=([0-9]+) exited=([01]) exit=([0-9]+) steps=([0-9]+) syscalls=([0-9]+)',attempt.stderr)
+            measured={key:int(value) for key,value in zip(
+                ('status','exited','exit','steps','syscalls'),record.groups())} if record else None
+            if measured:
+                rip=re.search(rb' rip=([0-9a-f]+)',attempt.stderr)
+                measured['last_rip_hex']=rip.group(1).decode() if rip else None
+                denied=re.search(rb' unsupported_syscall=([0-9]+) unsupported_syscall_valid=([01])',attempt.stderr)
+                measured['unsupported_syscall_nr']=int(denied.group(1)) if denied and denied.group(2)==b'1' else None
+            passed=bool(measured and measured['status']==0 and measured['exited']==1
+                        and measured['exit']==0 and
+                        b'CLX_PYTHON_CODE_OK\n' in attempt.stdout)
+            python_code_probe={'passed':passed,'actual':measured,
+                               'runner_exit':attempt.returncode,
+                               'expected_output':'CLX_PYTHON_CODE_OK',
+                               'full_stdlib_workflow_qualified':False}
+            if not passed:
+                blockers.append('actual guest CPython -c code execution not yet qualified')
         if not success:blockers.append('guest smoke failed: '+str(actual if actual else {'runner_exit':guest.returncode}))
-        records.append({'target':target,'version':version,'elf':info,'startup_libraries':libraries,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_output_excerpt':text[:2048],'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode,'guest_probe_args':guest_args,'guest_blockers':blockers,'full_target_workflows_qualified':False})
+        records.append({'target':target,'version':version,'elf':info,'startup_libraries':libraries,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_output_excerpt':text[:2048],'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode, 'guest_probe_args':guest_args,'guest_blockers':blockers,'python_code_probe':python_code_probe,'full_target_workflows_qualified':False})
     report={'schema':'compact-linux-target-profiles/v1','source_lock_sha256':build['source_lock_sha256'],'abi':build['abi'],'targets':records,'phase4_entry_ready':all(r['linux_reference_passed'] for r in records),'phase3_complete':False,'resource_qualified':False,'full_target_workflows_qualified':False,'limitations':['Reference smoke measurements are not full target workflow budgets','max_child_rss is not aggregate process-tree RAM','Target networking/certificate and PTY workflows remain unqualified','Guest failures are recorded, never promoted to successful measurements']}
     Path(output).write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
     return 0 if report['phase4_entry_ready'] else 1
