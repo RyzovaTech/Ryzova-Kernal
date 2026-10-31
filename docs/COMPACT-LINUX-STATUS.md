@@ -50,3 +50,7 @@ revocation of open fds and independent restart/recovery. FS-ROOT, FS-ISOLATION
 and FS-PERSIST have evidence in [the acceptance record](validation/compact-linux-v1-phase2-acceptance.json).
 Linux V1 is still incomplete; CLX-03 memory/process/budget work is next. Native
 live mounts retain the documented POSIX and durability limitations.
+
+CLX-03 has started with [private managed-file COW mappings](COMPACT-LINUX-V1-PHASE3.md).
+Shared anonymous memory, shared futex objects, required process/session APIs and
+measured per-target/aggregate developer profiles remain open Phase 3 work.

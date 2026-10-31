@@ -19,6 +19,7 @@
 typedef struct RyzFilePage {
     uint64_t page, offset;
     unsigned int vnode, maywrite, borrowed,dirty_start,dirty_end;
+    unsigned int private_map,detached;
 } RyzFilePage;
 typedef struct RyzLinuxMemory {
     unsigned char *bytes;

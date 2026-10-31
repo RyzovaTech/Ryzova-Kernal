@@ -137,6 +137,7 @@ jobs:
             artifacts/phase3/phase9-linux-shared-maps.json
             artifacts/phase3/compact-linux-rootfs.json
             artifacts/phase3/compact-linux-mounts.json
+            artifacts/phase3/compact-linux-private-maps.json
             artifacts/phase3/phase7-secure-closeout.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn

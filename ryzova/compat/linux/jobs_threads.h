@@ -97,7 +97,7 @@ static int thread_call(Jobs *jobs,Task *task,const RyzLinuxRegs *r,int64_t *answ
     if((command==0 || command==9) && task->futex_woken){task->futex_woken=0;*answer=0;return RYZ_VM_OK;}
     if((at&3) || !ryz_memory_access(c->m,at,4,RYZ_READ)){*answer=(at&3)?-22:-14;return RYZ_VM_OK;}
     if(!(operation&128)){
-        unsigned int page;for(page=0;page<c->m->file_count;page++)if(at>=c->m->filepages[page].page && at-c->m->filepages[page].page<RYZ_PAGE){*answer=-95;return RYZ_VM_OK;}
+        unsigned int page;for(page=0;page<c->m->file_count;page++)if(!c->m->filepages[page].private_map && at>=c->m->filepages[page].page && at-c->m->filepages[page].page<RYZ_PAGE){*answer=-95;return RYZ_VM_OK;}
     }
     if(command==3 || command==4){
         unsigned int i;uint32_t moved=0;int woke;

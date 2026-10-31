@@ -26,15 +26,24 @@ static int file_access(RyzLinuxMemory *m,uint64_t address,uint64_t size,unsigned
         f=&m->filepages[i];if(address>=f->page+RYZ_PAGE || end<=f->page)continue;
         node=&m->world->nodes[f->vnode];
         if(f->offset>=((node->size+RYZ_PAGE-1)&~(size_t)(RYZ_PAGE-1))){m->bus_valid=1;m->bus_address=address>f->page?address:f->page;return 0;}
-        if((flags&RYZ_WRITE) && !(flags&256U))for(j=0;j<m->file_count;j++){
+        if(!f->private_map && (flags&RYZ_WRITE) && !(flags&256U))for(j=0;j<m->file_count;j++){
             other=&m->filepages[j];
-            if(j!=i && other->vnode==f->vnode && other->offset==f->offset && (other->borrowed || (address<other->page+RYZ_PAGE && end>other->page)))return 0;
+            if(j!=i && !other->private_map && other->vnode==f->vnode && other->offset==f->offset && (other->borrowed || (address<other->page+RYZ_PAGE && end>other->page)))return 0;
         }
     }
     ryz_memory_commit(m,0);
     for(i=0;i<m->file_count;i++){
         f=&m->filepages[i];if(address>=f->page+RYZ_PAGE || end<=f->page)continue;
         node=&m->world->nodes[f->vnode];bytes=m->bytes+(size_t)(f->page-m->base);
+        if(f->private_map){
+            if(!f->detached){
+                /* Detach the whole page before any write (including syscall
+                 * output); later file changes cannot replace its untouched bytes. */
+                memcpy(bytes,node->bytes+(size_t)f->offset,RYZ_PAGE);
+                if(flags&RYZ_WRITE)f->detached=1;
+            }
+            continue;
+        }
         begin=address>f->page?(unsigned int)(address-f->page):0;finish=end<f->page+RYZ_PAGE?(unsigned int)(end-f->page):RYZ_PAGE;
         if((flags&RYZ_WRITE) && (m->file_dirty & (UINT64_C(1)<<i))){if(f->dirty_start<begin)begin=f->dirty_start;if(f->dirty_end>finish)finish=f->dirty_end;}
         memcpy(bytes+begin,node->bytes+(size_t)f->offset+begin,finish-begin);
@@ -64,7 +73,7 @@ void ryz_memory_drop(RyzLinuxMemory *m)
 int ryz_memory_fork(RyzLinuxMemory *next,RyzLinuxMemory *old,unsigned char *bytes)
 {
     unsigned char *baseline=NULL;unsigned int i;
-    if(old->file_count){baseline=malloc(RYZ_FILEMAP_PAGES*RYZ_PAGE);if(!baseline)return 0;}
+    if(old->file_baseline){baseline=malloc(RYZ_FILEMAP_PAGES*RYZ_PAGE);if(!baseline)return 0;}
     ryz_memory_commit(old,1);*next=*old;next->bytes=bytes;next->file_baseline=baseline;next->file_dirty=0;next->bus_valid=0;
     for(i=0;i<next->file_count;i++){next->filepages[i].borrowed=0;next->world->mapped_nodes[next->filepages[i].vnode]++;}
     return 1;

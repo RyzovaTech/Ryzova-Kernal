@@ -88,7 +88,9 @@
         "Mutable-file private COW and shared anonymous mappings",
         "Required shared futex/process/session/resource APIs",
         "Measured developer resource profile with aggregate quotas"
-      ]
+      ],
+      "state": "in_progress",
+      "progress_document": "docs/COMPACT-LINUX-V1-PHASE3.md"
     },
     {
       "id": "CLX-04",
@@ -312,8 +314,10 @@
       "phase": "CLX-03",
       "targets": [],
       "acceptance": "Private COW, shared anonymous maps, shared futex and required process/session calls pass Linux references, failure and lifetime tests.",
-      "state": "pending",
-      "evidence": null
+      "state": "partial",
+      "evidence": null,
+      "progress": "3A private managed-file mappings implemented; shared anonymous/futex and process/session acceptance remain pending",
+      "progress_document": "docs/COMPACT-LINUX-V1-PHASE3.md"
     },
     {
       "id": "RESOURCE",
