@@ -22,6 +22,17 @@ GIT_MUSL_MAKE_FLAGS=(
     'NO_REGEX=NeedsStartEnd',
 )
 
+def require_busybox_help_config(text):
+    """Reject a pinned BusyBox that cannot present its real version/help."""
+    if type(text) is not str:
+        raise TypeError('BusyBox config text required')
+    normalized=text.splitlines()
+    for required in ('CONFIG_LONG_OPTS=y','CONFIG_SHOW_USAGE=y',
+                     'CONFIG_FEATURE_VERBOSE_USAGE=y'):
+        if required not in normalized:
+            raise RuntimeError('BusyBox required version/help config disabled: '+required)
+    return True
+
 def git_make_command(jobs, install_root=None):
     if type(jobs) is not int or not 1 <= jobs <= 4:
         raise ValueError('bounded Git build job count required')
@@ -215,11 +226,7 @@ class Build:
         # Refuse a binary with no usage/version help: it silently interpreted
         # `busybox --help` as the nonexistent "-help" applet (exit 127).
         # Do not replace the real Linux reference with a fabricated output.
-        normalized=config.read_text().splitlines()
-        for required in ('CONFIG_LONG_OPTS=y','CONFIG_SHOW_USAGE=y',
-                         'CONFIG_FEATURE_VERBOSE_USAGE=y'):
-            if required not in normalized:
-                raise RuntimeError('BusyBox required version/help config disabled: '+required)
+        require_busybox_help_config(config.read_text())
         self.run('busybox-make',['make','-j'+str(self.jobs),'CC='+env['CC'],'HOSTCC=cc'],src['busybox'],env)
         shutil.copy2(src['busybox']/'busybox',self.root/'bin/busybox')
         for key in ('sh','cat','echo','mkdir','rm','cp','mv','touch','ln','true','false','sleep','env','grep','sed','find','tar'):
