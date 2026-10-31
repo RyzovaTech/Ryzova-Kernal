@@ -118,6 +118,21 @@ static void vector_xor(Cpu *c, Operand o, unsigned int reg)
     }
     for(i=0;i<16;i++)c->xmm[reg][i]^=data[i];
 }
+/* SSE2 POR is a 128-bit bitwise union. No EFLAGS are modified. */
+static void vector_or(Cpu *c, Operand o, unsigned int reg)
+{
+    unsigned char data[16];
+    uint64_t at;
+    unsigned int i;
+    if(c->fault)return;
+    if(o.reg>=0)memcpy(data,c->xmm[o.reg],16);
+    else{
+        at=address(c,o)+c->segment;
+        if(!ryz_memory_access(c->m,at,16,RYZ_READ)){c->fault=1;return;}
+        memcpy(data,c->m->bytes+(size_t)(at-c->m->base),16);
+    }
+    for(i=0;i<16;i++)c->xmm[reg][i]|=data[i];
+}
 static uint64_t resultflags(Cpu *c,uint64_t v,unsigned int size)
 {
     unsigned int parity=0, i;
@@ -507,6 +522,47 @@ static int step(Cpu *c)
             if(rm.reg>=0)memcpy(bytes,c->xmm[rm.reg],8);
             else{v=load(c,address(c,rm)+c->segment,8,RYZ_READ);for(count=0;count<8;count++)bytes[count]=(unsigned char)(v>>(count*8));}
             if(!c->fault)memcpy(c->xmm[reg]+8,bytes,8);
+        }
+        else if((op2==0x16 || op2==0x17) && !c->operand16 && !c->repeat){
+            /* 0F 16 /r: MOVHPS from memory, MOVLHPS from XMM register.
+             * 0F 17 /r: MOVHPS store to memory only (reg form invalid).
+             * Low half of the destination XMM is unchanged. */
+            rm=decode(c,&reg,&group,8);
+            if(op2==0x16){
+                if(rm.reg>=0)memcpy(c->xmm[reg]+8,c->xmm[rm.reg],8);
+                else{
+                    v=get(c,rm,8);
+                    if(!c->fault)for(count=0;count<8;count++)
+                        c->xmm[reg][8+count]=(unsigned char)(v>>(count*8));
+                }
+            }else{
+                if(rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED;
+                v=0;
+                for(count=0;count<8;count++)v|=(uint64_t)c->xmm[reg][8+count]<<(count*8);
+                store(c,address(c,rm)+c->segment,8,v);
+            }
+        }
+        else if(op2==0x73 && c->operand16 && !c->repeat){
+            /* 66 0F 73 /3 ib PSRLDQ, /7 ib PSLLDQ, register-only.
+             * Shift is in bytes; counts >=16 produce all zero bytes. */
+            unsigned char previous[16],shifted[16];
+            unsigned int i,amount;
+            rm=decode(c,&reg,&group,16);
+            if(rm.reg<0 || (group!=3 && group!=7))return RYZ_VM_OPCODE_UNSUPPORTED;
+            amount=(unsigned int)fetch(c,1);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            memcpy(previous,c->xmm[rm.reg],16);
+            for(i=0;i<16;i++){
+                shifted[i]=(unsigned char)(amount>=16?0:
+                    (group==3?(i+amount<16?previous[i+amount]:0):
+                     (i>=amount?previous[i-amount]:0)));
+            }
+            memcpy(c->xmm[rm.reg],shifted,16);
+        }
+        else if(op2==0xeb && c->operand16 && !c->repeat){
+            /* 66 0F EB /r POR xmm, xmm/m128, no EFLAGS changes. */
+            rm=decode(c,&reg,&group,16);
+            vector_or(c,rm,reg);
         }
         else if(op2==0xef || op2==0x57){
             if((op2==0xef && size!=2) || c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;

@@ -28,3 +28,5 @@ jobs:
           python -m py_compile scripts/compact_linux_isa_discovery.py
       - name: Validate bounded ELF image/aggregate budgets and large PIE relocation
         run: python -m unittest discover -s tests -p 'test_phase9_image_admission.py' -v
+      - name: Differential host Linux vs Ryzova guest SSE2 semantics
+        run: python -m unittest discover -s tests -p 'test_phase9_sse2_differential.py' -v
