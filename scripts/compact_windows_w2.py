@@ -73,7 +73,7 @@ def build(output, sanitize=False):
     if sanitize:
         flags += ['-fsanitize=undefined', '-fno-sanitize-recover=all']
     subprocess.run([os.environ.get('CC', 'cc'), *flags, *[str(ROOT / 'ryzova/compat/windows' / x)
-                   for x in ('loader.c', 'cpu.c', 'runtime_probe.c')], '-o', str(output)], check=True)
+                   for x in ('loader.c', 'cpu.c', 'api.c', 'runtime_probe.c')], '-o', str(output)], check=True)
     return output
 
 def execute(probe, path, base=0, budget=262144):
