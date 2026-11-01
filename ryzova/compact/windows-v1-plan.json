@@ -105,49 +105,49 @@
   "requirements": [
     {
       "id": "PE-LOAD",
-      "state": "pending-full-release",
+      "state": "pending",
       "acceptance": "Validated sections, relocations and entry execute in Flex",
       "bounded_profile_evidence": "W2 PE relocations, memory W^X, image quota and native W5/W4 PE execution",
       "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
     },
     {
       "id": "WIN64-ABI",
-      "state": "pending-full-release",
+      "state": "pending",
       "acceptance": "Independent ABI fixtures verify registers, stack and nonvolatile state",
       "bounded_profile_evidence": "W2 independent shadow-space, stack alignment, GPR and XMM callee-save checks; source-built AMD64 native execution",
       "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
     },
     {
       "id": "IMPORTS-CONSOLE",
-      "state": "pending-full-release",
+      "state": "pending",
       "acceptance": "Declared API thunks produce exact output and full DWORD exit",
       "bounded_profile_evidence": "W3 frozen MSVC Win32 import/thunk and exact stdout/stderr/full DWORD exit native receipts",
       "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
     },
     {
       "id": "NS-FILES",
-      "state": "pending-full-release",
+      "state": "pending",
       "acceptance": "Opaque grants enforce rights and deny traversal and cross-environment access",
       "bounded_profile_evidence": "W4 explicit file rights, cross-namespace denial, 9P ramfs I/O and dedicated resource disk barrier",
       "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
     },
     {
       "id": "RUNTIME",
-      "state": "pending-full-release",
+      "state": "pending",
       "acceptance": "Named compiler/CRT fixtures have a frozen supported API and instruction inventory",
       "bounded_profile_evidence": "W5 named compiler/CRT fixtures and explicit finite API/function instruction profile",
       "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
     },
     {
       "id": "RESOURCES",
-      "state": "pending-full-release",
+      "state": "pending",
       "acceptance": "Measured allocation, instruction and handle ceilings fail closed",
       "bounded_profile_evidence": "W6 1 MiB heap OOM, 64 KiB I/O denial, native file handle 30-slot ceiling, 1024-step loop, negative admission",
       "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
     },
     {
       "id": "NATIVE-EVIDENCE",
-      "state": "pending-full-release",
+      "state": "pending",
       "acceptance": "Source-identified Flex QEMU execution receipts and regression jobs pass",
       "bounded_profile_evidence": "W6 22 source-built AMD64 QEMU cases, exact hash provenance, SIGKILL recovery, injected backend EIO and sticky retry",
       "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
