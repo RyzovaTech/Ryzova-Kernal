@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import unittest
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'scripts'))
-from compact_windows_w6_native import case_specs,parse_cases,standalone,required_calls,fault_specs,verify_dedicated_resource_reboot
+from compact_windows_w6_native import case_specs,parse_cases,standalone,required_calls,fault_specs,verify_dedicated_resource_reboot,verify_fault_fixture
 
 def serial(specs):
     lines=[]
@@ -64,6 +64,21 @@ class CrashPersistenceScopeTests(unittest.TestCase):
         echo=b'term% echo CW_REBOOT_DONE\n'+log.replace(b'CW_REBOOT_DONE\n',b'')
         with self.assertRaises(ValueError):
             verify_dedicated_resource_reboot(echo,runtime,durable)
+
+class FaultFixtureProvenanceTests(unittest.TestCase):
+    def test_reuploaded_msbuild_pe_required_after_hard_kill(self):
+        digest='7'*64
+        good=(digest+'\t/tmp/cw-file.exe\n').encode()
+        self.assertTrue(verify_fault_fixture(good,digest))
+        for bad in (b'',b'sha1sum: file not found\n',
+                    ('0'*64+'\t/tmp/cw-file.exe\n').encode(),
+                    (digest+'\t/tmp/other.exe\n').encode(),
+                    b'term% echo '+good):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):
+                verify_fault_fixture(bad,digest)
+        for wrong in ('abc','7'*63,'g'*64):
+            with self.subTest(digest=wrong),self.assertRaises(ValueError):
+                verify_fault_fixture(good,wrong)
 
 class BarrierProtocolTests(unittest.TestCase):
     @classmethod

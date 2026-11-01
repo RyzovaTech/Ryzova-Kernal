@@ -128,3 +128,20 @@ reboot tests and receipt remain separate historical evidence.
 
 The independent injected QEMU storage error and sticky-error denial
 must still pass before native W6's bounded barrier may be qualified.
+
+## W6 fault-stage executable provenance across unbarriered boot OS reboot
+
+QEMU run [41287959299](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41287959299)
+passed real acknowledged flushes, kernel/runtime identity and exact dedicated
+resource-disk payload recovery after SIGKILL. The later injected fault case
+could not start because the test's original MSVC-built `/tmp/cw-file.exe`
+fixture resided on a separate, unbarriered boot hjfs partition and was lost
+after the abrupt VM stop. No fake or substitute executable is accepted.
+
+The fault boot now initializes guest networking, fetches the **same frozen W4
+MSVC PE** from the existing isolated fixture HTTP server, and records its
+fresh SHA-256. Source-commit-bound reference receipt equality and this exact
+newly measured PE digest are mandatory before any fault-case receipt counts.
+The dedicated overlay mount must succeed and the earlier durable payload
+must be removed before injection. Failures remain fail-closed; this change
+does not claim physical power-loss durability or boot hjfs crash recovery.

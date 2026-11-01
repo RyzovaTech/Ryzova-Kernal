@@ -148,6 +148,16 @@ def verify_dedicated_resource_reboot(log,runtime_sha,durable_sha):
         raise ValueError('ACK-backed resource file lost after SIGKILL')
     return True
 
+def verify_fault_fixture(log,sha):
+    """Require exact Windows reference PE after boot-disk SIGKILL recovery."""
+    if not isinstance(log,bytes) or not isinstance(sha,str) or len(sha)!=64 or any(
+        character not in '0123456789abcdef' for character in sha):
+        raise ValueError('untrusted fault-test PE provenance')
+    parts=[line.split() for line in log.decode('utf-8','replace').splitlines()]
+    if [sha,'/tmp/cw-file.exe'] not in parts:
+        raise ValueError('fault-test PE missing or checksum mismatch after reboot')
+    return True
+
 def session(image,commands,out,label,timeout,required=None,resource=None,hardcut=False,fault_config=None):
     raw=bytearray();socketdir=tempfile.TemporaryDirectory(prefix='cw6-');ser=Path(socketdir.name)/'serial'
     cmd=['qemu-system-x86_64','-machine','pc,accel=tcg','-cpu','qemu64','-m','2048','-smp','2','-device','virtio-scsi-pci,id=scsi',
@@ -295,11 +305,23 @@ def main():
     subprocess.run(['qemu-img','create','-f','qcow2','-F','qcow2','-b',str(resource.resolve()),str(fault_resource)],check=True)
     fault_config=out/'flush-fault.conf'
     fault_config.write_text('[set-state]\nevent = "pwritev"\nstate = "1"\nnew_state = "2"\n[inject-error]\nevent = "flush_to_os"\nstate = "2"\niotype = "flush"\nerrno = "5"\nonce = "on"\nimmediately = "on"\n')
-    fault_commands=["cat '#Z/version'; sha1sum -2 256 /amd64/bin/cw-hjfs",
-      'cw-hjfs -F -S -n cwfs-fault -f /dev/sd01/data > /tmp/cwfs-fault.log >[2]/dev/cons; mount -nc /srv/cwfs-fault /tmp/cw-durable; rm /tmp/cw-durable/payload.bin; cat /tmp/cwfs-fault.log']
-    for name in fault_specs():fault_commands.append(f'echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows -r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1 /tmp/cw-file.exe; echo CW_CASE_{name}_END; rm /tmp/cw-durable/payload.bin')
-    fault_log=session(args.image,fault_commands,out,'fault',120,resource=fault_resource,hardcut=True,fault_config=fault_config)
-    if b'Ryzova Kernel 0.1.0-dev' not in fault_log or server_sha[0] not in fault_log:raise ValueError('fault-test source identity')
+    # The boot hjfs is NOT protected by the cw-hjfs persistence barrier.
+    # Always re-download the exact frozen MSVC W4 fixture on this separate
+    # QEMU boot and verify it by SHA before recognizing any fault receipts.
+    fault_commands=[
+      "cat '#Z/version'; sha1sum -2 256 /amd64/bin/cw-hjfs",
+      "ip/ipconfig -d ether /net/ether0; webfs",
+      "hget http://10.0.2.2:8000/file.exe > /tmp/cw-file.exe; sha1sum -2 256 /tmp/cw-file.exe",
+      "mkdir -p /tmp/cw-durable; cw-hjfs -F -S -n cwfs-fault -f /dev/sd01/data > /tmp/cwfs-fault.log >[2]/dev/cons; mount -nc /srv/cwfs-fault /tmp/cw-durable && echo CW_FAULT_MOUNTED",
+      "rm /tmp/cw-durable/payload.bin; test ! -e /tmp/cw-durable/payload.bin && echo CW_FAULT_CLEAN_OK"]
+    for name in fault_specs():
+        fault_commands.append(f'echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows -r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1 /tmp/cw-file.exe; echo CW_CASE_{name}_END; rm /tmp/cw-durable/payload.bin')
+    fault_log=session(args.image,fault_commands,out,'fault',150,
+                     required={3:'CW_FAULT_MOUNTED',4:'CW_FAULT_CLEAN_OK'},
+                     resource=fault_resource,hardcut=True,fault_config=fault_config)
+    if b'Ryzova Kernel 0.1.0-dev' not in fault_log or server_sha[0] not in fault_log:
+        raise ValueError('fault-test source identity')
+    verify_fault_fixture(fault_log,hashes['file'])
     records.update(parse_cases(fault_log,fault_specs()))
     report={'schema':'compact-windows-w6-native/v1','source_commit':commit,'source_archive_sha256':archive_sha,'kernel_sha256':kernel_sha,'runtime_sha256':runtime_sha[0].decode(),
       'bootstrap_image_gzip_sha256':PIN,'bootstrap_image_sha256':base_sha,'cases':records,'fixture_sha256':hashes,'native_amd64_qemu_qualified':True,'native_9p_namespace_verified':True,
