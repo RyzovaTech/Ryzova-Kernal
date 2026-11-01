@@ -40,6 +40,7 @@ syncreq(void *v)
 
 	r = v;
 	s = r->fid->aux;
+	dprint("CW_SYNC_REQ_START type=%d\n", r->ifcall.type);
 	rc = 0;
 	qlock(&s->lock);
 	switch(r->ifcall.type){
@@ -94,6 +95,7 @@ syncreq(void *v)
 	if(rc < 0)
 		rerrstr(error, sizeof error);
 	qunlock(&s->lock);
+	dprint("CW_SYNC_REQ_RESPOND rc=%d\n", rc);
 	respond(r, rc < 0 ? error : nil);
 	threadexits(nil);
 }
@@ -174,6 +176,7 @@ tqueue(Req *req)
 		}
 	}
 	if(cwstrict && req->fid->qid.path == CWSYNCQID){
+		dprint("CW_SYNC_QUEUED type=%d\n", req->ifcall.type);
 		threadcreate(syncreq, req, mainstacksize);
 		return;
 	}
@@ -274,6 +277,7 @@ twalk(Chan *ch, Fid *fid, Fid *nfid, int n, char **name, Qid *qid)
 
 	if(cwstrict && n == 1 && ch->loc->path == ROOTQID
 	&& strcmp(name[0], CWSYNCNAME) == 0 && ch->uid != 0){
+		dprint("CW_SYNC_WALK_ENTER\n");
 		if(ch->open != 0 || nfid == fid){
 			werrstr(Einval);
 			return -1;
@@ -283,6 +287,7 @@ twalk(Chan *ch, Fid *fid, Fid *nfid, int n, char **name, Qid *qid)
 		nfid->qid.type = 0;
 		nfid->qid.vers = 1;
 		qid[0] = nfid->qid;
+		dprint("CW_SYNC_WALK_READY\n");
 		return 1;
 	}
 	if(nfid != fid){
