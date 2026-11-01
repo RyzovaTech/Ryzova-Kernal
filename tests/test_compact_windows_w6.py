@@ -28,7 +28,7 @@ class NativeEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):parse_cases(b'term% echo CW_CASE_api_BEGIN; echo CW_CASE_api_END\r\n',{'api':case_specs()['api']})
     def test_false_success_or_hidden_leaks_are_rejected(self):
         cases=case_specs();good=serial(cases)
-        for old,new in [(b'status=8 ',b'status=0 '),(b'open=0 ',b'open=1 '),(b'guest=1150976 ',b'guest=67108865 '),(b'peak_handles=30 ',b'peak_handles=29 '),(b'heap=1048576 ',b'heap=1044480 '),(b'error=50',b'error=0')]:
+        for old,new in [(b'status=8 ',b'status=0 '),(b'open=0 ',b'open=1 '),(b'guest=1150976 ',b'guest=67108865 '),(b'peak_handles=30 ',b'peak_handles=29 '),(b'heap=1048576 ',b'heap=1044480 '),(b'error=50',b'error=0'),(b'CW_CALL CreateFileW 31',b'CW_CALL CreateFileW 30'),(b'CW_CALL malloc 2',b'CW_CALL malloc 0')]:
             with self.subTest(old=old):
                 with self.assertRaises(ValueError):parse_cases(good.replace(old,new),cases)
     def test_native_case_output_is_exact_and_admission_does_not_execute(self):

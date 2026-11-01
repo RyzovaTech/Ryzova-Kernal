@@ -73,7 +73,7 @@ static CwFileHandle *handle(CwFileNamespace *ns,uint64_t token) {
     return NULL;
 }
 static void put(unsigned char *out,uint64_t value,unsigned int n) { unsigned int i;for(i=0;i<n;i++)out[i]=(unsigned char)(value>>(i*8)); }
-static uint64_t create(CwMachine *m,const uint64_t *a) {
+static uint64_t create_file(CwMachine *m,const uint64_t *a) {
     CwServices *s=m->services;CwFileNamespace *ns=namespace_for(m);uint16_t wide[CW_PATH_LIMIT+1];char path[CW_PATH_LIMIT+1];
     uint32_t i,drive,access=0,share=(uint32_t)a[2],mode=(uint32_t)a[4],rights,error,notice=0,slot;
     uint64_t resource=0;
@@ -105,7 +105,7 @@ static uint64_t create(CwMachine *m,const uint64_t *a) {
 uint64_t cw_file_call(CwMachine *m,unsigned int id,const uint64_t *a) {
     CwServices *s=m->services;CwFileNamespace *ns=namespace_for(m);CwFileHandle *h;
     unsigned char *count=NULL,*buffer=NULL,*result=NULL;uint32_t error=0,actual=0,n=(uint32_t)a[2];uint64_t value=0,base;
-    if(id==CW_CREATE_FILE)return create(m,a);
+    if(id==CW_CREATE_FILE)return create_file(m,a);
     if(id==CW_CLOSE_HANDLE && (a[0]==0x10001 || a[0]==0x10002)) {
         uint32_t bit=a[0]==0x10001?1:2;
         if(!(s->launch.console_mask&bit) || (s->console_closed&bit))return failed(s,6,0);

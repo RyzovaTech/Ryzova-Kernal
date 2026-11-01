@@ -13,7 +13,7 @@
 typedef struct Decode { CwMachine *m; uint64_t start,cur; unsigned int rex,prefix; int error; } Decode;
 typedef struct Operand { int reg,high,rip;uint64_t at; } Operand;
 static uint64_t mask(unsigned int n) { return n==8?UINT64_MAX:(UINT64_C(1)<<(8*n))-1; }
-static uint64_t readn(Decode *d,uint64_t at,unsigned int n,unsigned int rights) {
+static uint64_t guest_read(Decode *d,uint64_t at,unsigned int n,unsigned int rights) {
     unsigned char b[8];unsigned int i;uint64_t v=0;
     if(d->error)return 0;
     if(cw_read(d->m,at,b,n,rights)){d->error=CW_MEMORY;return 0;}
@@ -29,7 +29,7 @@ static void writen(Decode *d,uint64_t at,unsigned int n,uint64_t v) {
 static uint64_t fetch(Decode *d,unsigned int n) {
     uint64_t v;
     if(d->cur-d->start+n>15){d->error=CW_OPCODE;return 0;}
-    v=readn(d,d->cur,n,CW_X);d->cur+=n;return v;
+    v=guest_read(d,d->cur,n,CW_X);d->cur+=n;return v;
 }
 static Operand regop(Decode *d,unsigned int reg,unsigned int n) {
     Operand o;memset(&o,0,sizeof(o));o.reg=(int)reg;
@@ -55,7 +55,7 @@ static Operand operand(Decode *d,unsigned int *reg,unsigned int *group,unsigned 
 static uint64_t address(Decode *d,Operand o) { return o.at+(o.rip?d->cur:0); }
 static uint64_t get(Decode *d,Operand o,unsigned int n) {
     if(o.reg>=0)return (d->m->r[o.reg]>>(o.high?8:0))&mask(n);
-    return readn(d,address(d,o),n,CW_R);
+    return guest_read(d,address(d,o),n,CW_R);
 }
 static void put(Decode *d,Operand o,unsigned int n,uint64_t v) {
     unsigned int shift=o.high?8:0;uint64_t bits=mask(n);
@@ -94,7 +94,7 @@ static void push(Decode *d,uint64_t v) {
     uint64_t sp=d->m->r[4]-8;writen(d,sp,8,v);if(!d->error)d->m->r[4]=sp;
 }
 static uint64_t pop(Decode *d) {
-    uint64_t v=readn(d,d->m->r[4],8,CW_R);if(!d->error)d->m->r[4]+=8;return v;
+    uint64_t v=guest_read(d,d->m->r[4],8,CW_R);if(!d->error)d->m->r[4]+=8;return v;
 }
 static void vector(Decode *d,Operand o,unsigned int reg,int to_operand) {
     unsigned char bytes[16];uint64_t at=address(d,o);
@@ -129,7 +129,7 @@ static int divide_pair(uint64_t hi,uint64_t lo,uint64_t divisor,unsigned int n,u
     }
     *quotient=q;*remainder=r;return CW_OK;
 }
-static void muldiv(Decode *d,unsigned int group,uint64_t operand_value,unsigned int n) {
+static void guest_muldiv(Decode *d,unsigned int group,uint64_t operand_value,unsigned int n) {
     uint64_t lo,hi,a=d->m->r[0]&mask(n),b=operand_value&mask(n),bits=mask(n),sign=UINT64_C(1)<<(8*n-1),q,r;
     if(group==4 || group==5) {
         product(a,b,n,group==5,&lo,&hi);multiply_flags(d,lo,hi,n,group==5);
@@ -232,7 +232,7 @@ static int tick(CwMachine *m) {
         if(group==0){b=fetch(&d,n==8?4:n);if(n==8)b=sign_extend(b,4);(void)alu(&d,4,get(&d,o,n),b,n);}
         else if(group==2)put(&d,o,n,~get(&d,o,n));
         else if(group==3){v=alu(&d,5,0,get(&d,o,n),n);put(&d,o,n,v);}
-        else if(group>=4){a=get(&d,o,n);if(!d.error)muldiv(&d,group,a,n);}
+        else if(group>=4){a=get(&d,o,n);if(!d.error)guest_muldiv(&d,group,a,n);}
         else return CW_OPCODE;
     }
     else if(op==0xc0 || op==0xc1 || (op>=0xd0 && op<=0xd3)){
