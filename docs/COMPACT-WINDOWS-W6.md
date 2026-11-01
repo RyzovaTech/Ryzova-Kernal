@@ -145,3 +145,56 @@ newly measured PE digest are mandatory before any fault-case receipt counts.
 The dedicated overlay mount must succeed and the earlier durable payload
 must be removed before injection. Failures remain fail-closed; this change
 does not claim physical power-loss durability or boot hjfs crash recovery.
+
+## Bounded native AMD64/QEMU phase — achieved and separately gated
+
+Native qualification run [41288431721](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41288431721) completed
+**all six W1–W6 exact-head workflows successfully**, including the W6
+Windows-host reference and hosted regression jobs and native source-built
+Ryzova AMD64 kernel boot. The 22 native cases cover W3 console/API, W4
+namespace I/O, all six W5 workload fixtures, ISA/process/resource negative
+cases, two real MSVC W4 nonce-acknowledged `FlushFileBuffers`, recovery of
+the exact dedicated resource file SHA-256 after QEMU SIGKILL, and two
+negative storage cases returning error 1117 with no successful ACK.
+
+The generated native artifact `windows-w6-native-evidence/qualification.json`
+is authoritative for **this tested source/merge commit**, not for later
+unverified changes. `docs/validation/compact-windows-w6-native.json`
+is explicitly a **historical 19-case** receipt and must not be promoted
+as evidence for the 22-case storage barrier. The current head must always
+rebuild, reboot and requalify.
+
+To prevent a future change from earning a green W6 merely by asserting
+`native_file_flush_qualified=true` or recycling earlier JSON, the separate
+`scripts/compact_windows_w6_acceptance.py` gate consumes the **same-run**
+four serial logs and `qualification.json`, matches the source-built commit
+and all 22 individually parsed native case records, recovers exact 64-digit
+SHA values, compares W4 frozen payload hash, rejects omission/corruption of
+a required marker/receipt and demands fail-closed sticky storage EIO.
+Mutation-based hosted unit tests exercise false flags, missing guest cases,
+wrong resource digests and absent evidence.
+
+**Qualification classification:** The finite W1–W6 source-built native AMD64
+QEMU resource and Windows PE/CRT subset is implemented and proven by the
+above test run. This is *not* a claim of a fully compatible Windows OS,
+physical power-loss-safe hardware, ARM64, GUI, general services/drivers,
+whole-system resource/RSS measurement or crash-safe ordinary boot hjfs.
+`bounded_native_phase_complete=true` is intentionally distinct from
+`full_phase_complete=false`; the latter cannot change without additional
+physical hardware, architecture and release evidence. The PR stays draft
+and is not authorized for merging.
+
+### Remaining real-world release acceptance
+
+Physical qualification requires an independently identified disposable
+device (PCI/storage/controller and firmware revisions), audited I/O driver
+and flush implementation, verified forced power-cut test fixture, repeated
+recoverability checks after each acknowledged barrier, negative injected
+write/cache errors and a signed run evidence manifest. Actual driver agents
+own native controller work; this Windows compatibility PR does **not**
+modify their driver sources. Boot volume crash-safety requires its own
+independent barrier and recovery proof and cannot be inferred from cw-hjfs.
+ARM64 applications require separate binary and ABI work; these QEMU tests
+only run AMD64 instructions.
+
+A code-only CI environment cannot manufacture those observations.
