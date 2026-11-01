@@ -24,7 +24,7 @@ class Import(C.Structure):
 class Plan(C.Structure):
     _fields_ = [('preferred_base', C.c_uint64), ('base', C.c_uint64)] + [(n, C.c_uint32) for n in ('image_bytes', 'headers', 'entry', 'count', 'reloc_rva', 'reloc_bytes')] + [('sections', Section * 16)] + [(n, C.c_uint32) for n in ('import_count', 'api_mask', 'iat_rva', 'iat_bytes')] + [('imports', Import * 32)]
 class Machine(C.Structure):
-    _fields_ = [('plan', Plan), ('image', C.c_void_p), ('stack', C.c_void_p), ('stack_base', C.c_uint64), ('initial_sp', C.c_uint64), ('r', C.c_uint64 * 16), ('ip', C.c_uint64), ('flags', C.c_uint64), ('xmm', (C.c_ubyte * 16) * 16), ('instructions', C.c_uint32), ('exit_code', C.c_uint32), ('exited', C.c_int), ('status', C.c_int), ('exit_kind', C.c_uint32), ('services', C.c_void_p)]
+    _fields_ = [('plan', Plan), ('image', C.c_void_p), ('stack', C.c_void_p), ('stack_base', C.c_uint64), ('initial_sp', C.c_uint64), ('r', C.c_uint64 * 16), ('ip', C.c_uint64), ('flags', C.c_uint64), ('xmm', (C.c_ubyte * 16) * 16), ('instructions', C.c_uint32), ('exit_code', C.c_uint32), ('exited', C.c_int), ('status', C.c_int), ('exit_kind', C.c_uint32), ('services', C.c_void_p), ('last_guest_ip', C.c_uint64)]
 
 class WindowsW2Tests(unittest.TestCase):
     @classmethod
@@ -33,7 +33,7 @@ class WindowsW2Tests(unittest.TestCase):
         cls.directory = Path(cls.temp.name)
         cls.probe = build(cls.directory / 'probe', sanitize=True)
         library = cls.directory / 'runtime.so'
-        subprocess.run([os.environ.get('CC', 'cc'), '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-shared', '-fPIC', '-fsanitize=undefined', '-fno-sanitize-recover=all', *[str(ROOT / 'ryzova/compat/windows' / x) for x in ('loader.c', 'cpu.c', 'api.c', 'files.c')], '-o', str(library)], check=True)
+        subprocess.run([os.environ.get('CC', 'cc'), '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-shared', '-fPIC', '-fsanitize=undefined', '-fno-sanitize-recover=all', *[str(ROOT / 'ryzova/compat/windows' / x) for x in ('loader.c', 'cpu.c', 'api.c', 'crt.c', 'files.c')], '-o', str(library)], check=True)
         cls.lib = C.CDLL(str(library))
         cls.lib.cw_plan.argtypes = [C.c_void_p, C.c_size_t, C.c_uint64, C.POINTER(Plan)]
         cls.lib.cw_load.argtypes = [C.c_void_p, C.c_size_t, C.c_uint64, C.c_void_p, C.c_size_t, C.POINTER(Machine)]

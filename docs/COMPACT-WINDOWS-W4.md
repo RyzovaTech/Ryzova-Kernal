@@ -5,6 +5,9 @@ SetFilePointerEx, GetFileSizeEx and FlushFileBuffers. WriteFile now supports typ
 file handles as well as W3 console handles. This is stacked on W3 PR #85.
 Linux/shared runtime code and shared Compact negotiation remain unchanged.
 
+W5 extends this baseline with a separate selected CRT profile and named compiler
+workloads; see `COMPACT-WINDOWS-W5.md`.
+
 ## Resource boundary
 
 The portable `files.c` core receives directory grants from the trusted launcher:

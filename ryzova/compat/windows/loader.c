@@ -88,36 +88,51 @@ static int ascii_name(const unsigned char *f,const CwPlan *p,uint32_t rva,char *
     return 0;
 }
 static int import_table(const unsigned char *f,CwPlan *p,uint32_t rva,uint32_t bytes) {
-    const unsigned char *d,*end;uint32_t oft,ft,n,name_rva;char module[64],name[128];
-    int i;uint32_t advertised_rva=p->iat_rva,advertised_bytes=p->iat_bytes;
+    const unsigned char *table;uint32_t modules,mi,seen=0,total=0,minimum=UINT32_MAX,maximum=0;
+    uint32_t lookup_rva[2],iat_rva[2],iat_bytes[2],advertised_rva=p->iat_rva,advertised_bytes=p->iat_bytes;
     if(!bytes)return advertised_bytes?CW_HEADER:CW_OK;
-    /* W3 loads no DLLs: one kernel32 descriptor plus one zero terminator only. */
-    if(bytes!=40 || !(d=backed(f,p,rva,bytes)))return CW_HEADER;
-    end=d+20;for(n=0;n<20;n++)if(end[n])return CW_UNSUPPORTED;
-    oft=u32(d);ft=u32(d+16);name_rva=u32(d+12);
-    if(u32(d+4) || u32(d+8) || !ft || (ft&7) || (oft&7) || !ascii_name(f,p,name_rva,module,sizeof(module)))return CW_UNSUPPORTED;
-    for(n=0;module[n];n++)if(module[n]>='A' && module[n]<='Z')module[n]=(char)(module[n]+32);
-    if(strcmp(module,"kernel32.dll"))return CW_UNSUPPORTED;
-    if(!oft)oft=ft;
-    for(n=0;n<=CW_MAX_IMPORTS;n++) {
-        const unsigned char *lookup,*iat,*hint;uint64_t value;int api;
-        if(oft>UINT32_MAX-n*8 || ft>UINT32_MAX-n*8)return CW_HEADER;
-        lookup=backed(f,p,oft+n*8,8);iat=backed(f,p,ft+n*8,8);
-        if(!lookup || !iat || u64(lookup)!=u64(iat))return CW_HEADER;
-        value=u64(lookup);if(!value)break;
-        if(n==CW_MAX_IMPORTS || value>UINT32_MAX-2)return CW_UNSUPPORTED;
-        hint=backed(f,p,(uint32_t)value,2);
-        if(!hint || !ascii_name(f,p,(uint32_t)value+2,name,sizeof(name)))return CW_HEADER;
-        api=cw_api_id(name);if(api<0 || (p->api_mask&(1U<<api)))return CW_UNSUPPORTED;
-        p->imports[n].iat=ft+n*8;p->imports[n].api=(uint32_t)api;p->api_mask|=1U<<api;
+    if((bytes!=40 && bytes!=60) || !(table=backed(f,p,rva,bytes)))return CW_HEADER;
+    modules=bytes/20-1;
+    for(mi=0;mi<20;mi++)if(table[modules*20+mi])return CW_UNSUPPORTED;
+    for(mi=0;mi<modules;mi++) {
+        const unsigned char *d=table+mi*20;uint32_t oft=u32(d),ft=u32(d+16),n,k,module_id;char module[64],name[128];
+        if(u32(d+4) || u32(d+8) || !ft || (ft&7) || (oft&7) || !ascii_name(f,p,u32(d+12),module,sizeof(module)))return CW_UNSUPPORTED;
+        for(n=0;module[n];n++)if(module[n]>='A' && module[n]<='Z')module[n]=(char)(module[n]+32);
+        if(!strcmp(module,"kernel32.dll"))module_id=1;
+        else if(!strcmp(module,"ucrtbase.dll"))module_id=2;
+        else return CW_UNSUPPORTED;
+        if(seen&module_id)return CW_UNSUPPORTED;
+        seen|=module_id;if(!oft)oft=ft;
+        for(n=0;n<=CW_MAX_IMPORTS;n++) {
+            const unsigned char *lookup,*iat;uint64_t value;int api;
+            if(oft>UINT32_MAX-n*8 || ft>UINT32_MAX-n*8)return CW_HEADER;
+            lookup=backed(f,p,oft+n*8,8);iat=backed(f,p,ft+n*8,8);
+            if(!lookup || !iat || u64(lookup)!=u64(iat))return CW_HEADER;
+            value=u64(lookup);if(!value)break;
+            if(total==CW_MAX_IMPORTS || value>UINT32_MAX-2 || !backed(f,p,(uint32_t)value,2) || !ascii_name(f,p,(uint32_t)value+2,name,sizeof(name)))return CW_UNSUPPORTED;
+            api=cw_api_id(name);
+            if(api<0 || strcmp(cw_api_module((unsigned int)api),module) || (p->api_mask&(1U<<api)))return CW_UNSUPPORTED;
+            p->imports[total].iat=ft+n*8;p->imports[total].api=(uint32_t)api;p->api_mask|=1U<<api;total++;
+        }
+        if(!n)return CW_HEADER;
+        lookup_rva[mi]=oft;iat_rva[mi]=ft;iat_bytes[mi]=(n+1)*8;
+        {
+            int section=section_at(p,ft,iat_bytes[mi],1);
+            if(section<0 || !(p->sections[section].permissions&CW_R) || (p->sections[section].permissions&CW_X))return CW_MAPPING;
+        }
+        if(ft<minimum)minimum=ft;
+        if(ft>UINT32_MAX-iat_bytes[mi])return CW_HEADER;
+        if(ft+iat_bytes[mi]>maximum)maximum=ft+iat_bytes[mi];
+        for(k=0;k<mi;k++)if((uint64_t)ft<(uint64_t)iat_rva[k]+iat_bytes[k] && (uint64_t)iat_rva[k]<(uint64_t)ft+iat_bytes[mi])return CW_HEADER;
     }
-    if(!n)return CW_HEADER;
-    p->import_count=n;p->iat_rva=ft;p->iat_bytes=(n+1)*8;
-    i=section_at(p,ft,p->iat_bytes,1);
-    if(i<0 || !(p->sections[i].permissions&CW_R) || (p->sections[i].permissions&CW_X))return CW_MAPPING;
-    if(advertised_bytes && (advertised_rva!=ft || advertised_bytes!=p->iat_bytes))return CW_HEADER;
-    /* Distinct lookup and IAT arrays may not overlap. Resolution is immutable. */
-    if(oft!=ft && (uint64_t)oft<(uint64_t)ft+p->iat_bytes && (uint64_t)ft<(uint64_t)oft+p->iat_bytes)return CW_HEADER;
+    for(mi=0;mi<modules;mi++) {
+        uint32_t k;for(k=0;k<modules;k++)if((lookup_rva[mi]!=iat_rva[k] || mi!=k) &&
+            (uint64_t)lookup_rva[mi]<(uint64_t)iat_rva[k]+iat_bytes[k] && (uint64_t)iat_rva[k]<(uint64_t)lookup_rva[mi]+iat_bytes[mi])return CW_HEADER;
+    }
+    p->import_count=total;p->iat_rva=minimum;p->iat_bytes=maximum-minimum;
+    if(advertised_bytes && (advertised_rva!=minimum || advertised_bytes!=p->iat_bytes))return CW_HEADER;
+    /* Protect the entire aggregate range, including alignment gaps. */
+    if(section_at(p,minimum,p->iat_bytes,1)<0)return CW_HEADER;
     return CW_OK;
 }
 static int nonvolatile_register(unsigned int n) { return n==3 || (n>=5 && n<=7) || n>=12; }

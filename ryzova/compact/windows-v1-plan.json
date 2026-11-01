@@ -37,7 +37,20 @@
     "kernel32.dll!CloseHandle": "W4",
     "kernel32.dll!SetFilePointerEx": "W4",
     "kernel32.dll!GetFileSizeEx": "W4",
-    "kernel32.dll!FlushFileBuffers": "W4"
+    "kernel32.dll!FlushFileBuffers": "W4",
+    "ucrtbase.dll!memcpy": "W5",
+    "ucrtbase.dll!memmove": "W5",
+    "ucrtbase.dll!memset": "W5",
+    "ucrtbase.dll!memcmp": "W5",
+    "ucrtbase.dll!strlen": "W5",
+    "ucrtbase.dll!strcmp": "W5",
+    "ucrtbase.dll!strncmp": "W5",
+    "ucrtbase.dll!wcslen": "W5",
+    "ucrtbase.dll!malloc": "W5",
+    "ucrtbase.dll!calloc": "W5",
+    "ucrtbase.dll!realloc": "W5",
+    "ucrtbase.dll!free": "W5",
+    "ucrtbase.dll!_errno": "W5"
   },
   "phases": [
     {
@@ -77,7 +90,7 @@
       "depends_on": [
         "W4"
       ],
-      "state": "pending"
+      "state": "implemented"
     },
     {
       "id": "W6",
@@ -140,7 +153,7 @@
     "general Windows compatibility"
   ],
   "hosted_windows_subset_available": true,
-  "hosted_scope": "Import-free bounded PE execution; native Flex kernel qualification remains W6",
+  "hosted_scope": "Bounded hosted AMD64 Windows console/selected CRT profiles; native Flex qualification remains W6",
   "hosted_api_subset": [
     "kernel32.dll!GetStdHandle",
     "kernel32.dll!WriteFile",
@@ -156,8 +169,27 @@
     "kernel32.dll!CloseHandle",
     "kernel32.dll!SetFilePointerEx",
     "kernel32.dll!GetFileSizeEx",
-    "kernel32.dll!FlushFileBuffers"
+    "kernel32.dll!FlushFileBuffers",
+    "ucrtbase.dll!memcpy",
+    "ucrtbase.dll!memmove",
+    "ucrtbase.dll!memset",
+    "ucrtbase.dll!memcmp",
+    "ucrtbase.dll!strlen",
+    "ucrtbase.dll!strcmp",
+    "ucrtbase.dll!strncmp",
+    "ucrtbase.dll!wcslen",
+    "ucrtbase.dll!malloc",
+    "ucrtbase.dll!calloc",
+    "ucrtbase.dll!realloc",
+    "ucrtbase.dll!free",
+    "ucrtbase.dll!_errno"
   ],
   "native_kernel_qualified": false,
-  "hosted_file_namespace": "explicit drive grants, portable provider interface and Linux descriptor transport; native Flex transport pending"
+  "hosted_file_namespace": "explicit drive grants, portable provider interface and Linux descriptor transport; native Flex transport pending",
+  "selected_crt_profile": {
+    "profile": "console-ucrt-selected-v1",
+    "api_major": 1,
+    "api_minor": 1,
+    "workload_inventory": "ryzova/compat/windows/w5-profile.json"
+  }
 }

@@ -72,7 +72,8 @@ int main(int argc,char **argv) {
     }
 #endif
     if(!status)status=cw_run(&m,budget);
-    printf("{\"status\":%d,\"executed\":%s,\"exited\":%s,\"exit_code\":%" PRIu32 ",\"exit_kind\":%" PRIu32 ",\"instructions\":%" PRIu32 ",\"imports\":%" PRIu32 ",\"stdout_hex\":\"",status,m.instructions?"true":"false",m.exited?"true":"false",m.exit_code,m.exit_kind,m.instructions,plan.import_count);
+    printf("{\"status\":%d,\"executed\":%s,\"exited\":%s,\"exit_code\":%" PRIu32 ",\"exit_kind\":%" PRIu32 ",\"instructions\":%" PRIu32 ",\"imports\":%" PRIu32 ",\"diagnostic_version\":\"1",status,m.instructions?"true":"false",m.exited?"true":"false",m.exit_code,m.exit_kind,m.instructions,plan.import_count);
+    printf("\",\"stop\":\"%s\",\"guest_ip\":%" PRIu64 ",\"stdout_hex\":\"",cw_status_name(status),m.last_guest_ip);
     if(m.services)hex(s->output[0],s->output_bytes[0]);
     printf("\",\"stderr_hex\":\"");
     if(m.services)hex(s->output[1],s->output_bytes[1]);

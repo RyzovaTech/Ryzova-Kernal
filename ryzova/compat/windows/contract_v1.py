@@ -7,6 +7,7 @@ import re
 ENVIRONMENT='compact/windows'
 ABI='windows-amd64-pe32plus-v1'
 PROFILE='console-win32-v1'
+CRT_PROFILE='console-ucrt-selected-v1'
 LIMITS={
     'pe_file_bytes':4*1024*1024,
     'mapped_image_bytes':64*1024*1024,
@@ -40,6 +41,8 @@ APIS={
     'kernel32.dll!GetFileSizeEx':'W4',
     'kernel32.dll!FlushFileBuffers':'W4',
 }
+APIS.update({name:'W5' for name in ('ucrtbase.dll!memcpy','ucrtbase.dll!memmove','ucrtbase.dll!memset','ucrtbase.dll!memcmp','ucrtbase.dll!strlen','ucrtbase.dll!strcmp','ucrtbase.dll!strncmp','ucrtbase.dll!wcslen','ucrtbase.dll!malloc','ucrtbase.dll!calloc','ucrtbase.dll!realloc','ucrtbase.dll!free','ucrtbase.dll!_errno')})
+
 REF=re.compile(r'[A-Za-z][A-Za-z0-9_.-]{0,63}\Z')
 RIGHTS={'console':frozenset(('write',)),
         'directory':frozenset(('read','write','create','list','metadata'))}
@@ -56,15 +59,16 @@ def validate_request(request):
     if type(request) is not dict or set(request)!=fields:raise ContractError('invalid request fields')
     if request['schema']!='compact-windows-request/v1' or request['environment']!=ENVIRONMENT:raise ContractError('unsupported Windows contract')
     if type(request['api_major']) is not int or request['api_major']!=1:raise ContractError('unsupported major')
-    if type(request['api_minor']) is not int or request['api_minor']!=0:raise ContractError('unsupported minor')
-    if request['abi']!=ABI or request['profile']!=PROFILE:raise ContractError('unsupported ABI/profile')
+    if type(request['api_minor']) is not int:raise ContractError('unsupported minor')
+    if request['abi']!=ABI or request['profile'] not in (PROFILE,CRT_PROFILE):raise ContractError('unsupported ABI/profile')
+    if request['api_minor']!=(0 if request['profile']==PROFILE else 1):raise ContractError('unsupported profile/minor')
     apis=request['apis']
     if type(apis) is not list or len(apis)>LIMITS['imports']:raise ContractError('invalid imports')
     normalized=[]
     for name in apis:
         if type(name) is not str or len(name)>128 or name.count('!')!=1:raise ContractError('invalid import name')
         module,export=name.split('!');name=module.lower()+'!'+export
-        if name not in APIS or name in normalized:raise ContractError('unknown or duplicate import')
+        if name not in APIS or name in normalized or (request['profile']==PROFILE and APIS[name]=='W5'):raise ContractError('unknown or duplicate import')
         normalized.append(name)
     resources=request['resources']
     if type(resources) is not list or len(resources)>8:raise ContractError('invalid resource requests')

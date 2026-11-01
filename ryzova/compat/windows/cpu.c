@@ -99,6 +99,78 @@ static void vector(Decode *d,Operand o,unsigned int reg,int to_operand) {
     if(to_operand){memcpy(bytes,d->m->xmm[reg],16);if(o.reg>=0)memcpy(d->m->xmm[o.reg],bytes,16);else if(cw_write(d->m,at,bytes,16))d->error=CW_MEMORY;}
     else {if(o.reg>=0)memcpy(bytes,d->m->xmm[o.reg],16);else if(cw_read(d->m,at,bytes,16,CW_R)){d->error=CW_MEMORY;return;}memcpy(d->m->xmm[reg],bytes,16);}
 }
+static uint64_t sign_extend(uint64_t value,unsigned int bytes) {
+    uint64_t bits=mask(bytes);return (value&(UINT64_C(1)<<(bytes*8-1)))?value|~bits:value&bits;
+}
+static void product(uint64_t a,uint64_t b,unsigned int n,int signed_product,uint64_t *low,uint64_t *high) {
+    uint64_t bits=mask(n),lo,hi;
+    a&=bits;b&=bits;
+    if(n<8){uint64_t full=a*b;lo=full&bits;hi=(full>>(8*n))&bits;}
+    else {
+        uint64_t a0=(uint32_t)a,a1=a>>32,b0=(uint32_t)b,b1=b>>32;
+        uint64_t w0=a0*b0,t=a1*b0+(w0>>32),w1=t&UINT32_MAX,w2=t>>32;
+        w1+=a0*b1;hi=a1*b1+w2+(w1>>32);lo=(w1<<32)|(w0&UINT32_MAX);
+    }
+    if(signed_product){uint64_t sign=UINT64_C(1)<<(8*n-1);hi=(hi-((a&sign)?b:0)-((b&sign)?a:0))&bits;}
+    *low=lo;*high=hi;
+}
+static void multiply_flags(Decode *d,uint64_t lo,uint64_t hi,unsigned int n,int is_signed) {
+    uint64_t expected=is_signed && (lo&(UINT64_C(1)<<(8*n-1)))?mask(n):0;
+    d->m->flags&=~(uint64_t)(CF|OF);if(hi!=expected)d->m->flags|=CF|OF;
+}
+static int divide_pair(uint64_t hi,uint64_t lo,uint64_t divisor,unsigned int n,uint64_t *quotient,uint64_t *remainder) {
+    unsigned int i=n*8;uint64_t q=0,r=hi;
+    if(!divisor || hi>=divisor)return CW_DIVIDE;
+    while(i--) {
+        uint64_t carry=r>>63;r=(r<<1)|((lo>>i)&1);
+        if(carry || r>=divisor){r-=divisor;q|=UINT64_C(1)<<i;}
+    }
+    *quotient=q;*remainder=r;return CW_OK;
+}
+static void muldiv(Decode *d,unsigned int group,uint64_t operand_value,unsigned int n) {
+    uint64_t lo,hi,a=d->m->r[0]&mask(n),b=operand_value&mask(n),bits=mask(n),sign=UINT64_C(1)<<(8*n-1),q,r;
+    if(group==4 || group==5) {
+        product(a,b,n,group==5,&lo,&hi);multiply_flags(d,lo,hi,n,group==5);
+    }else {
+        int negative_dividend,negative_divisor;
+        lo=a;hi=n==1?(d->m->r[0]>>8)&255:d->m->r[2]&bits;
+        negative_dividend=group==7 && !!(hi&sign);negative_divisor=group==7 && !!(b&sign);
+        if(negative_dividend){lo=(~lo+1)&bits;hi=(~hi+(lo==0))&bits;}
+        if(negative_divisor)b=(~b+1)&bits;
+        if(divide_pair(hi,lo,b,n,&q,&r)){d->error=CW_DIVIDE;return;}
+        if(group==7) {
+            int negative_quotient=negative_dividend!=negative_divisor;
+            if(q>(negative_quotient?sign:sign-1)){d->error=CW_DIVIDE;return;}
+            if(negative_quotient)q=(~q+1)&bits;
+            if(negative_dividend)r=(~r+1)&bits;
+        }
+        lo=q;hi=r;
+    }
+    if(n==1)put(d,regop(d,0,2),2,lo|(hi<<8));
+    else {put(d,regop(d,0,n),n,lo);put(d,regop(d,2,n),n,hi);}
+}
+static uint64_t shift(Decode *d,unsigned int group,uint64_t value,unsigned int n,unsigned int count) {
+    uint64_t v=value&mask(n),sign=UINT64_C(1)<<(n*8-1),carry=0;unsigned int i;
+    count&=n==8?63U:31U;
+    if(group==0 || group==1)count%=n*8;
+    if(!count)return v;
+    for(i=0;i<count;i++) {
+        if(group==0){carry=!!(v&sign);v=((v<<1)|carry)&mask(n);}
+        else if(group==1){carry=v&1;v=(v>>1)|(carry?sign:0);}
+        else if(group==4 || group==6){carry=!!(v&sign);v=(v<<1)&mask(n);}
+        else if(group==5){carry=v&1;v>>=1;}
+        else if(group==7){carry=v&1;v=(v>>1)|(v&sign);}
+        else {d->error=CW_OPCODE;return 0;}
+    }
+    d->m->flags=(d->m->flags&~(uint64_t)CF)|(carry?CF:0);
+    if(group>=4)result_flags(d,v,n);
+    if(count==1) {
+        int overflow=(group==0 || group==4 || group==6)?(!!(v&sign)!=(int)carry):
+            group==1?(!!(v&sign)!=!!(v&(sign>>1))):group==5?!!(value&sign):0;
+        d->m->flags=(d->m->flags&~(uint64_t)OF)|(overflow?OF:0);
+    }
+    return v;
+}
 static int tick(CwMachine *m) {
     Decode d;Operand o,q;unsigned int op,n,reg=0,group=0,prefixes=0;
     uint64_t a,b,v,target=0;int jump=0;
@@ -148,11 +220,33 @@ static int tick(CwMachine *m) {
     }
     else if(op==0x80 || op==0x81 || op==0x83){if(op==0x80)n=1;o=operand(&d,&reg,&group,n);b=fetch(&d,op==0x83?1:(n==8?4:n));if(op==0x83)b=(uint64_t)(int64_t)(int8_t)b;else if(n==8)b=(uint64_t)(int64_t)(int32_t)b;a=get(&d,o,n);v=alu(&d,group,a,b,n);if(group!=7)put(&d,o,n,v);}
     else if(op==0x84 || op==0x85){if(op==0x84)n=1;o=operand(&d,&reg,&group,n);(void)alu(&d,4,get(&d,o,n),get(&d,regop(&d,reg,n),n),n);}
+    else if(op==0x63){if(n==2)return CW_OPCODE;o=operand(&d,&reg,&group,4);put(&d,regop(&d,reg,n),n,sign_extend(get(&d,o,4),4));}
+    else if(op==0x98){unsigned int small=n/2;put(&d,regop(&d,0,n),n,sign_extend(m->r[0]&mask(small),small));}
+    else if(op==0x99){put(&d,regop(&d,2,n),n,(m->r[0]&(UINT64_C(1)<<(n*8-1)))?mask(n):0);}
+    else if(op==0x69 || op==0x6b){uint64_t high;o=operand(&d,&reg,&group,n);b=fetch(&d,op==0x6b?1:(n==8?4:n));b=sign_extend(b,op==0x6b?1:(n==8?4:n));a=get(&d,o,n);product(a,b,n,1,&v,&high);multiply_flags(&d,v,high,n,1);put(&d,regop(&d,reg,n),n,v);}
+    else if(op==0xf6 || op==0xf7){
+        if(op==0xf6)n=1;
+        o=operand(&d,&reg,&group,n);
+        if(group==0){b=fetch(&d,n==8?4:n);if(n==8)b=sign_extend(b,4);(void)alu(&d,4,get(&d,o,n),b,n);}
+        else if(group==2)put(&d,o,n,~get(&d,o,n));
+        else if(group==3){v=alu(&d,5,0,get(&d,o,n),n);put(&d,o,n,v);}
+        else if(group>=4){a=get(&d,o,n);if(!d.error)muldiv(&d,group,a,n);}
+        else return CW_OPCODE;
+    }
+    else if(op==0xc0 || op==0xc1 || (op>=0xd0 && op<=0xd3)){
+        unsigned int count;if(op==0xc0 || op==0xd0 || op==0xd2)n=1;
+        o=operand(&d,&reg,&group,n);
+        count=(op==0xc0 || op==0xc1)?(unsigned int)fetch(&d,1):(op==0xd0 || op==0xd1)?1U:(unsigned int)(m->r[1]&255);
+        if(group==2 || group==3)return CW_OPCODE;
+        v=shift(&d,group,get(&d,o,n),n,count);put(&d,o,n,v);
+    }
     else if(op==0xff){o=operand(&d,&reg,&group,n);if(group==2 || group==4 || group==6){if(d.prefix)return CW_OPCODE;v=get(&d,o,8);if(group==6)push(&d,v);else {if(group==2)push(&d,d.cur);jump=1;target=v;}}else if(group<2){a=m->flags&CF;v=alu(&d,group?5:0,get(&d,o,n),1,n);m->flags=(m->flags&~(uint64_t)CF)|a;put(&d,o,n,v);}else return CW_OPCODE;}
     else if(op==0x0f){
         unsigned int second=(unsigned int)fetch(&d,1);
         if(d.prefix==0xf3 && second!=0x6f && second!=0x7f)return CW_OPCODE;
         if(second>=0x80 && second<=0x8f){if(d.prefix || d.rex)return CW_OPCODE;b=(uint64_t)(int64_t)(int32_t)fetch(&d,4);if(condition(m,second&15)){jump=1;target=d.cur+b;}}
+        else if(second==0xaf){uint64_t high;o=operand(&d,&reg,&group,n);product(get(&d,regop(&d,reg,n),n),get(&d,o,n),n,1,&v,&high);multiply_flags(&d,v,high,n,1);put(&d,regop(&d,reg,n),n,v);}
+        else if(second==0xbe || second==0xbf){unsigned int small=second==0xbe?1:2;o=operand(&d,&reg,&group,small);put(&d,regop(&d,reg,n),n,sign_extend(get(&d,o,small),small));}
         else if(second==0xb6 || second==0xb7){unsigned int small=second==0xb6?1:2;o=operand(&d,&reg,&group,small);put(&d,regop(&d,reg,n),n,get(&d,o,small));}
         else if(second>=0x90 && second<=0x9f){o=operand(&d,&reg,&group,1);put(&d,o,1,(uint64_t)condition(m,second&15));}
         else if(second>=0x40 && second<=0x4f){o=operand(&d,&reg,&group,n);v=get(&d,o,n);if(condition(m,second&15))put(&d,regop(&d,reg,n),n,v);}
@@ -170,6 +264,11 @@ int cw_run(CwMachine *m,uint32_t budget) {
     if(m->status)return m->status;
     if(m->exited)return CW_OK;
     if(!budget || budget>CW_MAX_STEPS){cw_files_close_all(m);return m->status=CW_BUDGET;}
-    while(m->instructions<budget){int status;m->instructions++;status=m->ip>=CW_THUNK_BASE?cw_api_dispatch(m):tick(m);if(status){cw_files_close_all(m);return m->status=status;}if(m->exited){cw_files_close_all(m);return CW_OK;}}
+    while(m->instructions<budget){int status;if(m->ip<CW_THUNK_BASE)m->last_guest_ip=m->ip;m->instructions++;status=m->ip>=CW_THUNK_BASE?cw_api_dispatch(m):tick(m);if(status){cw_files_close_all(m);return m->status=status;}if(m->exited){cw_files_close_all(m);return CW_OK;}}
     cw_files_close_all(m);return m->status=CW_BUDGET;
+}
+
+const char *cw_status_name(int status) {
+    static const char *const names[]={"ok","bad-header","unsupported-image","bounds","unsafe-mapping","bad-relocation","memory-fault","unsupported-opcode","instruction-budget","abi-violation","api-policy","integer-divide-error","crt-contract"};
+    return status>=0 && (unsigned int)status<sizeof(names)/sizeof(names[0])?names[status]:"unknown";
 }

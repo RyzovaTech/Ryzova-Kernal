@@ -9,11 +9,12 @@
 #define ERR_ENVIRONMENT 203U
 #define ERR_ADDRESS 487U
 #define ERR_NOACCESS 998U
-static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers"};
+static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno"};
 int cw_api_id(const char *name) {
     unsigned int i;for(i=0;i<CW_API_COUNT;i++)if(!strcmp(name,names[i]))return (int)i;
     return -1;
 }
+const char *cw_api_module(unsigned int id) { return id<CW_MEMCPY?"kernel32.dll":(id<CW_API_COUNT?"ucrtbase.dll":NULL); }
 const char *cw_api_name(unsigned int id) { return id<CW_API_COUNT?names[id]:NULL; }
 uint64_t cw_api_token(unsigned int id) { return id<CW_API_COUNT?CW_THUNK_BASE+16U*id:0; }
 static int span(uint64_t size,uint64_t at,uint64_t bytes) { return at<=size && bytes<=size-at; }
@@ -74,6 +75,8 @@ unsigned char *cw_service_memory(CwMachine *m,uint64_t at,size_t n,unsigned int 
     if(!s || s->bound_machine!=m || !n)return NULL;
     if(at>=s->command_base && span(sizeof(s->command_bytes),at-s->command_base,n))
         return rights==CW_R?s->command_bytes+(size_t)(at-s->command_base):NULL;
+    if(at>=s->command_base+4096 && span(4,at-s->command_base-4096,n))
+        return rights==CW_X?NULL:s->errno_bytes+(size_t)(at-s->command_base-4096);
     if(at<s->heap_base || !span(s->heap_bytes,at-s->heap_base,n) || rights==CW_X)return NULL;
     off=at-s->heap_base;first=(size_t)(off/4096);last=(size_t)((off+n-1)/4096);
     for(i=first;i<=last;i++)if(!s->owner[i] || !(s->protection[i]&rights))return NULL;
@@ -183,6 +186,14 @@ static uint64_t virtual_free(CwMachine *m,const uint64_t *a) {
     if(type==0x8000)s->allocations[slot].pages=0;
     return 1;
 }
+uint64_t cw_heap_allocate(CwMachine *m,uint64_t bytes) {
+    uint64_t args[4]={0,bytes,0x3000,4},value;uint32_t error=m->services->last_error;
+    value=virtual_alloc(m,args);m->services->last_error=error;return value;
+}
+int cw_heap_release(CwMachine *m,uint64_t at) {
+    uint64_t args[3]={at,0,0x8000};int result;uint32_t error=m->services->last_error;
+    result=(int)virtual_free(m,args);m->services->last_error=error;return result;
+}
 int cw_api_dispatch(CwMachine *m) {
     uint64_t token=m->ip;unsigned int id;uint64_t a[7],result=0,ret;unsigned char *stack;
     CwServices *s=m->services;
@@ -212,12 +223,14 @@ int cw_api_dispatch(CwMachine *m) {
     case CW_SET_LAST_ERROR:s->last_error=(uint32_t)a[0];break;
     case CW_GET_COMMAND_LINE:result=s->command_base;break;
     case CW_GET_ENVIRONMENT_VARIABLE:result=environment(m,a);break;
-    case CW_VIRTUAL_ALLOC:result=virtual_alloc(m,a);break;
-    case CW_VIRTUAL_FREE:result=virtual_free(m,a);break;
+    case CW_VIRTUAL_ALLOC:result=a[0] && cw_crt_owned(m,a[0])?fail(s,ERR_ADDRESS):virtual_alloc(m,a);break;
+    case CW_VIRTUAL_FREE:result=cw_crt_owned(m,a[0])?fail(s,ERR_ADDRESS):virtual_free(m,a);break;
     case CW_CREATE_FILE:case CW_READ_FILE:case CW_CLOSE_HANDLE:
     case CW_SET_FILE_POINTER:case CW_GET_FILE_SIZE:case CW_FLUSH_FILE_BUFFERS:
         result=cw_file_call(m,id,a);break;
-    default:return CW_API;
+    default:
+        if(id>=CW_MEMCPY){int status=cw_crt_call(m,id,a,&result);if(status)return status;}
+        else return CW_API;
     }
     m->r[0]=result;m->r[4]+=8;
     if(ret==UINT64_MAX) {
