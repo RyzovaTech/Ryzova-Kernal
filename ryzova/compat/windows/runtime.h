@@ -11,6 +11,15 @@
 #define CW_R 1U
 #define CW_W 2U
 #define CW_X 4U
+/* Recursive service/namespace references are opaque in the native linker
+   signature, as with Plan 9 libc's Tzone. Their definitions remain checked
+   normally by the compiler in each translation unit. */
+typedef struct CwServices CwServices;
+typedef struct CwFileNamespace CwFileNamespace;
+#ifdef CW_PLAN9
+#pragma incomplete CwServices
+#pragma incomplete CwFileNamespace
+#endif
 /* All guest addresses are numbers. No host executable mappings or DLL calls. */
 typedef struct CwSection { uint32_t rva, size, raw, bytes, permissions; } CwSection;
 typedef struct CwImport { uint32_t iat, api; } CwImport;

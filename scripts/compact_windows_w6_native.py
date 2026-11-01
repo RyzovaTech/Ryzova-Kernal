@@ -89,7 +89,7 @@ def required_calls(name):
     if name=='heap-limit':return {'malloc':2,'_errno':1,'ExitProcess':1}
     if name=='io-limit':return {'malloc':1,'GetStdHandle':1,'WriteFile':1,'GetLastError':1,'ExitProcess':1}
     if name=='handle-limit':return {'CreateFileW':31,'GetLastError':1,'ExitProcess':1}
-    if name=='ramfs-io':return {'CreateFileW':2,'WriteFile':1,'ReadFile':1,'CloseHandle':2,'ExitProcess':1}
+    if name=='ramfs-io':return {'CreateFileW':3,'WriteFile':1,'ReadFile':3,'CloseHandle':3,'GetFileSizeEx':1,'SetFilePointerEx':3,'GetLastError':2,'ExitProcess':1}
     return {}
 
 def parse_cases(log,specs):

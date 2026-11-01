@@ -26,14 +26,14 @@ typedef struct CwFileOps {
     uint32_t (*close)(void *,uint64_t);
 } CwFileOps;
 typedef struct CwFileHandle { uint64_t token,resource,position;uint32_t access,mount; } CwFileHandle;
-typedef struct CwFileNamespace {
+struct CwFileNamespace {
     CwMachine *bound_machine;
     const CwFileOps *ops;void *context;
     uint32_t mount_count,serial;
     CwDirectoryGrant mounts[CW_DIRECTORY_GRANTS];
     CwFileHandle handles[CW_FILE_HANDLES];
     unsigned char scratch[CW_FILE_LIMIT];
-} CwFileNamespace;
+};
 /* Namespace state must be zero-initialized; grants are copied and frozen. */
 int cw_attach_files(CwMachine *,CwFileNamespace *,const CwDirectoryGrant *,uint32_t,const CwFileOps *,void *);
 int cw_file_path(const uint16_t *,char *,uint32_t *);

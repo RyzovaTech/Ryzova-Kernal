@@ -3,6 +3,7 @@
 #define CW_FILES_NATIVE_H
 #include "files.h"
 typedef struct CwFileNative CwFileNative;
+#pragma incomplete CwFileNative
 /* Caller owns a private namespace; root is an explicit trusted capability.
    syncfd, if present, must belong to the owning hjfs control service. */
 CwFileNative *cw_file_native_new(const char *,int);

@@ -41,7 +41,9 @@ profile. The provider trusts the native launcher and owning 9P server; it does
 not defend against a malicious native administrator replacing namespace objects.
 
 The second namespace in the QEMU test is a separate native ramfs 9P server process.
-The Windows PE performs actual create/write/close/reopen/read there. Distinct roots
+The Windows PE exercises create/write/size/seek/read/EOF/close there, plus
+case-insensitive reopen and sharing denial before truncation. A stale handle
+must fail after close. Distinct roots
 must not acquire each other's files. This proves kernel-mediated 9P namespace
 resource access, not separate physical/network nodes or distributed performance.
 

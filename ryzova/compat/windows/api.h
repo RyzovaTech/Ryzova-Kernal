@@ -23,7 +23,7 @@ typedef struct CwLaunch {
 } CwLaunch;
 typedef struct CwAllocation { uint32_t first, pages; } CwAllocation;
 typedef struct CwCrtBlock { uint64_t base,size,capacity; } CwCrtBlock;
-typedef struct CwServices {
+struct CwServices {
     CwLaunch launch;
     uint32_t last_error, output_bytes[2], calls[CW_API_COUNT];
     unsigned char output[2][CW_OUTPUT_LIMIT], command_bytes[CW_COMMAND_UNITS*2];
@@ -37,7 +37,7 @@ typedef struct CwServices {
     uint32_t console_closed;
     CwCrtBlock crt_blocks[16];
     unsigned char errno_bytes[4];
-} CwServices;
+};
 /* Zero-initialize services before first attach; a service belongs to one machine.
    Trusted launcher attaches explicit policy/backing, never host env/DLLs. */
 int cw_attach_services(CwMachine *,CwServices *,const CwLaunch *,unsigned char *,size_t);
