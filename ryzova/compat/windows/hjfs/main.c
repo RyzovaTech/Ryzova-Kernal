@@ -132,13 +132,15 @@ threadmain(int argc, char **argv)
 	default: usage();
 	} ARGEND;
 	rfork(RFNOTEG);
-	bufinit(nbuf);
 	if(file == nil)
 		sysfatal("no default file");
 	if(argc != 0)
 		usage();
+	if(cwstrict && (netc != 0 || stdio != 0))
+		sysfatal("barrier v1 is a local service only");
 	if(cwstrict && cwsyncinit(file) < 0)
 		sysfatal("qualified storage capability: %r");
+	bufinit(nbuf);
 	d = newdev(file);
 	if(d == nil)
 		sysfatal("newdev: %r");

@@ -87,8 +87,11 @@ cwsync(void)
 	}
 	/* Quiesce filesystem readers/writers, drain queued putbuf operations,
 	 * enqueue dirty cache writes, and wait behind every device write. */
+	dprint("CW_BARRIER quiesce\n");
 	wlock(fsmain);
+	dprint("CW_BARRIER cache-drain\n");
 	sync(1);
+	dprint("CW_BARRIER device-flush\n");
 	rc = 0;
 	for(d = devs; d != nil; d = d->next)
 		if(d->writefailed)
@@ -101,6 +104,7 @@ cwsync(void)
 			d->writefailed = 1;
 		werrstr("resource storage barrier failed");
 	}
+	dprint("CW_BARRIER %s\n", rc < 0 ? "failed" : "complete");
 	wunlock(fsmain);
 	return rc;
 }
