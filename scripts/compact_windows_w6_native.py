@@ -259,9 +259,60 @@ def main():
     for path,sha in [('/tmp/cw-local/payload.bin',file_sha),('/tmp/cw-ram/ram.bin',ram_sha)]:
         if not re.search(rb'(?m)^'+sha.encode()+rb'\s+'+path.encode()+rb'\r?$',log):raise ValueError('persistent/9P file mismatch')
     durable_sha=hashlib.sha256(PAYLOAD).hexdigest()
-    reboot=session(args.image,["cat '#Z/version'; sha1sum -2 256 /tmp/cw-local/payload.bin; cw-hjfs -F -S -n cwfs-reboot -f /dev/sd01/data > /tmp/cwfs-reboot.log >[2]/dev/cons; mount -nc /srv/cwfs-reboot /tmp/cw-durable; sha1sum -2 256 /tmp/cw-durable/payload.bin; cat /tmp/cwfs-reboot.log; echo CW_REBOOT_DONE"],out,'reboot',100,resource=resource)
-    if b'Ryzova Kernel 0.1.0-dev' not in reboot or not re.search(rb'(?m)^'+file_sha.encode()+rb'\s+/tmp/cw-local/payload.bin\r?$',reboot):raise ValueError('reboot persistence mismatch')
-    if not re.search(rb'(?m)^'+durable_sha.encode()+rb'\s+/tmp/cw-durable/payload.bin\r?$',reboot):raise ValueError('acknowledged bytes lost after QEMU hard kill')
+    # The hard-kill barrier qualifies ONLY the dedicated cw-hjfs resource
+    # unit. The separate boot hjfs instance has no acknowledged SCSI barrier.
+    # Do not claim that an unsynced /tmp/cw-local file survives SIGKILL:
+    # doing so previously failed even though the qualified disk's exact
+    # W4 payload SHA was recovered on the very same fresh QEMU boot.
+    # Short stages also avoid long serial lines losing UART characters.
+    reboot_commands=[
+      "cat '#Z/version'; sha1sum -2 256 /amd64/bin/compact-windows; echo CW_REBOOT_IDENTITY_OK",
+      "mkdir -p /tmp/cw-durable; cw-hjfs -F -S -n cwfs-reboot -f /dev/sd01/data > /tmp/cwfs-reboot.log >[2]/dev/cons; mount -nc /srv/cwfs-reboot /tmp/cw-durable && echo CW_REBOOT_RESOURCE_MOUNTED",
+      "sha1sum -2 256 /tmp/cw-durable/payload.bin; echo CW_REBOOT_DONE"]
+    reboot=session(args.image,reboot_commands,out,'reboot',100,
+                   required={0:'CW_REBOOT_IDENTITY_OK',1:'CW_REBOOT_RESOURCE_MOUNTED'},
+                   resource=resource)
+    if b'Ryzova Kernel 0.1.0-dev' not in reboot or not re.search(
+        rb'(?m)^'+runtime_sha[0]+rb'\s+/amd64/bin/compact-windows\r?
+    # One real virtual-storage EIO, then a healthy backend: the server must
+    # reject both the failed barrier and the subsequent uncertain-state retry.
+    fault_resource=out/'resource-fault.qcow2'
+    subprocess.run(['qemu-img','create','-f','qcow2','-F','qcow2','-b',str(resource.resolve()),str(fault_resource)],check=True)
+    fault_config=out/'flush-fault.conf'
+    fault_config.write_text('[set-state]\nevent = "pwritev"\nstate = "1"\nnew_state = "2"\n[inject-error]\nevent = "flush_to_os"\nstate = "2"\niotype = "flush"\nerrno = "5"\nonce = "on"\nimmediately = "on"\n')
+    fault_commands=["cat '#Z/version'; sha1sum -2 256 /amd64/bin/cw-hjfs",
+      'cw-hjfs -F -S -n cwfs-fault -f /dev/sd01/data > /tmp/cwfs-fault.log >[2]/dev/cons; mount -nc /srv/cwfs-fault /tmp/cw-durable; rm /tmp/cw-durable/payload.bin; cat /tmp/cwfs-fault.log']
+    for name in fault_specs():fault_commands.append(f'echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows -r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1 /tmp/cw-file.exe; echo CW_CASE_{name}_END; rm /tmp/cw-durable/payload.bin')
+    fault_log=session(args.image,fault_commands,out,'fault',120,resource=fault_resource,hardcut=True,fault_config=fault_config)
+    if b'Ryzova Kernel 0.1.0-dev' not in fault_log or server_sha[0] not in fault_log:raise ValueError('fault-test source identity')
+    records.update(parse_cases(fault_log,fault_specs()))
+    report={'schema':'compact-windows-w6-native/v1','source_commit':commit,'source_archive_sha256':archive_sha,'kernel_sha256':kernel_sha,'runtime_sha256':runtime_sha[0].decode(),
+      'bootstrap_image_gzip_sha256':PIN,'bootstrap_image_sha256':base_sha,'cases':records,'fixture_sha256':hashes,'native_amd64_qemu_qualified':True,'native_9p_namespace_verified':True,
+      'file_sha256':file_sha,'reboot_persistence_verified':True,'boot_root_sigkill_persistence_qualified':False,'dedicated_resource_sigkill_persistence_qualified':True,'native_file_flush_qualified':True,'barrier_local_only_verified':True,'durable_file_sha256':durable_sha,'resource_server_sha256':server_sha[0].decode(),'qemu_sigkill_persistence_verified':True,'storage_flush_failure_and_sticky_error_verified':True,'storage_fault_config_sha256':digest(fault_config),'flush_evidence_scope':'dedicated QEMU virtio-SCSI disk; pinned cw-hjfs ACK after dirty cache drain and SYNCHRONIZE CACHE; no physical power-loss claim','full_w6_complete':False,'physical_hardware_qualified':False,'arm64_windows_qualified':False,'general_windows_compatibility':False}
+    (out/'qualification.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True);server.shutdown()
+if __name__=='__main__':main()
+,reboot):
+        raise ValueError('reboot source/runtime identity mismatch')
+    if not re.search(rb'(?m)^'+durable_sha.encode()+rb'\s+/tmp/cw-durable/payload.bin\r?
+    # One real virtual-storage EIO, then a healthy backend: the server must
+    # reject both the failed barrier and the subsequent uncertain-state retry.
+    fault_resource=out/'resource-fault.qcow2'
+    subprocess.run(['qemu-img','create','-f','qcow2','-F','qcow2','-b',str(resource.resolve()),str(fault_resource)],check=True)
+    fault_config=out/'flush-fault.conf'
+    fault_config.write_text('[set-state]\nevent = "pwritev"\nstate = "1"\nnew_state = "2"\n[inject-error]\nevent = "flush_to_os"\nstate = "2"\niotype = "flush"\nerrno = "5"\nonce = "on"\nimmediately = "on"\n')
+    fault_commands=["cat '#Z/version'; sha1sum -2 256 /amd64/bin/cw-hjfs",
+      'cw-hjfs -F -S -n cwfs-fault -f /dev/sd01/data > /tmp/cwfs-fault.log >[2]/dev/cons; mount -nc /srv/cwfs-fault /tmp/cw-durable; rm /tmp/cw-durable/payload.bin; cat /tmp/cwfs-fault.log']
+    for name in fault_specs():fault_commands.append(f'echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows -r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1 /tmp/cw-file.exe; echo CW_CASE_{name}_END; rm /tmp/cw-durable/payload.bin')
+    fault_log=session(args.image,fault_commands,out,'fault',120,resource=fault_resource,hardcut=True,fault_config=fault_config)
+    if b'Ryzova Kernel 0.1.0-dev' not in fault_log or server_sha[0] not in fault_log:raise ValueError('fault-test source identity')
+    records.update(parse_cases(fault_log,fault_specs()))
+    report={'schema':'compact-windows-w6-native/v1','source_commit':commit,'source_archive_sha256':archive_sha,'kernel_sha256':kernel_sha,'runtime_sha256':runtime_sha[0].decode(),
+      'bootstrap_image_gzip_sha256':PIN,'bootstrap_image_sha256':base_sha,'cases':records,'fixture_sha256':hashes,'native_amd64_qemu_qualified':True,'native_9p_namespace_verified':True,
+      'file_sha256':file_sha,'reboot_persistence_verified':True,'native_file_flush_qualified':True,'barrier_local_only_verified':True,'durable_file_sha256':durable_sha,'resource_server_sha256':server_sha[0].decode(),'qemu_sigkill_persistence_verified':True,'storage_flush_failure_and_sticky_error_verified':True,'storage_fault_config_sha256':digest(fault_config),'flush_evidence_scope':'dedicated QEMU virtio-SCSI disk; pinned cw-hjfs ACK after dirty cache drain and SYNCHRONIZE CACHE; no physical power-loss claim','full_w6_complete':False,'physical_hardware_qualified':False,'arm64_windows_qualified':False,'general_windows_compatibility':False}
+    (out/'qualification.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True);server.shutdown()
+if __name__=='__main__':main()
+,reboot):
+        raise ValueError('dedicated resource barrier did not retain acknowledged bytes after SIGKILL')
     # One real virtual-storage EIO, then a healthy backend: the server must
     # reject both the failed barrier and the subsequent uncertain-state retry.
     fault_resource=out/'resource-fault.qcow2'
