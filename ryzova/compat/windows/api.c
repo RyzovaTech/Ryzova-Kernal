@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #include "api.h"
 #include "files.h"
+#ifndef CW_PLAN9
 #include <string.h>
+#endif
 #define ERR_INVALID_HANDLE 6U
 #define ERR_MEMORY 8U
 #define ERR_UNSUPPORTED 50U

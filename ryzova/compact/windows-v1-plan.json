@@ -98,7 +98,7 @@
       "depends_on": [
         "W5"
       ],
-      "state": "pending"
+      "state": "native-integration-awaiting-ci"
     }
   ],
   "requirements": [
@@ -191,5 +191,12 @@
     "api_major": 1,
     "api_minor": 1,
     "workload_inventory": "ryzova/compat/windows/w5-profile.json"
+  },
+  "w6_qualification": {
+    "native_amd64_qemu": "awaiting-ci",
+    "native_file_flush": "unsupported-error-50",
+    "physical_hardware": "not-tested",
+    "arm64_windows": "not-tested",
+    "full_phase_complete": false
   }
 }

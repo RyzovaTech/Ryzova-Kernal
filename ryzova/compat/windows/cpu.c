@@ -2,7 +2,9 @@
 /* Windows-owned bounded AMD64 subset. No Linux process, host CPU jump or syscall. */
 #include "api.h"
 #include "files.h"
+#ifndef CW_PLAN9
 #include <string.h>
+#endif
 #define CF 1U
 #define PF 4U
 #define ZF 64U

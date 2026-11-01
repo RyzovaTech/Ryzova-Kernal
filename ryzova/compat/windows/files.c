@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #include "api.h"
 #include "files.h"
+#ifndef CW_PLAN9
 #include <string.h>
+#endif
 static uint64_t failed(CwServices *s,uint32_t error,int create) { s->last_error=error;return create?UINT64_MAX:0; }
 static int overlap(const void *a,size_t an,const void *b,size_t bn) {
     uintptr_t x=(uintptr_t)a,y=(uintptr_t)b;

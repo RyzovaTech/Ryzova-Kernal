@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #ifndef RYZ_WINDOWS_RUNTIME_H
 #define RYZ_WINDOWS_RUNTIME_H
-#include <stddef.h>
-#include <stdint.h>
+#include "portable.h"
 #define CW_MAX_FILE (4U*1024U*1024U)
 #define CW_MAX_MEMORY (64U*1024U*1024U)
 #define CW_STACK 65536U

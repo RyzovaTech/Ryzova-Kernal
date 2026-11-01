@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Selected CRT contracts, implemented inside the guest boundary, never forwarded. */
 #include "api.h"
+#ifndef CW_PLAN9
 #include <string.h>
+#endif
 #define CRT_LIMIT 65536U
 static void error_number(CwServices *s,uint32_t value) { unsigned int i;for(i=0;i<4;i++)s->errno_bytes[i]=(unsigned char)(value>>(8*i)); }
 int cw_crt_owned(CwMachine *m,uint64_t at) {

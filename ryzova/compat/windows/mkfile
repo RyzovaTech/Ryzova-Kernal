@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+</$objtype/mkfile
+TARG=compact-windows
+OFILES=loader.$O cpu.$O api.$O crt.$O files.$O files_native.$O native_runner.$O
+HFILES=portable.h runtime.h api.h files.h files_native.h
+BIN=/$objtype/bin
+CFLAGS=$CFLAGS -DCW_PLAN9
+</sys/src/cmd/mkone
