@@ -176,8 +176,12 @@ tqueue(Req *req)
 		}
 	}
 	if(cwstrict && req->fid->qid.path == CWSYNCQID){
-		dprint("CW_SYNC_QUEUED type=%d\n", req->ifcall.type);
-		threadcreate(syncreq, req, mainstacksize);
+		/* The lib9p server request dispatcher may block in getreq while
+		 * its process-local scheduler has a freshly created thread pending.
+		 * Use an independently scheduled Plan 9 process, just as the hjfs
+		 * buffer/IO workers do. An ACK is never produced by a failed spawn. */
+		if(proccreate(syncreq, req, mainstacksize) < 0)
+			respond(req, "control response worker unavailable");
 		return;
 	}
 	ch = req->fid->aux;
