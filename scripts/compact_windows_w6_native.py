@@ -160,7 +160,11 @@ def session(image,commands,out,label,timeout,required=None,resource=None,hardcut
                 if b'bootargs is ' in tail and not bootargs:client.sendall(b'\r');bootargs=True
                 if bootargs and (b'user[glenda]:' in tail or b'user:' in tail) and not login:client.sendall(b'glenda\r');login=True
                 if login and b'term%' in tail and not sent:
-                    client.sendall((commands[stage]+f'; echo CW6_STAGE_{stage}\r').encode());sent=True;print(label,'stage',stage,flush=True)
+                    line=(commands[stage]+f'; echo CW6_STAGE_{stage}\r').encode()
+                    # The emulated UART/guest console can lose burst input.
+                    for offset in range(0,len(line),8):
+                        client.sendall(line[offset:offset+8]);time.sleep(.01)
+                    sent=True;print(label,'stage',stage,flush=True)
                 if sent and standalone(tail,f'CW6_STAGE_{stage}'):
                     if required and stage in required and not standalone(tail,required[stage]):raise RuntimeError(label+' failed: '+required[stage]+' '+bytes(raw[-10000:]).decode('utf-8','replace'))
                     if stage==len(commands)-1:completed=True;break
@@ -234,7 +238,8 @@ def main():
     cases=case_specs();commands=["cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; echo CW_IDENTITY_END",'ip/ipconfig -d ether /net/ether0; webfs',
       'mkdir -p /tmp/cw-local /tmp/cw-ro /tmp/cw-unsynced /tmp/cw-ram /tmp/cw-durable; ramfs -m /tmp/cw-ram',
       'sha1sum -2 256 /amd64/bin/compact-windows /amd64/bin/cw-hjfs',
-      "cw-hjfs -F -s -f /dev/sd01/data > /tmp/cwfs-denied.log >[2=1]; grep 'local service only' /tmp/cwfs-denied.log > /dev/null && echo CW_BARRIER_LOCAL_ONLY_OK; cw-hjfs -F -S -r -n cwfs -f /dev/sd01/data > /tmp/cwfs.log >[2]/dev/cons; mount -nc /srv/cwfs /tmp/cw-durable; test -e /tmp/cw-durable/.ryzova-sync-v1 && echo CW_BARRIER_SERVICE_OK; cat /tmp/cwfs.log"]
+      "cw-hjfs -F -s -f /dev/sd01/data > /tmp/cwfs-denied.log >[2=1]; grep 'local service only' /tmp/cwfs-denied.log > /dev/null && echo CW_BARRIER_LOCAL_ONLY_OK",
+      "cw-hjfs -F -S -r -n cwfs -f /dev/sd01/data > /tmp/cwfs.log >[2]/dev/cons; mount -nc /srv/cwfs /tmp/cw-durable; test -e /tmp/cw-durable/.ryzova-sync-v1 && echo CW_BARRIER_SERVICE_OK; cat /tmp/cwfs.log"]
     for name in hashes:commands.append(f'hget http://10.0.2.2:8000/{name}.exe > /tmp/cw-{name}.exe; sha1sum -2 256 /tmp/cw-{name}.exe')
     for name,spec in cases.items():
         if name=='durable':continue
@@ -243,7 +248,7 @@ def main():
       'test ! -e /tmp/cw-ro/payload.bin && test ! -e /tmp/cw-local/ram.bin && test ! -e /tmp/cw-ram/payload.bin && echo CW_NAMESPACE_ISOLATION_OK',
       'echo sync >> /srv/hjfs.cmd; sleep 3; echo CW_RUNTIME_DONE',
       'echo CW_CASE_durable_BEGIN; /amd64/bin/compact-windows -r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1 /tmp/cw-file.exe; echo CW_CASE_durable_END']
-    log=session(args.image,commands,out,'fresh',120,required={4:'CW_BARRIER_SERVICE_OK'},resource=resource,hardcut=True)
+    log=session(args.image,commands,out,'fresh',120,required={4:'CW_BARRIER_LOCAL_ONLY_OK',5:'CW_BARRIER_SERVICE_OK'},resource=resource,hardcut=True)
     if b'Ryzova Kernel 0.1.0-dev' not in log or b'9front-derived' not in log or not standalone(log,'CW_NAMESPACE_ISOLATION_OK'):raise ValueError('fresh kernel identity/namespace isolation')
     if not standalone(log,'CW_BARRIER_SERVICE_OK') or not standalone(log,'CW_BARRIER_LOCAL_ONLY_OK') or server_sha[0] not in log:raise ValueError('resource service provenance/capability')
     if runtime_sha[0] not in log:raise ValueError('fresh runtime binary mismatch')
