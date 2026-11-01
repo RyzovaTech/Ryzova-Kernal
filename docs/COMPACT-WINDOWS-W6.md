@@ -5,7 +5,23 @@ launcher and native directory-resource transport. It is stacked on W5 PR #87.
 Linux/shared runtime and the existing native-build workflows remain unchanged.
 W1-W5 hosted comparisons continue as regressions.
 
-## Evidence to collect
+## Verified result
+
+[CI run 41266387859](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41266387859)
+passed all three jobs: 115 hosted regressions, Windows reference builds/results,
+and 19 native QEMU cases. The tested branch head is
+`f4ac8d6de71b973280c6bdd8ed1d931fc1242309`; GitHub's tested PR merge commit is
+`a93fb0436ede5c099fea6180550f8ee116ede196`.
+
+[The preserved qualification receipt](validation/compact-windows-w6-native.json)
+contains source/archive/kernel/runtime/PE hashes, instruction/API counts and
+resource results. Native 6c compilation/linking, independent FAT kernel hash
+verification, source-built kernel identity, separate ramfs resource operations
+and orderly reboot persistence passed. The native file test explicitly took
+exit 103 / error 50 at FlushFileBuffers, as expected for the unsupported barrier.
+Full W6 remains incomplete under the gates below.
+
+## Evidence workflow
 
 The new workflow compiles the existing Windows reference programs with MSVC,
 verifies their native results and transfers only project fixture binaries and

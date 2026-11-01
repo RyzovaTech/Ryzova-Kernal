@@ -98,7 +98,8 @@
       "depends_on": [
         "W5"
       ],
-      "state": "native-integration-awaiting-ci"
+      "state": "native-subset-qualified-full-qualification-pending",
+      "ci_evidence": "https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41266387859"
     }
   ],
   "requirements": [
@@ -153,7 +154,7 @@
     "general Windows compatibility"
   ],
   "hosted_windows_subset_available": true,
-  "hosted_scope": "Bounded hosted AMD64 Windows console/selected CRT profiles; native Flex qualification remains W6",
+  "hosted_scope": "Bounded hosted AMD64 Windows console/selected CRT profiles; native subset evidence is recorded separately in w6_qualification",
   "hosted_api_subset": [
     "kernel32.dll!GetStdHandle",
     "kernel32.dll!WriteFile",
@@ -185,7 +186,7 @@
     "ucrtbase.dll!_errno"
   ],
   "native_kernel_qualified": false,
-  "hosted_file_namespace": "explicit drive grants, portable provider interface and Linux descriptor transport; native Flex transport pending",
+  "hosted_file_namespace": "explicit drive grants, portable provider interface and Linux descriptor transport; native 9P transport subset verified, native flush unqualified",
   "selected_crt_profile": {
     "profile": "console-ucrt-selected-v1",
     "api_major": 1,
@@ -193,10 +194,13 @@
     "workload_inventory": "ryzova/compat/windows/w5-profile.json"
   },
   "w6_qualification": {
-    "native_amd64_qemu": "awaiting-ci",
+    "native_amd64_qemu": "19-bounded-cases-passed",
     "native_file_flush": "unsupported-error-50",
     "physical_hardware": "not-tested",
     "arm64_windows": "not-tested",
-    "full_phase_complete": false
+    "full_phase_complete": false,
+    "native_9p_namespace": "passed-separate-ramfs-server",
+    "orderly_reboot_persistence": "passed",
+    "evidence": "docs/validation/compact-windows-w6-native.json"
   }
 }
