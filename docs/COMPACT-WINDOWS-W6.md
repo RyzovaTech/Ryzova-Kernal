@@ -67,7 +67,7 @@ resource access, not separate physical/network nodes or distributed performance.
 
 The previously preserved receipt below predates this implementation and remains
 historical evidence of 19 native cases, including unsupported-flush errors. The
-new 20-case run must qualify the isolated `cw-hjfs` durability profile before any
+new 22-case run must qualify the isolated `cw-hjfs` durability profile before any
 success claim is made for this part.
 
 The Windows-owned hjfs overlay builds a separate binary and uses an explicit
@@ -83,7 +83,10 @@ explicit grant; generic empty wstat or a command-pipe write never means success.
 The native test must run the complete existing MSVC W4 program, require its full
 stdout/exit and two acknowledged FlushFileBuffers calls, immediately SIGKILL QEMU,
 and recover the exact final W4 bytes from the dedicated filesystem on a fresh
-boot without formatting. Background server sync is disabled for this profile.
+boot without formatting. Background server sync is disabled for this profile. A separate qcow2 overlay
+uses QEMU blkdebug to inject one storage-flush EIO after writes. Both that
+barrier and the following retry must return error 1117 with zero ACKs; the
+second denial checks sticky uncertainty after the one-shot backend fault.
 This tests a VM process crash and virtual storage flush semantics, not loss of
 physical power or arbitrary hardware storage caches. Unsupported roots retain
 error 50. Physical hardware qualification remains a separate outstanding gate.

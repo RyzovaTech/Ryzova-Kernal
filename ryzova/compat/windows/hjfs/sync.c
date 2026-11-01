@@ -19,15 +19,22 @@ storageflush(void)
 	/* IMMED=0: the GOOD status must follow completion of SYNCHRONIZE CACHE. */
 	if(write(rawfd, cdb, sizeof cdb) != sizeof cdb)
 		return -1;
-	if(read(rawfd, status, 1) != 0)
+	/* The Plan 9 SCSI adapter may return the requested dummy byte count
+	 * even for a no-data CDB. Completion is established by the following
+	 * separately validated SCSI status, not this data-phase length. */
+	if(read(rawfd, status, 1) < 0)
 		return -1;
 	n = read(rawfd, status, sizeof(status)-1);
-	if(n <= 0)
+	if(n <= 0){
+		werrstr("missing SCSI completion status");
 		return -1;
+	}
 	status[n] = 0;
 	code = strtol(status, &end, 10);
-	if(end == status)
+	if(end == status){
+		werrstr("malformed SCSI completion status");
 		return -1;
+	}
 	while(*end == ' ' || *end == '\n' || *end == '\t')
 		end++;
 	if(code != 0 || *end != 0){

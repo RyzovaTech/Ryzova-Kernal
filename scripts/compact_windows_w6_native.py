@@ -82,11 +82,14 @@ def case_specs():
     cases['durable']={'image':'file','status':0,'code':0x23456789,'out':b'FLEX_WINDOWS_W4_OK\n'.hex(),'err':'','args':'-r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1'}
     return cases
 
+def fault_specs():
+    return {name:{'image':'file','status':0,'code':103,'out':'','err':''} for name in ('flush-fault','flush-sticky')}
+
 def required_calls(name):
     if name in WORKLOADS and 'exit_code' in WORKLOADS[name]:return {api:1 for api in (*WORKLOADS[name]['apis'],'GetStdHandle','WriteFile','ExitProcess')}
     if name=='durable':return {'CreateFileW':3,'WriteFile':3,'FlushFileBuffers':2,'GetFileSizeEx':2,'SetFilePointerEx':5,'ReadFile':3,'CloseHandle':3,'GetLastError':2,'ExitProcess':1}
     if name=='api':return {api:1 for api in ('GetStdHandle','WriteFile','ExitProcess','GetLastError','SetLastError','GetCommandLineW','GetEnvironmentVariableW','VirtualAlloc','VirtualFree')}
-    if name in ('file','unsynced'):return {'CreateFileW':1,'WriteFile':1,'FlushFileBuffers':1,'ExitProcess':1}
+    if name in ('file','unsynced','flush-fault','flush-sticky'):return {'CreateFileW':1,'WriteFile':1,'FlushFileBuffers':1,'ExitProcess':1}
     if name=='readonly':return {'CreateFileW':1,'ExitProcess':1}
     if name=='heap-limit':return {'malloc':2,'_errno':1,'ExitProcess':1}
     if name=='io-limit':return {'malloc':1,'GetStdHandle':1,'WriteFile':1,'GetLastError':1,'ExitProcess':1}
@@ -112,6 +115,7 @@ def parse_cases(log,specs):
             for field,prefix in [('out','CW_OUT'),('err','CW_ERR')]:
                 values=re.findall(r'(?m)^'+prefix+r' ([0-9a-f]*)\r?$',section.group(1))
                 if values!=[spec[field]]:raise ValueError(f'native output {name}/{field}')
+            if name in ('flush-fault','flush-sticky') and (record.get('error')!=1117 or record.get('flushes')!=0):raise ValueError('storage failure acknowledged as durable')
             if name=='durable' and record.get('flushes')!=2:raise ValueError('unacknowledged native flush')
             if name=='heap-limit' and record.get('heap')!=1048576:raise ValueError('heap cap not exercised')
             if name=='handle-limit' and record.get('peak_handles')!=30:raise ValueError('handle cap not exercised')
@@ -124,12 +128,17 @@ def parse_cases(log,specs):
         results[name]=record
     return results
 
-def session(image,commands,out,label,timeout,required=None,resource=None,hardcut=False):
+def session(image,commands,out,label,timeout,required=None,resource=None,hardcut=False,fault_config=None):
     raw=bytearray();socketdir=tempfile.TemporaryDirectory(prefix='cw6-');ser=Path(socketdir.name)/'serial'
     cmd=['qemu-system-x86_64','-machine','pc,accel=tcg','-cpu','qemu64','-m','2048','-smp','2','-device','virtio-scsi-pci,id=scsi',
          '-drive',f'if=none,id=vd0,file={image},format=qcow2','-device','scsi-hd,drive=vd0,scsi-id=0','-device','virtio-net-pci,netdev=n0','-netdev','user,id=n0',
          '-vga','std','-display','none','-chardev',f'socket,id=uart,path={ser},server=on,wait=off','-serial','chardev:uart','-monitor','none','-no-reboot','-no-shutdown']
-    if resource is not None:cmd+=['-drive',f'if=none,id=cwres,file={resource},format=qcow2,cache=writeback','-device','scsi-hd,drive=cwres,scsi-id=1']
+    if resource is not None:
+        if fault_config is None:cmd+=['-drive',f'if=none,id=cwres,file={resource},format=qcow2,cache=writeback']
+        else:
+            block={'driver':'qcow2','node-name':'cwres','file':{'driver':'blkdebug','config':str(fault_config.resolve()),'image':{'driver':'file','filename':str(resource.resolve())}}}
+            cmd+=['-blockdev',json.dumps(block)]
+        cmd+=['-device','scsi-hd,drive=cwres,scsi-id=1,write-cache=on']
     client=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);bootargs=login=False;stage=0;sent=False;completed=False
     with (out/(label+'-host.log')).open('wb') as host:
         proc=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
@@ -233,7 +242,7 @@ def main():
       'test ! -e /tmp/cw-ro/payload.bin && test ! -e /tmp/cw-local/ram.bin && test ! -e /tmp/cw-ram/payload.bin && echo CW_NAMESPACE_ISOLATION_OK',
       'echo sync >> /srv/hjfs.cmd; sleep 3; echo CW_RUNTIME_DONE',
       'echo CW_CASE_durable_BEGIN; /amd64/bin/compact-windows -r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1 /tmp/cw-file.exe; echo CW_CASE_durable_END']
-    log=session(args.image,commands,out,'fresh',420,resource=resource,hardcut=True)
+    log=session(args.image,commands,out,'fresh',420,required={4:'CW_BARRIER_SERVICE_OK'},resource=resource,hardcut=True)
     if b'Ryzova Kernel 0.1.0-dev' not in log or b'9front-derived' not in log or not standalone(log,'CW_NAMESPACE_ISOLATION_OK'):raise ValueError('fresh kernel identity/namespace isolation')
     if not standalone(log,'CW_BARRIER_SERVICE_OK') or server_sha[0] not in log:raise ValueError('resource service provenance/capability')
     if runtime_sha[0] not in log:raise ValueError('fresh runtime binary mismatch')
@@ -247,8 +256,20 @@ def main():
     reboot=session(args.image,["cat '#Z/version'; sha1sum -2 256 /tmp/cw-local/payload.bin; cw-hjfs -F -S -n cwfs-reboot -f /dev/sd01/data > /tmp/cwfs-reboot.log >[2=1]; mount -nc /srv/cwfs-reboot /tmp/cw-durable; sha1sum -2 256 /tmp/cw-durable/payload.bin; cat /tmp/cwfs-reboot.log; echo CW_REBOOT_DONE"],out,'reboot',100,resource=resource)
     if b'Ryzova Kernel 0.1.0-dev' not in reboot or not re.search(rb'(?m)^'+file_sha.encode()+rb'\s+/tmp/cw-local/payload.bin\r?$',reboot):raise ValueError('reboot persistence mismatch')
     if not re.search(rb'(?m)^'+durable_sha.encode()+rb'\s+/tmp/cw-durable/payload.bin\r?$',reboot):raise ValueError('acknowledged bytes lost after QEMU hard kill')
+    # One real virtual-storage EIO, then a healthy backend: the server must
+    # reject both the failed barrier and the subsequent uncertain-state retry.
+    fault_resource=out/'resource-fault.qcow2'
+    subprocess.run(['qemu-img','create','-f','qcow2','-F','qcow2','-b',str(resource.resolve()),str(fault_resource)],check=True)
+    fault_config=out/'flush-fault.conf'
+    fault_config.write_text('[set-state]\nevent = "pwritev"\nstate = "1"\nnew_state = "2"\n[inject-error]\nevent = "flush_to_os"\nstate = "2"\niotype = "flush"\nerrno = "5"\nonce = "on"\nimmediately = "on"\n')
+    fault_commands=["cat '#Z/version'; sha1sum -2 256 /amd64/bin/cw-hjfs",
+      'cw-hjfs -F -S -n cwfs-fault -f /dev/sd01/data > /tmp/cwfs-fault.log >[2=1]; mount -nc /srv/cwfs-fault /tmp/cw-durable; rm /tmp/cw-durable/payload.bin; cat /tmp/cwfs-fault.log']
+    for name in fault_specs():fault_commands.append(f'echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows -r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1 /tmp/cw-file.exe; echo CW_CASE_{name}_END; rm /tmp/cw-durable/payload.bin')
+    fault_log=session(args.image,fault_commands,out,'fault',120,resource=fault_resource,hardcut=True,fault_config=fault_config)
+    if b'Ryzova Kernel 0.1.0-dev' not in fault_log or server_sha[0] not in fault_log:raise ValueError('fault-test source identity')
+    records.update(parse_cases(fault_log,fault_specs()))
     report={'schema':'compact-windows-w6-native/v1','source_commit':commit,'source_archive_sha256':archive_sha,'kernel_sha256':kernel_sha,'runtime_sha256':runtime_sha[0].decode(),
       'bootstrap_image_gzip_sha256':PIN,'bootstrap_image_sha256':base_sha,'cases':records,'fixture_sha256':hashes,'native_amd64_qemu_qualified':True,'native_9p_namespace_verified':True,
-      'file_sha256':file_sha,'reboot_persistence_verified':True,'native_file_flush_qualified':True,'durable_file_sha256':durable_sha,'resource_server_sha256':server_sha[0].decode(),'qemu_sigkill_persistence_verified':True,'flush_evidence_scope':'dedicated QEMU virtio-SCSI disk; pinned cw-hjfs ACK after dirty cache drain and SYNCHRONIZE CACHE; no physical power-loss claim','full_w6_complete':False,'physical_hardware_qualified':False,'arm64_windows_qualified':False,'general_windows_compatibility':False}
+      'file_sha256':file_sha,'reboot_persistence_verified':True,'native_file_flush_qualified':True,'durable_file_sha256':durable_sha,'resource_server_sha256':server_sha[0].decode(),'qemu_sigkill_persistence_verified':True,'storage_flush_failure_and_sticky_error_verified':True,'flush_evidence_scope':'dedicated QEMU virtio-SCSI disk; pinned cw-hjfs ACK after dirty cache drain and SYNCHRONIZE CACHE; no physical power-loss claim','full_w6_complete':False,'physical_hardware_qualified':False,'arm64_windows_qualified':False,'general_windows_compatibility':False}
     (out/'qualification.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True);server.shutdown()
 if __name__=='__main__':main()

@@ -66,9 +66,9 @@ CwFileNative *cw_file_native_new(const char *path,int syncfd) {
     h->syncfd=-1;
     if(syncfd>=0) {
         cap=dirfstat(syncfd);
-        if(!cap || cap->dev!=h->dev || cap->type!=h->type || cap->qid.type || cap->qid.path!=~UINT64_C(1) || cap->qid.vers!=1){free(cap);free(h);return nil;}
+        if(!cap || cap->dev!=h->dev || cap->type!=h->type || cap->qid.type || cap->qid.path!=~UINT64_C(1) || cap->qid.vers!=1){free(cap);free(h);werrstr("barrier capability does not match grant mount and Qid");return nil;}
         free(cap);got=pread(syncfd,banner,sizeof banner,0);
-        if(got!=13 || memcmp(banner,"CWFS_SYNC_V1\n",13)){free(h);return nil;}
+        if(got!=13 || memcmp(banner,"CWFS_SYNC_V1\n",13)){free(h);werrstr("barrier capability version mismatch");return nil;}
         h->syncfd=dup(syncfd,-1);if(h->syncfd<0){free(h);return nil;}
         h->sync_serial=nsec();
     }
