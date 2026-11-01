@@ -239,7 +239,7 @@ def main():
       'mkdir -p /tmp/cw-local /tmp/cw-ro /tmp/cw-unsynced /tmp/cw-ram /tmp/cw-durable; ramfs -m /tmp/cw-ram',
       'sha1sum -2 256 /amd64/bin/compact-windows /amd64/bin/cw-hjfs',
       "cw-hjfs -F -s -f /dev/sd01/data > /tmp/cwfs-denied.log >[2=1]; grep 'local service only' /tmp/cwfs-denied.log > /dev/null && echo CW_BARRIER_LOCAL_ONLY_OK",
-      "cw-hjfs -F -S -r -n cwfs -f /dev/sd01/data > /tmp/cwfs.log >[2]/dev/cons; mount -nc /srv/cwfs /tmp/cw-durable; test -e /tmp/cw-durable/.ryzova-sync-v1 && echo CW_BARRIER_SERVICE_OK; cat /tmp/cwfs.log"]
+      "cw-hjfs -F -S -r -n cwfs -f /dev/sd01/data > /tmp/cwfs.log >[2]/dev/cons; echo CW6_DAEMON_RETURNED; mount -nc /srv/cwfs /tmp/cw-durable; echo CW6_MOUNT_RETURNED; test -e /tmp/cw-durable/.ryzova-sync-v1 && echo CW_BARRIER_SERVICE_OK; echo CW6_CONTROL_PROBED; cat /tmp/cwfs.log"]
     for name in hashes:commands.append(f'hget http://10.0.2.2:8000/{name}.exe > /tmp/cw-{name}.exe; sha1sum -2 256 /tmp/cw-{name}.exe')
     for name,spec in cases.items():
         if name=='durable':continue
