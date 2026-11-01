@@ -82,6 +82,8 @@ jobs:
           qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-windows.qcow2
       - name: Native 6c build, source kernel reboot, exact PE and resource tests
         run: python3 scripts/compact_windows_w6_native.py native-windows.qcow2 --bootstrap-gzip 9front.qcow2.gz --fixtures artifacts/w6-fixtures
+      - name: Verify exact source-bound 22-case native QEMU and crash/fault receipts
+        run: python3 scripts/compact_windows_w6_acceptance.py artifacts/compact-windows/w6-native --source-sha "$(git rev-parse HEAD)"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
