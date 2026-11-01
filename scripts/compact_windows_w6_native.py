@@ -79,10 +79,12 @@ def case_specs():
         cases[name]={'image':name,'status':0,'code':37,'out':'','err':''}
     cases['handle-limit']['args']='-r /tmp/cw-local'
     cases['ramfs-io']['args']='-r /tmp/cw-ram'
+    cases['durable']={'image':'file','status':0,'code':0x23456789,'out':b'FLEX_WINDOWS_W4_OK\n'.hex(),'err':'','args':'-r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1'}
     return cases
 
 def required_calls(name):
     if name in WORKLOADS and 'exit_code' in WORKLOADS[name]:return {api:1 for api in (*WORKLOADS[name]['apis'],'GetStdHandle','WriteFile','ExitProcess')}
+    if name=='durable':return {'CreateFileW':3,'WriteFile':3,'FlushFileBuffers':2,'GetFileSizeEx':2,'SetFilePointerEx':5,'ReadFile':3,'CloseHandle':3,'GetLastError':2,'ExitProcess':1}
     if name=='api':return {api:1 for api in ('GetStdHandle','WriteFile','ExitProcess','GetLastError','SetLastError','GetCommandLineW','GetEnvironmentVariableW','VirtualAlloc','VirtualFree')}
     if name in ('file','unsynced'):return {'CreateFileW':1,'WriteFile':1,'FlushFileBuffers':1,'ExitProcess':1}
     if name=='readonly':return {'CreateFileW':1,'ExitProcess':1}
@@ -110,6 +112,7 @@ def parse_cases(log,specs):
             for field,prefix in [('out','CW_OUT'),('err','CW_ERR')]:
                 values=re.findall(r'(?m)^'+prefix+r' ([0-9a-f]*)\r?$',section.group(1))
                 if values!=[spec[field]]:raise ValueError(f'native output {name}/{field}')
+            if name=='durable' and record.get('flushes')!=2:raise ValueError('unacknowledged native flush')
             if name=='heap-limit' and record.get('heap')!=1048576:raise ValueError('heap cap not exercised')
             if name=='handle-limit' and record.get('peak_handles')!=30:raise ValueError('handle cap not exercised')
             if name in ('file','unsynced') and record.get('error')!=50:raise ValueError('unsupported sync was hidden')
@@ -121,11 +124,12 @@ def parse_cases(log,specs):
         results[name]=record
     return results
 
-def session(image,commands,out,label,timeout,required=None):
+def session(image,commands,out,label,timeout,required=None,resource=None,hardcut=False):
     raw=bytearray();socketdir=tempfile.TemporaryDirectory(prefix='cw6-');ser=Path(socketdir.name)/'serial'
     cmd=['qemu-system-x86_64','-machine','pc,accel=tcg','-cpu','qemu64','-m','2048','-smp','2','-device','virtio-scsi-pci,id=scsi',
-         '-drive',f'if=none,id=vd0,file={image},format=qcow2','-device','scsi-hd,drive=vd0','-device','virtio-net-pci,netdev=n0','-netdev','user,id=n0',
+         '-drive',f'if=none,id=vd0,file={image},format=qcow2','-device','scsi-hd,drive=vd0,scsi-id=0','-device','virtio-net-pci,netdev=n0','-netdev','user,id=n0',
          '-vga','std','-display','none','-chardev',f'socket,id=uart,path={ser},server=on,wait=off','-serial','chardev:uart','-monitor','none','-no-reboot','-no-shutdown']
+    if resource is not None:cmd+=['-drive',f'if=none,id=cwres,file={resource},format=qcow2,cache=writeback','-device','scsi-hd,drive=cwres,scsi-id=1']
     client=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);bootargs=login=False;stage=0;sent=False;completed=False
     with (out/(label+'-host.log')).open('wb') as host:
         proc=subprocess.Popen(cmd,stdout=host,stderr=subprocess.STDOUT)
@@ -155,7 +159,9 @@ def session(image,commands,out,label,timeout,required=None):
                     if marker and b'term%' in tail[marker.end():]:stage+=1;sent=False
                 if proc.poll() is not None:break
         finally:
-            (out/(label+'-serial.log')).write_bytes(raw);proc.terminate()
+            if hardcut:proc.kill()
+            else:proc.terminate()
+            (out/(label+'-serial.log')).write_bytes(raw)
             try:proc.wait(timeout=8)
             except subprocess.TimeoutExpired:proc.kill();proc.wait()
             client.close();socketdir.cleanup()
@@ -186,19 +192,25 @@ def main():
     synthetic['filecap']=pe(b'\xc3')+bytes(4*1024*1024)
     for name,data in synthetic.items():(out/(name+'.exe')).write_bytes(data);hashes[name]=digest(out/(name+'.exe'))
     archive=out/'source.tgz';sourcefiles=subprocess.check_output(['git','ls-files','sys/src/9','sys/include','amd64/include','ryzova/compat/windows'],cwd=ROOT,text=True).splitlines()
+    # Use the exact tracked upstream hjfs sources in an isolated Windows-owned
+    # build directory, then replace only the opt-in barrier overlay files.
+    serverfiles=subprocess.check_output(['git','ls-files','sys/src/cmd/hjfs'],cwd=ROOT,text=True).splitlines()
+    members={name.replace('sys/src/cmd/hjfs','sys/src/cmd/compact-windows/hjfs',1):name for name in serverfiles}
+    members.update({name.replace('ryzova/compat/windows','sys/src/cmd/compact-windows',1):name for name in sourcefiles})
     with tarfile.open(archive,'w:gz',format=tarfile.USTAR_FORMAT) as tar:
-        for name in sourcefiles:
-            arc=name.replace('ryzova/compat/windows','sys/src/cmd/compact-windows',1);tar.add(ROOT/name,arcname=arc,recursive=False)
+        for arc,name in sorted(members.items()):tar.add(ROOT/name,arcname=arc,recursive=False)
+    resource=out/'resource.qcow2'
+    subprocess.run(['qemu-img','create','-f','qcow2',str(resource),'64M'],check=True)
     archive_sha=digest(archive)
     handler=functools.partial(http.server.SimpleHTTPRequestHandler,directory=str(out));server=http.server.ThreadingHTTPServer(('127.0.0.1',8000),handler)
     threading.Thread(target=server.serve_forever,daemon=True).start()
     build_commands=["ip/ipconfig -d ether /net/ether0; webfs",'hget http://10.0.2.2:8000/source.tgz > /tmp/cw-source.tgz; sha1sum -2 256 /tmp/cw-source.tgz',
       'cd /; mkdir -p /sys/src/cmd/compact-windows; tar xzf /tmp/cw-source.tgz',
-      'cd /sys/src/cmd/compact-windows; mk install > /tmp/cw-build.log >[2=1] && echo CW_NATIVE_BUILD_OK; cat /tmp/cw-build.log',
+      'cd /sys/src/cmd/compact-windows; mk install > /tmp/cw-build.log >[2=1] && @{cd hjfs; mk install >> /tmp/cw-build.log >[2=1]} && echo CW_NATIVE_BUILD_OK; cat /tmp/cw-build.log',
       'cd /sys/src/9/pc64; mk > /tmp/cw-kernel.log >[2=1] && echo CW_KERNEL_BUILD_OK; tail -n 30 /tmp/cw-kernel.log',
       '9fs 9fat; cd /sys/src/9/pc64; cp 9pc64 /n/9fat/9pc64 && cmp 9pc64 /n/9fat/9pc64 && echo CW_KERNEL_COPY_OK; sha1sum -2 256 9pc64; sha1sum -2 256 /n/9fat/9pc64',
-      'sha1sum -2 256 /amd64/bin/compact-windows; echo sync >> /srv/hjfs.cmd; sleep 3']
-    buildlog=session(args.image,build_commands,out,'build',850,{3:'CW_NATIVE_BUILD_OK',4:'CW_KERNEL_BUILD_OK',5:'CW_KERNEL_COPY_OK'})
+      'sha1sum -2 256 /amd64/bin/compact-windows /amd64/bin/cw-hjfs; echo sync >> /srv/hjfs.cmd; sleep 3']
+    buildlog=session(args.image,build_commands,out,'build',850,{3:'CW_NATIVE_BUILD_OK',4:'CW_KERNEL_BUILD_OK',5:'CW_KERNEL_COPY_OK'},resource=resource)
     for marker in ('CW_NATIVE_BUILD_OK','CW_KERNEL_BUILD_OK','CW_KERNEL_COPY_OK'):
         if not standalone(buildlog,marker):raise ValueError('native build failed: '+marker)
     if not re.search(rb'(?m)^'+archive_sha.encode()+rb'\s+/tmp/cw-source.tgz\r?$',buildlog):raise ValueError('guest source archive mismatch')
@@ -207,16 +219,23 @@ def main():
     kernel_sha=kerneldigests[0].decode();extract_kernel(args.image,out,kernel_sha)
     runtime_sha=re.findall(rb'(?m)^([0-9a-f]{64})\s+/amd64/bin/compact-windows\r?$',buildlog)
     if len(runtime_sha)!=1:raise ValueError('native runtime binary hash')
+    server_sha=re.findall(rb'(?m)^([0-9a-f]{64})\s+/amd64/bin/cw-hjfs\r?$',buildlog)
+    if len(server_sha)!=1:raise ValueError('native resource server hash')
     cases=case_specs();commands=["cat '#Z/version'; cat '#Z/foundation'; cat '#Z/abi'; echo CW_IDENTITY_END",'ip/ipconfig -d ether /net/ether0; webfs',
-      'mkdir -p /tmp/cw-local /tmp/cw-ro /tmp/cw-unsynced /tmp/cw-ram; ramfs -m /tmp/cw-ram',
-      'sha1sum -2 256 /amd64/bin/compact-windows']
+      'mkdir -p /tmp/cw-local /tmp/cw-ro /tmp/cw-unsynced /tmp/cw-ram /tmp/cw-durable; ramfs -m /tmp/cw-ram',
+      'sha1sum -2 256 /amd64/bin/compact-windows /amd64/bin/cw-hjfs',
+      'cw-hjfs -F -S -r -n cwfs -f /dev/sd01/data > /tmp/cwfs.log >[2=1]; mount -nc /srv/cwfs /tmp/cw-durable; test -e /tmp/cw-durable/.ryzova-sync-v1 && echo CW_BARRIER_SERVICE_OK; cat /tmp/cwfs.log']
     for name in hashes:commands.append(f'hget http://10.0.2.2:8000/{name}.exe > /tmp/cw-{name}.exe; sha1sum -2 256 /tmp/cw-{name}.exe')
-    for name,spec in cases.items():commands.append(f"echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows {spec.get('args','')} /tmp/cw-{spec['image']}.exe; echo CW_CASE_{name}_END")
+    for name,spec in cases.items():
+        if name=='durable':continue
+        commands.append(f"echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows {spec.get('args','')} /tmp/cw-{spec['image']}.exe; echo CW_CASE_{name}_END")
     commands+=['sha1sum -2 256 /tmp/cw-local/payload.bin /tmp/cw-ram/ram.bin',
       'test ! -e /tmp/cw-ro/payload.bin && test ! -e /tmp/cw-local/ram.bin && test ! -e /tmp/cw-ram/payload.bin && echo CW_NAMESPACE_ISOLATION_OK',
-      'echo sync >> /srv/hjfs.cmd; sleep 3; echo CW_RUNTIME_DONE']
-    log=session(args.image,commands,out,'fresh',420)
+      'echo sync >> /srv/hjfs.cmd; sleep 3; echo CW_RUNTIME_DONE',
+      'echo CW_CASE_durable_BEGIN; /amd64/bin/compact-windows -r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1 /tmp/cw-file.exe; echo CW_CASE_durable_END']
+    log=session(args.image,commands,out,'fresh',420,resource=resource,hardcut=True)
     if b'Ryzova Kernel 0.1.0-dev' not in log or b'9front-derived' not in log or not standalone(log,'CW_NAMESPACE_ISOLATION_OK'):raise ValueError('fresh kernel identity/namespace isolation')
+    if not standalone(log,'CW_BARRIER_SERVICE_OK') or server_sha[0] not in log:raise ValueError('resource service provenance/capability')
     if runtime_sha[0] not in log:raise ValueError('fresh runtime binary mismatch')
     for name,sha in hashes.items():
         if not re.search(rb'(?m)^'+sha.encode()+rb'\s+/tmp/cw-'+name.encode()+rb'.exe\r?$',log):raise ValueError('guest PE hash '+name)
@@ -224,10 +243,12 @@ def main():
     file_sha=hashlib.sha256(b'FLEX_WINDOWS_W4_FILE_OK\n').hexdigest();ram_sha=hashlib.sha256(bytes.fromhex('78563412')).hexdigest()
     for path,sha in [('/tmp/cw-local/payload.bin',file_sha),('/tmp/cw-ram/ram.bin',ram_sha)]:
         if not re.search(rb'(?m)^'+sha.encode()+rb'\s+'+path.encode()+rb'\r?$',log):raise ValueError('persistent/9P file mismatch')
-    reboot=session(args.image,["cat '#Z/version'; sha1sum -2 256 /tmp/cw-local/payload.bin; echo CW_REBOOT_DONE"],out,'reboot',100)
+    durable_sha=hashlib.sha256(PAYLOAD).hexdigest()
+    reboot=session(args.image,["cat '#Z/version'; sha1sum -2 256 /tmp/cw-local/payload.bin; cw-hjfs -F -S -n cwfs-reboot -f /dev/sd01/data > /tmp/cwfs-reboot.log >[2=1]; mount -nc /srv/cwfs-reboot /tmp/cw-durable; sha1sum -2 256 /tmp/cw-durable/payload.bin; cat /tmp/cwfs-reboot.log; echo CW_REBOOT_DONE"],out,'reboot',100,resource=resource)
     if b'Ryzova Kernel 0.1.0-dev' not in reboot or not re.search(rb'(?m)^'+file_sha.encode()+rb'\s+/tmp/cw-local/payload.bin\r?$',reboot):raise ValueError('reboot persistence mismatch')
+    if not re.search(rb'(?m)^'+durable_sha.encode()+rb'\s+/tmp/cw-durable/payload.bin\r?$',reboot):raise ValueError('acknowledged bytes lost after QEMU hard kill')
     report={'schema':'compact-windows-w6-native/v1','source_commit':commit,'source_archive_sha256':archive_sha,'kernel_sha256':kernel_sha,'runtime_sha256':runtime_sha[0].decode(),
       'bootstrap_image_gzip_sha256':PIN,'bootstrap_image_sha256':base_sha,'cases':records,'fixture_sha256':hashes,'native_amd64_qemu_qualified':True,'native_9p_namespace_verified':True,
-      'file_sha256':file_sha,'reboot_persistence_verified':True,'native_file_flush_qualified':False,'full_w6_complete':False,'physical_hardware_qualified':False,'arm64_windows_qualified':False,'general_windows_compatibility':False}
+      'file_sha256':file_sha,'reboot_persistence_verified':True,'native_file_flush_qualified':True,'durable_file_sha256':durable_sha,'resource_server_sha256':server_sha[0].decode(),'qemu_sigkill_persistence_verified':True,'flush_evidence_scope':'dedicated QEMU virtio-SCSI disk; pinned cw-hjfs ACK after dirty cache drain and SYNCHRONIZE CACHE; no physical power-loss claim','full_w6_complete':False,'physical_hardware_qualified':False,'arm64_windows_qualified':False,'general_windows_compatibility':False}
     (out/'qualification.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True);server.shutdown()
 if __name__=='__main__':main()

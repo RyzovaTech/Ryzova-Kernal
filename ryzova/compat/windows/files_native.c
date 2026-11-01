@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #include "files_native.h"
+#include "sync_protocol.h"
 #define NATIVE_OPENS 64U
 typedef struct NativeOpen { uint64_t token,path;uint32_t access,share,dev,type;int fd; } NativeOpen;
 struct CwFileNative {
-    char root[256];int rootfd,syncfd;uint64_t path;uint32_t dev,type,serial,peak;
+    char root[256];int rootfd,syncfd;uint64_t path;uint32_t dev,type,serial,peak,flushes;uint64_t sync_serial;
     NativeOpen handles[NATIVE_OPENS];
 };
 static uint32_t native_error(void) {
@@ -56,13 +57,22 @@ static uint32_t resolve(CwFileNative *h,const char *relative,char *out,int *exis
     }
 }
 CwFileNative *cw_file_native_new(const char *path,int syncfd) {
-    CwFileNative *h;Dir *d;size_t n=strlen(path);
+    CwFileNative *h;Dir *d,*cap;char banner[32];int got;size_t n=strlen(path);
     if(!n || n>=256 || path[0]!='/')return nil;
     d=dirstat(path);if(!d)return nil;
     if(!(d->mode&DMDIR)){free(d);return nil;}
     h=mallocz(sizeof(*h),1);if(!h){free(d);return nil;}
     strcpy(h->root,path);h->path=d->qid.path;h->dev=d->dev;h->type=d->type;free(d);
-    h->syncfd=syncfd>=0?dup(syncfd,-1):-1;h->rootfd=open(path,OREAD);
+    h->syncfd=-1;
+    if(syncfd>=0) {
+        cap=dirfstat(syncfd);
+        if(!cap || cap->dev!=h->dev || cap->type!=h->type || cap->qid.type || cap->qid.path!=~UINT64_C(1) || cap->qid.vers!=1){free(cap);free(h);return nil;}
+        free(cap);got=pread(syncfd,banner,sizeof banner,0);
+        if(got!=13 || memcmp(banner,"CWFS_SYNC_V1\n",13)){free(h);return nil;}
+        h->syncfd=dup(syncfd,-1);if(h->syncfd<0){free(h);return nil;}
+        h->sync_serial=nsec();
+    }
+    h->rootfd=open(path,OREAD);
     if(h->rootfd<0){if(h->syncfd>=0)close(h->syncfd);free(h);return nil;}
     return h;
 }
@@ -78,7 +88,7 @@ static uint32_t checked(NativeOpen *o,Dir **out) {
 }
 static uint32_t nopen(void *context,uint32_t mount,const char *relative,uint32_t access,uint32_t share,uint32_t mode,uint32_t rights,uint64_t *token,uint32_t *notice) {
     CwFileNative *h=context;char path[512];uint32_t i,slot,error;int exists=0,fd,omode;Dir *d,change;
-    if(mount || (access&~rights&3U))return 5;
+    if(mount || (access&~rights&3U) || same(relative,".ryzova-sync-v1"))return 5;
     for(slot=0;slot<NATIVE_OPENS;slot++)if(!h->handles[slot].token)break;
     if(slot==NATIVE_OPENS || h->serial==UINT32_MAX)return 4;
     error=resolve(h,relative,path,&exists);if(error)return error;
@@ -123,11 +133,17 @@ static uint32_t nsize(void *context,uint64_t token,uint64_t *out) {
 }
 static uint32_t nflush(void *context,uint64_t token) {
     CwFileNative *h=context;NativeOpen *o=opened(h,token);Dir *d;uint32_t error=checked(o,&d);
+    char request[22],reply[32];int got;
     if(error)return error;free(d);
     if(!(o->access&CW_FILE_WRITE))return 5;
-    /* Empty wstat is optional in 9P; hjfs command pipes do not acknowledge
-       completed sync. No native durability capability has been qualified. */
-    USED(h);return 50;
+    if(h->syncfd<0)return 50;
+    if(h->sync_serial==UINT64_MAX)return 1117;
+    ++h->sync_serial;
+    cw_sync_request(h->sync_serial,request);
+    if(pwrite(h->syncfd,request,sizeof request,0)!=sizeof request)return 1117;
+    got=pread(h->syncfd,reply,sizeof reply,0);
+    if(got<0 || !cw_sync_ack(reply,got,h->sync_serial))return 1117;
+    h->flushes++;return 0;
 }
 static uint32_t nclose(void *context,uint64_t token) {
     NativeOpen *o=opened(context,token);int fd;if(!o)return 6;
@@ -142,3 +158,5 @@ uint32_t cw_file_native_open_count(CwFileNative *h) { uint32_t i,n=0;for(i=0;i<N
 const CwFileOps *cw_file_native_ops(void) { static CwFileOps ops={nopen,nread,nwrite,nsize,nflush,nclose};return &ops; }
 
 uint32_t cw_file_native_peak_count(CwFileNative *h) { return h->peak; }
+
+uint32_t cw_file_native_sync_count(CwFileNative *h) { return h->flushes; }

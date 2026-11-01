@@ -195,12 +195,13 @@
   },
   "w6_qualification": {
     "native_amd64_qemu": "19-bounded-cases-passed",
-    "native_file_flush": "unsupported-error-50",
+    "native_file_flush": "acknowledged-cw-hjfs-implementation-awaiting-ci",
     "physical_hardware": "not-tested",
     "arm64_windows": "not-tested",
     "full_phase_complete": false,
     "native_9p_namespace": "passed-separate-ramfs-server",
     "orderly_reboot_persistence": "passed",
-    "evidence": "docs/validation/compact-windows-w6-native.json"
+    "evidence": "docs/validation/compact-windows-w6-native.json",
+    "flush_backend_scope": "dedicated QEMU virtio-SCSI resource disk; no physical power-loss qualification"
   }
 }

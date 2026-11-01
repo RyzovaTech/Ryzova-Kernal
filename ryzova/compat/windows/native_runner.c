@@ -15,14 +15,14 @@ static void text16(uint16_t *out,const char *in,size_t capacity) {
 void main(int argc,char **argv) {
     CwMachine *m;CwServices *s;CwLaunch *launch;CwFileNamespace *ns=nil;CwFileNative *provider=nil;
     CwDirectoryGrant grant;CwPlan plan;unsigned char *file,*arena,*heap;size_t size,owned;
-    uint32_t budget=CW_MAX_STEPS,rights=31,apis=CW_ALL_APIS,committed=0;int status,syncfd=-1,i=1;char *root=nil,*syncpath=nil,*end;
+    uint32_t budget=CW_MAX_STEPS,rights=31,apis=CW_ALL_APIS,committed=0;int status,syncfd=-1,i=1;char *root=nil,*syncpath=nil,*end,capability[512];
     while(i<argc && argv[i][0]=='-') {
         if(!strcmp(argv[i],"-b") && i+1<argc){budget=strtoul(argv[++i],&end,0);if(*end || !budget || budget>CW_MAX_STEPS)sysfatal("instruction limit");}
         else if(!strcmp(argv[i],"-r") && i+1<argc)root=argv[++i];
         else if(!strcmp(argv[i],"-s") && i+1<argc)syncpath=argv[++i];
         else if(!strcmp(argv[i],"-R") && i+1<argc){rights=strtoul(argv[++i],&end,0);if(*end || !rights || rights>31)sysfatal("rights");}
         else if(!strcmp(argv[i],"-a") && i+1<argc){apis=strtoul(argv[++i],&end,0);if(*end || apis>CW_ALL_APIS)sysfatal("API mask");}
-        else sysfatal("usage: compact-windows [-b steps] [-r root [-s hjfs-sync-cap] [-R rights]] [-a API-mask] PE");
+        else sysfatal("usage: compact-windows [-b steps] [-r root [-s cw-hjfs-control] [-R rights]] [-a API-mask] PE");
         i++;
     }
     if(i!=argc-1 || (syncpath && !root))sysfatal("executable or grant arguments");
@@ -42,7 +42,11 @@ void main(int argc,char **argv) {
     if(!status)status=cw_attach_services(m,s,launch,heap,CW_HEAP_LIMIT);
     if(root && !status) {
         ns=mallocz(sizeof(*ns),1);if(!ns)sysfatal("namespace state");
-        if(syncpath)sysfatal("native flush capability is not qualified");
+        if(syncpath) {
+            snprint(capability,sizeof capability,"%s/.ryzova-sync-v1",root);
+            if(strcmp(capability,syncpath))sysfatal("sync capability must belong to grant root");
+            syncfd=open(syncpath,ORDWR);if(syncfd<0)sysfatal("storage barrier capability: %r");
+        }
         provider=cw_file_native_new(root,syncfd);if(syncfd>=0)close(syncfd);
         if(!provider)sysfatal("directory capability: %r");
         memset(&grant,0,sizeof grant);strcpy(grant.ref,"work");grant.drive='C';grant.rights=rights;
@@ -51,7 +55,7 @@ void main(int argc,char **argv) {
     owned=size+plan.image_bytes+CW_STACK+CW_HEAP_LIMIT+sizeof(*m)+sizeof(*s)+sizeof(*launch)+(ns?sizeof(*ns):0);
     if(!status)status=cw_run(m,budget);
     for(i=0;i<CW_HEAP_LIMIT/4096;i++)if(s->protection[i]&128)committed+=4096;
-    print("CW_NATIVE status=%d executed=%d exited=%d code=%ud steps=%ud stop=%s ip=%llud owned=%llud guest=%ud open=%ud peak_handles=%ud heap=%ud error=%ud\n",status,m->instructions!=0,m->exited,m->exit_code,m->instructions,cw_status_name(status),m->last_guest_ip,(uvlong)owned,plan.image_bytes+CW_STACK+4096+CW_HEAP_LIMIT,provider?cw_file_native_open_count(provider):0,provider?cw_file_native_peak_count(provider):0,committed,s->last_error);
+    print("CW_NATIVE status=%d executed=%d exited=%d code=%ud steps=%ud stop=%s ip=%llud owned=%llud guest=%ud open=%ud peak_handles=%ud heap=%ud error=%ud flushes=%ud\n",status,m->instructions!=0,m->exited,m->exit_code,m->instructions,cw_status_name(status),m->last_guest_ip,(uvlong)owned,plan.image_bytes+CW_STACK+4096+CW_HEAP_LIMIT,provider?cw_file_native_open_count(provider):0,provider?cw_file_native_peak_count(provider):0,committed,s->last_error,provider?cw_file_native_sync_count(provider):0);
     print("CW_OUT ");for(i=0;i<(int)s->output_bytes[0];i++)print("%02ux",s->output[0][i]);print("\nCW_ERR ");for(i=0;i<(int)s->output_bytes[1];i++)print("%02ux",s->output[1][i]);print("\n");
     for(i=0;i<CW_API_COUNT;i++)if(s->calls[i])print("CW_CALL %s %ud\n",cw_api_name(i),s->calls[i]);
     cw_files_close_all(m);cw_file_native_destroy(provider);free(ns);free(heap);free(arena);free(launch);free(s);free(m);free(file);

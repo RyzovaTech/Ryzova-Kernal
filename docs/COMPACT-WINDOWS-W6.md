@@ -63,22 +63,30 @@ must fail after close. Distinct roots
 must not acquire each other's files. This proves kernel-mediated 9P namespace
 resource access, not separate physical/network nodes or distributed performance.
 
-## Flush is deliberately a remaining gate
+## Next W6 part: acknowledged native flush
 
-A native FlushFileBuffers success is **not implemented**. Generic 9P empty wstat
-has optional synchronization semantics. The pinned hjfs control interface accepts
-commands through a pipe, so writing `sync` is not an acknowledgement that stable
-storage has completed. Returning success from either operation without a verified
-barrier would misrepresent the Windows API contract.
+The previously preserved receipt below predates this implementation and remains
+historical evidence of 19 native cases, including unsupported-flush errors. The
+new 20-case run must qualify the isolated `cw-hjfs` durability profile before any
+success claim is made for this part.
 
-The native provider returns error 50 for FlushFileBuffers. Consequently the W4
-reference is expected to take its error-handling exit 103 in native QEMU, while
-its full success/persistent-byte comparison remains qualified on the hosted Linux
-fsync transport. Native tests explicitly require error 50 rather than hiding it.
-Read/write/seek/close/rights and separate 9P resource I/O can still be qualified.
-A future acknowledged server durability capability is required before clearing
-the full native file-profile gate. Passing orderly reboot persistence is useful
-but is not a replacement for that barrier or a power-loss test.
+The Windows-owned hjfs overlay builds a separate binary and uses an explicit
+version 1 capability for a dedicated QEMU virtio-SCSI resource disk. The boot
+filesystem, original hjfs sources and Linux runtime are unchanged. The barrier
+quiesces filesystem operations, drains pending buffer returns, queues dirty writes,
+waits for device completion and obtains a non-immediate SCSI SYNCHRONIZE CACHE
+GOOD status. Dirty-write failures are sticky. A bounded virtual 9P control fid
+returns an ACK only for the current request nonce after all of those steps.
+The native provider pins this control fid in the same mounted filesystem as its
+explicit grant; generic empty wstat or a command-pipe write never means success.
+
+The native test must run the complete existing MSVC W4 program, require its full
+stdout/exit and two acknowledged FlushFileBuffers calls, immediately SIGKILL QEMU,
+and recover the exact final W4 bytes from the dedicated filesystem on a fresh
+boot without formatting. Background server sync is disabled for this profile.
+This tests a VM process crash and virtual storage flush semantics, not loss of
+physical power or arbitrary hardware storage caches. Unsupported roots retain
+error 50. Physical hardware qualification remains a separate outstanding gate.
 
 ## Remaining qualification limits
 
@@ -86,7 +94,7 @@ The native qualification report distinguishes:
 
 - AMD64 QEMU execution of the listed bounded cases;
 - native 9P namespace I/O and orderly reboot persistence;
-- native file flush: unqualified;
+- native file flush: new dedicated virtual-storage profile awaiting CI;
 - physical hardware: unqualified;
 - ARM64 Windows execution: unqualified;
 - full W6/general Windows compatibility: incomplete.
