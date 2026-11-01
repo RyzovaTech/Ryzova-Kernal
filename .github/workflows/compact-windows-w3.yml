@@ -1,0 +1,77 @@
+name: Compact Windows W3
+on:
+  pull_request:
+    paths:
+      - 'ryzova/compat/windows/**'
+      - 'ryzova/compact/windows-v1-plan.json'
+      - 'scripts/compact_windows_w[23]*'
+      - 'tests/test_compact_windows_w[23].py'
+      - 'tests/fixtures/windows_w3_reference.c'
+      - 'docs/COMPACT-WINDOWS*'
+      - '.github/workflows/compact-windows-w3.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  api-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -p 'test_compact_windows_w*.py' -v
+      - name: Preserve legacy metadata regressions
+        env:
+          PHASE5_SANITIZE: '1'
+        run: python -m unittest discover -s tests -p test_phase5_5_pe.py -v
+  windows-reference:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - name: Preserve source bytes and excluded Plan 9 index names
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_w3_reference.ps1
+            /tests/fixtures/windows_w3_reference.c
+      - name: Compile and execute nine-API Windows reference
+        shell: pwsh
+        run: ./scripts/compact_windows_w3_reference.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w3-compiler-reference
+          if-no-files-found: error
+          path: |
+            artifacts/compact-windows/w3-reference/reference.exe
+            artifacts/compact-windows/w3-reference/native-reference.json
+            artifacts/compact-windows/w3-reference/build.log
+  identical-pe-comparison:
+    needs: [api-boundaries, windows-reference]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-w3-compiler-reference
+          path: artifacts/w3-reference
+      - name: Compare identical PE exit, stdout, stderr and all nine API calls
+        run: >-
+          python scripts/compact_windows_w3.py
+          --reference artifacts/w3-reference/reference.exe
+          --receipt artifacts/w3-reference/native-reference.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w3-hosted-comparison
+          if-no-files-found: error
+          path: artifacts/compact-windows/w3/comparison.json

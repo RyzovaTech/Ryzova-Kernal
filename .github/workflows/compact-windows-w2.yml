@@ -1,0 +1,78 @@
+name: Compact Windows W2
+on:
+  pull_request:
+    paths:
+      - 'ryzova/compat/windows/**'
+      - 'ryzova/compact/windows-v1-plan.json'
+      - 'scripts/compact_windows_w2*'
+      - 'tests/test_compact_windows_w2.py'
+      - 'tests/fixtures/windows_w2_reference.c'
+      - 'docs/COMPACT-WINDOWS*'
+      - '.github/workflows/compact-windows-w2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  runtime-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -p test_compact_windows_w2.py -v
+      - run: python -m unittest discover -s tests -p test_compact_windows_w1.py -v
+      - name: Preserve legacy PE regression
+        env:
+          PHASE5_SANITIZE: '1'
+        run: python -m unittest discover -s tests -p test_phase5_5_pe.py -v
+  windows-reference:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - name: Keep byte-identical sources and excluded Plan 9 index names
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_w2_reference.ps1
+            /tests/fixtures/windows_w2_reference.c
+      - name: Compile and execute import-free AMD64 Windows PE
+        shell: pwsh
+        run: ./scripts/compact_windows_w2_reference.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w2-compiler-reference
+          if-no-files-found: error
+          path: |
+            artifacts/compact-windows/w2-reference/reference.exe
+            artifacts/compact-windows/w2-reference/native-reference.json
+            artifacts/compact-windows/w2-reference/build.log
+  identical-pe-comparison:
+    needs: [runtime-boundaries, windows-reference]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-w2-compiler-reference
+          path: artifacts/reference
+      - name: Execute identical Windows-built PE in hosted Flex runtime and compare
+        run: >-
+          python scripts/compact_windows_w2.py
+          --reference artifacts/reference/reference.exe
+          --receipt artifacts/reference/native-reference.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w2-hosted-comparison
+          if-no-files-found: error
+          path: artifacts/compact-windows/w2/comparison.json

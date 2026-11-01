@@ -1,0 +1,61 @@
+{
+  "schema": "compact-windows-w1-audit/v1",
+  "scope": "metadata-only characterization; accepted variants are W2 admission blockers",
+  "source_sha256": {
+    "ryzova/compat/windows/pe64.c": "2b2c1e4dbb004efc23b767fdc6b797d1d6d6fcefeebbdccce303baf3cf6183e9",
+    "ryzova/compat/windows/pe64.h": "6db3a44e8082632b5f92dcb027823da44f862a7ce8e29764f979ae676e7b1cc5",
+    "ryzova/compat/windows/pe64_probe.c": "08a693abf7c9ba93088bc71672cb49d01344b1cf5f0e91fa8a9933efc7f770b9"
+  },
+  "cases": [
+    {
+      "case": "baseline",
+      "fixture_sha256": "3d99542237cd6f201ce536c1edcdb09cac84c4687269008481c8c73d5e43e03d",
+      "probe_exit": 0,
+      "observed": "PE64 status=0 sections=1 entry=4096 (not executed)",
+      "execution_attempted": false
+    },
+    {
+      "case": "nonconsole-subsystem",
+      "fixture_sha256": "518f03533eec544ff1129f36c766b4e1bda97404cd2142379e50665995ffe1d0",
+      "probe_exit": 0,
+      "observed": "PE64 status=0 sections=1 entry=4096 (not executed)",
+      "execution_attempted": false
+    },
+    {
+      "case": "unaligned-image-base",
+      "fixture_sha256": "6284362b07e48d2544dbbaa5f1575a9fb454a4c0451ece8d3fd900bd90f51b75",
+      "probe_exit": 0,
+      "observed": "PE64 status=0 sections=1 entry=4096 (not executed)",
+      "execution_attempted": false
+    },
+    {
+      "case": "noncanonical-image-base",
+      "fixture_sha256": "7c9d1246254fb0066c2e85a486704359202c306785b24407f76761e4982c7c5a",
+      "probe_exit": 0,
+      "observed": "PE64 status=0 sections=1 entry=4096 (not executed)",
+      "execution_attempted": false
+    },
+    {
+      "case": "zero-size-of-headers",
+      "fixture_sha256": "5ad7b6508d3bea50184ad4f2a5fd124f36dae7c6597f5d7638a9efcce1dcf850",
+      "probe_exit": 0,
+      "observed": "PE64 status=0 sections=1 entry=4096 (not executed)",
+      "execution_attempted": false
+    },
+    {
+      "case": "raw-section-aliases-headers",
+      "fixture_sha256": "0c21f0aeeccd671081a6179358feae3b245b553cf6bad3da94db6a927d0c1a2e",
+      "probe_exit": 0,
+      "observed": "PE64 status=0 sections=1 entry=4096 (not executed)",
+      "execution_attempted": false
+    },
+    {
+      "case": "delay-import-directory",
+      "fixture_sha256": "e0969f1645b6524b2000193f32d0c5d7e561fcc1ccd5e7d52d503221456ebef2",
+      "probe_exit": 0,
+      "observed": "PE64 status=0 sections=1 entry=4096 (not executed)",
+      "execution_attempted": false
+    }
+  ],
+  "windows_execution_qualified": false
+}
