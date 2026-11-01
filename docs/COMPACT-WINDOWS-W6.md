@@ -106,3 +106,25 @@ The workflow must not mark the full phase/release ready merely because native
 subset tests pass. Actual hardware qualification requires identifiable devices,
 firmware/drivers, boot/storage/network tests and physical access; this environment
 provides no such hardware evidence. The branch remains reviewable without merge.
+
+## Hard-cut scope: boot filesystem versus dedicated acknowledged disk
+
+The native QEMU run [41287084806](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41287084806)
+completed the source-built Windows W4 PE with two nonce-acknowledged
+\`cw-hjfs\` barriers, then SIGKILLed QEMU. A fresh kernel boot recovered
+the exact expected W4 payload SHA-256
+\`282108862566a5a16ee67f4282f6c5ae962371e5a393d0001d2bc5883a8961d5\`
+from the dedicated /dev/sd01/data resource disk.
+
+The unrelated /tmp/cw-local/payload.bin on the boot hjfs filesystem
+was absent after that hard-kill, and boot hjfs reported type mismatches.
+The boot filesystem has no acknowledged cw-hjfs SCSI barrier; asserting
+its SIGKILL survival as part of the *dedicated resource* barrier was
+incorrect. The new hard-cut recovery gate requires an independently
+rebooted Ryzova kernel identity, the exact source-built runtime hash,
+and the exact dedicated resource file hash. It does NOT claim boot hjfs
+crash-safety or physical power-loss durability. The earlier orderly
+reboot tests and receipt remain separate historical evidence.
+
+The independent injected QEMU storage error and sticky-error denial
+must still pass before native W6's bounded barrier may be qualified.

@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import unittest
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'scripts'))
-from compact_windows_w6_native import case_specs,parse_cases,standalone,required_calls,fault_specs
+from compact_windows_w6_native import case_specs,parse_cases,standalone,required_calls,fault_specs,verify_dedicated_resource_reboot
 
 def serial(specs):
     lines=[]
@@ -43,6 +43,28 @@ class NativeEvidenceTests(unittest.TestCase):
         cases=case_specs();good=serial(cases)
         with self.assertRaises(ValueError):parse_cases(good.replace(b'admission=1',b'admission=0'),cases)
         with self.assertRaises(ValueError):parse_cases(good.replace(b'CW_OUT ',b'CW_OUT ff',1),cases)
+class CrashPersistenceScopeTests(unittest.TestCase):
+    def test_only_acknowledged_resource_disk_required_after_hardcut(self):
+        runtime='a'*64
+        durable='b'*64
+        log=('Ryzova Kernel 0.1.0-dev\n'+runtime+'\t/amd64/bin/compact-windows\n'
+             'CW_REBOOT_IDENTITY_OK\nCW_REBOOT_RESOURCE_MOUNTED\n'
+             +durable+'\t/tmp/cw-durable/payload.bin\nCW_REBOOT_DONE\n').encode()
+        self.assertTrue(verify_dedicated_resource_reboot(log,runtime,durable))
+        for bad in (
+            log.replace(durable.encode(),b'c'*64),
+            log.replace(runtime.encode(),b'c'*64),
+            log.replace(b'CW_REBOOT_RESOURCE_MOUNTED\n',b''),
+            log.replace(b'CW_REBOOT_DONE\n',b''),
+            log.replace(b'Ryzova Kernel 0.1.0-dev',b'Other OS'),
+        ):
+            with self.subTest(bad=bad[-90:]),self.assertRaises(ValueError):
+                verify_dedicated_resource_reboot(bad,runtime,durable)
+        # Echoing a command is NOT proof that the event took place.
+        echo=b'term% echo CW_REBOOT_DONE\n'+log.replace(b'CW_REBOOT_DONE\n',b'')
+        with self.assertRaises(ValueError):
+            verify_dedicated_resource_reboot(echo,runtime,durable)
+
 class BarrierProtocolTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
