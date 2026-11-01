@@ -63,6 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
@@ -80,7 +81,7 @@ jobs:
           gzip -dc 9front.qcow2.gz > 9front.qcow2
           qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-windows.qcow2
       - name: Native 6c build, source kernel reboot, exact PE and resource tests
-        run: python3 scripts/compact_windows_w6_native.py native-windows.qcow2 --fixtures artifacts/w6-fixtures
+        run: python3 scripts/compact_windows_w6_native.py native-windows.qcow2 --bootstrap-gzip 9front.qcow2.gz --fixtures artifacts/w6-fixtures
       - uses: actions/upload-artifact@v4
         if: always()
         with:

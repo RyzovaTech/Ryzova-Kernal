@@ -2,6 +2,7 @@
 """Native 6c/mk and source-built-kernel QEMU evidence for bounded Windows profiles."""
 import argparse
 import functools
+import gzip
 import hashlib
 import http.server
 import json
@@ -21,7 +22,23 @@ from compact_windows_w4 import PAYLOAD
 from compact_windows_w5 import WORKLOADS
 PIN='3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c'
 
-def digest(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+def digest(path):
+    result=hashlib.sha256()
+    with Path(path).open('rb') as file:
+        for chunk in iter(lambda:file.read(1024*1024),b''):result.update(chunk)
+    return result.hexdigest()
+
+def bootstrap_provenance(image,archive):
+    if digest(archive)!=PIN:raise ValueError('bootstrap archive SHA mismatch')
+    chain=json.loads(subprocess.check_output(['qemu-img','info','--backing-chain','--output=json',str(image)],text=True))
+    if len(chain)!=2 or any(x.get('format')!='qcow2' for x in chain):raise ValueError('unexpected bootstrap disk chain')
+    base=Path(chain[0]['full-backing-filename']).resolve()
+    if base!=Path(chain[1]['filename']).resolve():raise ValueError('bootstrap backing mismatch')
+    result=hashlib.sha256()
+    with gzip.open(archive,'rb') as file:
+        for chunk in iter(lambda:file.read(1024*1024),b''):result.update(chunk)
+    if digest(base)!=result.hexdigest():raise ValueError('bootstrap disk is not the verified gzip payload')
+    return result.hexdigest()
 def standalone(data,text):return re.search(rb'(?:^|\r?\n)'+re.escape(text.encode())+rb'(?:\r?\n|$)',data) is not None
 
 def references(fixtures,commit):
@@ -64,6 +81,17 @@ def case_specs():
     cases['ramfs-io']['args']='-r /tmp/cw-ram'
     return cases
 
+def required_calls(name):
+    if name in WORKLOADS and 'exit_code' in WORKLOADS[name]:return {api:1 for api in (*WORKLOADS[name]['apis'],'GetStdHandle','WriteFile','ExitProcess')}
+    if name=='api':return {api:1 for api in ('GetStdHandle','WriteFile','ExitProcess','GetLastError','SetLastError','GetCommandLineW','GetEnvironmentVariableW','VirtualAlloc','VirtualFree')}
+    if name in ('file','unsynced'):return {'CreateFileW':1,'WriteFile':1,'FlushFileBuffers':1,'ExitProcess':1}
+    if name=='readonly':return {'CreateFileW':1,'ExitProcess':1}
+    if name=='heap-limit':return {'malloc':2,'_errno':1,'ExitProcess':1}
+    if name=='io-limit':return {'malloc':1,'GetStdHandle':1,'WriteFile':1,'GetLastError':1,'ExitProcess':1}
+    if name=='handle-limit':return {'CreateFileW':31,'GetLastError':1,'ExitProcess':1}
+    if name=='ramfs-io':return {'CreateFileW':2,'WriteFile':1,'ReadFile':1,'CloseHandle':2,'ExitProcess':1}
+    return {}
+
 def parse_cases(log,specs):
     text=log.decode('utf-8','replace');results={}
     for name,spec in specs.items():
@@ -86,6 +114,10 @@ def parse_cases(log,specs):
             if name=='handle-limit' and record.get('peak_handles')!=30:raise ValueError('handle cap not exercised')
             if name in ('file','unsynced') and record.get('error')!=50:raise ValueError('unsupported sync was hidden')
             if name=='readonly' and record.get('error')!=5:raise ValueError('read-only rights failure')
+            calls=re.findall(r'(?m)^CW_CALL (\w+) ([0-9]+)\r?$',section.group(1))
+            if len({k for k,v in calls})!=len(calls):raise ValueError('duplicate API receipt')
+            record['calls']={k:int(v) for k,v in calls}
+            if any(record['calls'].get(api,0)<count for api,count in required_calls(name).items()):raise ValueError('native API coverage '+name)
         results[name]=record
     return results
 
@@ -144,8 +176,9 @@ def extract_kernel(image,out,expected):
     raise ValueError('independent FAT kernel hash mismatch')
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('image',type=Path);parser.add_argument('--fixtures',type=Path,required=True)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('image',type=Path);parser.add_argument('--bootstrap-gzip',type=Path,required=True);parser.add_argument('--fixtures',type=Path,required=True)
     args=parser.parse_args();out=ROOT/'artifacts/compact-windows/w6-native';out.mkdir(parents=True,exist_ok=True)
+    base_sha=bootstrap_provenance(args.image,args.bootstrap_gzip)
     commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip();hashes=references(args.fixtures,commit)
     for name,sha in hashes.items():(out/(name+'.exe')).write_bytes((args.fixtures/(name+'.exe')).read_bytes())
     synthetic={'loop':pe(b'\xeb\xfe'),'stack':pe(bytes.fromhex('4881ec00000200 48890424'))}
@@ -194,7 +227,7 @@ def main():
     reboot=session(args.image,["cat '#Z/version'; sha1sum -2 256 /tmp/cw-local/payload.bin; echo CW_REBOOT_DONE"],out,'reboot',100)
     if b'Ryzova Kernel 0.1.0-dev' not in reboot or not re.search(rb'(?m)^'+file_sha.encode()+rb'\s+/tmp/cw-local/payload.bin\r?$',reboot):raise ValueError('reboot persistence mismatch')
     report={'schema':'compact-windows-w6-native/v1','source_commit':commit,'source_archive_sha256':archive_sha,'kernel_sha256':kernel_sha,'runtime_sha256':runtime_sha[0].decode(),
-      'bootstrap_image_gzip_sha256':PIN,'cases':records,'fixture_sha256':hashes,'native_amd64_qemu_qualified':True,'native_9p_namespace_verified':True,
+      'bootstrap_image_gzip_sha256':PIN,'bootstrap_image_sha256':base_sha,'cases':records,'fixture_sha256':hashes,'native_amd64_qemu_qualified':True,'native_9p_namespace_verified':True,
       'file_sha256':file_sha,'reboot_persistence_verified':True,'native_file_flush_qualified':False,'full_w6_complete':False,'physical_hardware_qualified':False,'arm64_windows_qualified':False,'general_windows_compatibility':False}
     (out/'qualification.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True);server.shutdown()
 if __name__=='__main__':main()
