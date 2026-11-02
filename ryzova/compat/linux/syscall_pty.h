@@ -137,7 +137,7 @@ static int64_t pty_ioctl(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         {unsigned int i;for(i=0;i<8;i++)if(buf[i])return -95;
          for(i=12;i<16;i++)if(buf[i])return -95;}
         value=(unsigned int)buf[8]|((unsigned int)buf[9]<<8)|((unsigned int)buf[10]<<16)|((unsigned int)buf[11]<<24);
-        if(value!=0xb0)return -95;
+        if(value!=0xb0 || buf[16]!=0 || buf[22]!=0 || buf[23]!=1)return -95;
         return 0;
     }
     return -25;
