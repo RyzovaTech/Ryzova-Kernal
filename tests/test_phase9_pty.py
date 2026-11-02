@@ -58,7 +58,7 @@ class GuestPtyTests(unittest.TestCase):
     def test_shared_world_real_c_namespace_and_uid_cross_access_denied(self):
         program=self.root/'pty-isolation'
         subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-O2',
-                        '-I',str(CORE),*map(str,SOURCES),
+                        '-I',str(CORE),*map(str,SOURCES[:-1]),
                         str(ROOT/'tests/fixtures/compact_pty_isolation.c'),
                         '-o',str(program)],capture_output=True,check=True,timeout=120)
         result=subprocess.run([str(program)],capture_output=True,timeout=25)
