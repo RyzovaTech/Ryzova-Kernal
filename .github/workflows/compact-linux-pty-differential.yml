@@ -8,6 +8,7 @@ on:
       - 'ryzova/compat/linux/syscall.c'
       - 'ryzova/compat/linux/namespace.h'
       - 'tests/fixtures/compact_pty.c'
+      - 'tests/fixtures/compact_pty_isolation.c'
       - 'tests/test_phase9_pty.py'
       - '.github/workflows/compact-linux-pty-differential.yml'
 permissions:

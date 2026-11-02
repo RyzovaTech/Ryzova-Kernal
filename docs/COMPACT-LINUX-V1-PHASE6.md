@@ -25,3 +25,10 @@ guest tests reject unauthorized locked slave access and malformed ioctls.
 The TTY-JOBS acceptance gate remains pending. Even passing Python host
 tests and a native QEMU regression suite does not prove an unmodified
 BusyBox ash interactive PTY session in the Ryzova native kernel.
+
+An additional source-built C harness attaches three guest process states to
+one finite Ryzova world. It verifies that a locked slave cannot open, and
+that a different namespace ID or UID cannot open the owner's slave even
+when it is unlocked; after the last descriptor closes, authorization is not
+retained. This is a **hosted VM isolation test**, not a real kernel multi-user
+or native Ryzova /dev/pts implementation.
