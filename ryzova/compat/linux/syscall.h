@@ -26,7 +26,7 @@ typedef struct RyzLinuxFD {
     enum RyzLinuxNode node;
     int mode, open, cloexec, append, nonblock;
     unsigned int description;
-    unsigned int pipe, vnode, socket;
+    unsigned int pipe, vnode, socket, pty;
     size_t offset;
 } RyzLinuxFD;
 #include "resource_fs.h"
@@ -58,6 +58,16 @@ typedef struct RyzVnode {
 /* Hardlink entries refer directly to an owned inode slot, never a chain. */
 #define RYZ_VFS_INDEX(w,i) ((w)->nodes[(i)].backing?(w)->nodes[(i)].backing-1:(unsigned int)(i))
 #define RYZ_VFS_NODE(w,i) (&(w)->nodes[RYZ_VFS_INDEX(w,i)])
+/* At most two per-world, same-namespace raw PTY pairs. No host PTY access. */
+#define RYZ_WORLD_PTYS 2U
+#define RYZ_PTY_BUFFER 4096U
+#define RYZ_PTY_TOTAL_BYTES (4U*1024U*1024U)
+typedef struct RyzLinuxPty {
+    uint32_t namespace_id, uid;
+    unsigned int used,locked,rows,columns;
+    size_t head[2],size[2];
+    unsigned char bytes[2][RYZ_PTY_BUFFER];
+} RyzLinuxPty;
 #define RYZ_NET_SOCKETS 32U
 #define RYZ_NET_BUFFER 4096U
 #define RYZ_NET_BACKLOG 8U
@@ -115,6 +125,8 @@ typedef struct RyzLinuxWorld {
     unsigned int memory_barriers[8];
     RyzLinuxDescription descriptions[RYZ_WORLD_DESCRIPTIONS];
     RyzLinuxPipe pipes[RYZ_WORLD_PIPES];
+    RyzLinuxPty ptys[RYZ_WORLD_PTYS];
+    uint64_t pty_bytes;
     RyzLinuxSocket sockets[RYZ_NET_SOCKETS];
     uint64_t network_bytes;
     const RyzNetworkResources *network;
