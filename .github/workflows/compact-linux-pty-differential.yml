@@ -1,0 +1,31 @@
+name: CLX-06 bounded virtual raw PTY differential
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/compat/linux/syscall_pty.h'
+      - 'ryzova/compat/linux/syscall.h'
+      - 'ryzova/compat/linux/syscall.c'
+      - 'ryzova/compat/linux/namespace.h'
+      - 'tests/fixtures/compact_pty.c'
+      - 'tests/test_phase9_pty.py'
+      - '.github/workflows/compact-linux-pty-differential.yml'
+permissions:
+  contents: read
+jobs:
+  raw-pty:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11','3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compare raw PTY master/slave guest ELF and real Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_pty.py' -v
