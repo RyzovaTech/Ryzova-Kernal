@@ -1,0 +1,23 @@
+name: Compact Windows W8 namespace-local process identity APIs
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/compat/windows/api.c'
+      - 'ryzova/compat/windows/api.h'
+      - 'tests/test_compact_windows_w3.py'
+      - 'tests/test_compact_windows_w8_identity.py'
+      - '.github/workflows/compact-windows-w8-identity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-virtual-process-thread-identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test original Win32 identity imports, authorizations and isolation
+        run: python3 -m unittest discover -s tests -p 'test_compact_windows_w8_identity.py' -v

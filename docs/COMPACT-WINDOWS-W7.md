@@ -123,3 +123,18 @@ This is a **compatibility inventory**, not an implemented delay loader,
 Win32 networking, GUI/registry, or application execution claim.
 
 PE layout reference: https://learn.microsoft.com/en-us/windows/win32/debug/pe-format
+
+## W8 bounded Win32 virtual process identity
+
+The existing single-process/single-thread AMD64 compact Windows console
+runtime now recognizes two **additional explicit Kernel32 import thunks**:
+`GetCurrentProcessId` and `GetCurrentThreadId`. Each returns the stable
+namespace-local DWORD 1 for the one permitted guest process/thread.
+No physical host process/thread ID is revealed. Like all API thunks, the
+launcher and PE import plan must both authorize these IDs before guest
+execution. Per-machine call counters and last-error preservation have
+standalone C/ctypes regression tests; the existing 28 API tokens preserve
+their historical indices. The declared W1–W6 stable API subset and seven
+release requirements remain unchanged, and this extension is **not** a
+Windows process/thread creation/scheduler, general compatibility or
+physical hardware qualification.

@@ -11,12 +11,16 @@
 #define ERR_ENVIRONMENT 203U
 #define ERR_ADDRESS 487U
 #define ERR_NOACCESS 998U
-static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno"};
+static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno","GetCurrentProcessId","GetCurrentThreadId"};
 int cw_api_id(const char *name) {
     unsigned int i;for(i=0;i<CW_API_COUNT;i++)if(!strcmp(name,names[i]))return (int)i;
     return -1;
 }
-const char *cw_api_module(unsigned int id) { return id<CW_MEMCPY?"kernel32.dll":(id<CW_API_COUNT?"ucrtbase.dll":NULL); }
+const char *cw_api_module(unsigned int id) {
+    if(id>=CW_API_COUNT)return NULL;
+    if(id>=CW_GET_CURRENT_PROCESS_ID)return "kernel32.dll";
+    return id<CW_MEMCPY?"kernel32.dll":"ucrtbase.dll";
+}
 const char *cw_api_name(unsigned int id) { return id<CW_API_COUNT?names[id]:NULL; }
 uint64_t cw_api_token(unsigned int id) { return id<CW_API_COUNT?CW_THUNK_BASE+16U*id:0; }
 static int span(uint64_t size,uint64_t at,uint64_t bytes) { return at<=size && bytes<=size-at; }
@@ -222,6 +226,12 @@ int cw_api_dispatch(CwMachine *m) {
         result=(a[0]==0x10001 || a[0]==0x10002)?write_file(m,a):cw_file_call(m,id,a);break;
     case CW_EXIT_PROCESS:cw_files_close_all(m);m->exit_code=(uint32_t)a[0];m->exited=1;m->exit_kind=1;return CW_OK;
     case CW_GET_LAST_ERROR:result=s->last_error;break;
+    /* W8 named single-process/single-thread guest profile.
+     * IDs are virtual namespace-local tokens, not host PID/TID leaks.
+     * Their value remains stable while this one guest process exists.
+     * No process or thread creation is implied by these APIs. */
+    case CW_GET_CURRENT_PROCESS_ID:result=1;break;
+    case CW_GET_CURRENT_THREAD_ID:result=1;break;
     case CW_SET_LAST_ERROR:s->last_error=(uint32_t)a[0];break;
     case CW_GET_COMMAND_LINE:result=s->command_base;break;
     case CW_GET_ENVIRONMENT_VARIABLE:result=environment(m,a);break;

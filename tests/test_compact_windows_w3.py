@@ -24,7 +24,7 @@ class Allocation(C.Structure):
 class CrtBlock(C.Structure):
     _fields_=[("base",C.c_uint64),("size",C.c_uint64),("capacity",C.c_uint64)]
 class Services(C.Structure):
-    _fields_=[('launch',Launch),('last_error',C.c_uint32),('output_bytes',C.c_uint32*2),('calls',C.c_uint32*28),('output',(C.c_ubyte*65536)*2),('command_bytes',C.c_ubyte*2048),('command_base',C.c_uint64),('heap_base',C.c_uint64),('heap',C.c_void_p),('heap_bytes',C.c_size_t),('owner',C.c_ubyte*256),('protection',C.c_ubyte*256),('allocations',Allocation*16),('bound_machine',C.c_void_p),('files',C.c_void_p),('console_closed',C.c_uint32),('crt_blocks',CrtBlock*16),('errno_bytes',C.c_ubyte*4)]
+    _fields_=[('launch',Launch),('last_error',C.c_uint32),('output_bytes',C.c_uint32*2),('calls',C.c_uint32*30),('output',(C.c_ubyte*65536)*2),('command_bytes',C.c_ubyte*2048),('command_base',C.c_uint64),('heap_base',C.c_uint64),('heap',C.c_void_p),('heap_bytes',C.c_size_t),('owner',C.c_ubyte*256),('protection',C.c_ubyte*256),('allocations',Allocation*16),('bound_machine',C.c_void_p),('files',C.c_void_p),('console_closed',C.c_uint32),('crt_blocks',CrtBlock*16),('errno_bytes',C.c_ubyte*4)]
 
 def put_utf16(array,text):
     units=struct.unpack('<'+'H'*(len(text.encode('utf-16le'))//2),text.encode('utf-16le'))
