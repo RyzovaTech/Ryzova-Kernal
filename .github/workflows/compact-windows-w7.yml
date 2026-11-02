@@ -1,0 +1,27 @@
+name: Compact Windows W7 real ARM64 PE research
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/compat/windows/arm64_probe*'
+      - 'tests/test_compact_windows_w7_arm64.py'
+      - 'tests/fixtures/windows_w7_arm64_reference.c'
+      - '.github/workflows/compact-windows-w7.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  import-free-arm64-pe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require real C compiler and ARM64 Windows linker
+        run: |
+          command -v cc
+          command -v clang
+          command -v lld-link
+      - name: Run real compiler-built ARM64 PE and malformed image/ISA denials
+        run: python3 -m unittest discover -s tests -p 'test_compact_windows_w7_arm64.py' -v
