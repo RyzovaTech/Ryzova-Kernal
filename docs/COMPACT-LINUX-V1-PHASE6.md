@@ -32,3 +32,11 @@ that a different namespace ID or UID cannot open the owner's slave even
 when it is unlocked; after the last descriptor closes, authorization is not
 retained. This is a **hosted VM isolation test**, not a real kernel multi-user
 or native Ryzova /dev/pts implementation.
+
+The raw PTY fixture additionally checks guest `stat`/`fstat` character-device
+metadata against real Linux, while the shared-world cross-namespace harness
+requires `stat('/dev/pts/0')` to return `ENOENT` for unauthorized nodes.
+Per-slot inode metadata is bounded and cannot escape the caller's namespace.
+This does not implement the full `/dev/pts` directory or dynamic devpts
+mount semantics, canonical line discipline, or interactive shell process-group
+control.
