@@ -74,11 +74,9 @@ class ImportAuditTests(unittest.TestCase):
         struct.pack_into("<II",image,opt+112+13*8,0x20c0,64)
         struct.pack_into("<8I",image,0x4c0,1,0x2100,0x2110,0x2130,
                          0x2120,0,0,0)
-        image[0x500:0x50b]=b"USER32.DLL\\0".replace(b"\\0",b"\\x00")
+        image[0x500:0x50b]=b"USER32.DLL\0"
         struct.pack_into("<Q",image,0x520,0x2140)
-        image[0x540:0x54e]=b"\\x00\\x00MessageBoxW\\x00".decode(
-            "unicode_escape").encode("latin1")
-        report=discover(bytes(image),PLAN)
+        image[0x540:0x54e]=b"\x00\x00MessageBoxW\x00"
         self.assertEqual(report["delay_load_modules"],["user32.dll"])
         self.assertEqual(report["delay_load_imports"],["user32.dll!MessageBoxW"])
         self.assertTrue(report["delay_load_requires_runtime_resolver"])
