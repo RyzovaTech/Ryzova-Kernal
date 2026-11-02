@@ -114,7 +114,7 @@ def discover(data,plan):
             thunk_rva=oft or ft
             terminated=False
             for j in range(MAX_SYMBOLS+1):
-                value=field(data,image_rva(thunk_rva+j*8,8),0,8)
+                value=field(data,image_rva(thunk_rva+j*8,8),8)
                 if not value:
                     terminated=True
                     break
