@@ -1,0 +1,23 @@
+name: Compact Windows W7 executable import capability inventory
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/compact_windows_import_audit.py'
+      - 'tests/test_compact_windows_import_audit.py'
+      - '.github/workflows/compact-windows-import-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  direct-pe-import-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Audit declared imports vs supported Windows console profile
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_windows_import_audit.py' -v
+          python3 -m py_compile scripts/compact_windows_import_audit.py
