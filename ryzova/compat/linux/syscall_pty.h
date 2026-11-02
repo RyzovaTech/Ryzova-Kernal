@@ -134,7 +134,8 @@ static int64_t pty_ioctl(RyzLinuxProcess *p,const RyzLinuxRegs *r)
         memset(buf,0,36);encode(buf+8,0xb0,4);buf[17+6]=1;return 0;
     }
     if(code==0x5402U){ /* TCSETS: only actual raw mode; no fake canonical/echo */
-        if(buf[0] || buf[4] || buf[12])return -95;
+        {unsigned int i;for(i=0;i<8;i++)if(buf[i])return -95;
+         for(i=12;i<16;i++)if(buf[i])return -95;}
         value=(unsigned int)buf[8]|((unsigned int)buf[9]<<8)|((unsigned int)buf[10]<<16)|((unsigned int)buf[11]<<24);
         if(value!=0xb0)return -95;
         return 0;
