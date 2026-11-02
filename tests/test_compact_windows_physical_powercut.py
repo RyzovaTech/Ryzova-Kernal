@@ -12,7 +12,9 @@ import tempfile
 import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scripts"))
-from compact_windows_physical_powercut import audit_report,verify_external_witness
+from compact_windows_physical_powercut import (
+    audit_report,verify_external_witness,verify_raw_evidence_bundle
+)
 
 
 def fixture():
@@ -63,6 +65,30 @@ def fixture():
     }
 
 
+def build_fake_raw_logs(record,root):
+    """Synthetic corpus ONLY: no physical power-off was performed."""
+    folder=Path(root)
+    for cycle in record["power_cycles"]:
+        d=folder/cycle["cycle_id"]
+        d.mkdir(parents=True)
+        for filename,field in (
+            ("flush-ack.serial","flush_ack_serial_log_sha256"),
+            ("power-cut.serial","witness_cut_log_sha256"),
+            ("reboot.serial","post_reboot_serial_log_sha256"),
+        ):
+            message=(cycle["cycle_id"]+":"+filename+":UNIT-ONLY\\n").encode()
+            (d/filename).write_bytes(message)
+            cycle[field]=hashlib.sha256(message).hexdigest()
+    d=folder/"negative"
+    d.mkdir()
+    for name in ("flush-fault","flush-sticky"):
+        message=(name+":UNIT-ONLY\\n").encode()
+        (d/(name+".serial")).write_bytes(message)
+        record["negative_cases"][name]["independent_event_log_sha256"]=(
+            hashlib.sha256(message).hexdigest())
+    return record
+
+
 class ExternalWitnessAuditTests(unittest.TestCase):
     def test_synthetic_report_only_creates_unqualified_review_candidate(self):
         record=audit_report(fixture())
@@ -93,6 +119,60 @@ class ExternalWitnessAuditTests(unittest.TestCase):
             with self.subTest(mutant=str(mutate)),self.assertRaises(ValueError):
                 audit_report(case)
 
+    def test_all_original_raw_logs_required_and_bound_to_external_digests(self):
+        with tempfile.TemporaryDirectory() as temp:
+            record=build_fake_raw_logs(fixture(),Path(temp))
+            result=verify_raw_evidence_bundle(record,temp)
+            self.assertTrue(result["raw_log_digest_verified"])
+            self.assertEqual(result["raw_logs_checked"],11)
+            self.assertEqual(len(result["raw_logs_bundle_sha256"]),64)
+            target=Path(temp)/"cycle-2"/"power-cut.serial"
+            old=target.read_bytes()
+            target.write_bytes(old+b"forged")
+            with self.assertRaises(ValueError):
+                verify_raw_evidence_bundle(record,temp)
+            target.write_bytes(old)
+            target.unlink()
+            with self.assertRaises(OSError):
+                verify_raw_evidence_bundle(record,temp)
+            if hasattr(Path,"symlink_to"):
+                (Path(temp)/"cycle-2"/"power-cut.serial").symlink_to(
+                    Path(temp)/"cycle-1"/"power-cut.serial")
+                with self.assertRaises(OSError):
+                    verify_raw_evidence_bundle(record,temp)
+
+    def test_signed_report_and_raw_files_still_only_candidate_for_review(self):
+        if not shutil.which("openssl"):
+            raise AssertionError("real OpenSSL Ed25519 implementation required")
+        with tempfile.TemporaryDirectory() as temp:
+            d=Path(temp)
+            bundle=d/"witness-logs"
+            bundle.mkdir()
+            report=build_fake_raw_logs(fixture(),bundle)
+            priv=d/"witness-private.pem"
+            pub=d/"witness-public.pem"
+            payload=d/"signed.json"
+            sig=d/"signed.bin"
+            subprocess.run(["openssl","genpkey","-algorithm","ED25519","-out",str(priv)],
+                           check=True,capture_output=True,timeout=15)
+            subprocess.run(["openssl","pkey","-in",str(priv),"-pubout","-out",str(pub)],
+                           check=True,capture_output=True,timeout=15)
+            der=subprocess.run(["openssl","pkey","-pubin","-in",str(pub),"-outform","DER"],
+                               check=True,capture_output=True,timeout=15).stdout
+            trusted=hashlib.sha256(der).hexdigest()
+            payload.write_bytes(json.dumps(report,sort_keys=True,
+                                separators=(",",":"),ensure_ascii=True).encode("ascii"))
+            subprocess.run(["openssl","pkeyutl","-sign","-inkey",str(priv),
+                            "-rawin","-in",str(payload),"-out",str(sig)],
+                           check=True,capture_output=True,timeout=15)
+            candidate=verify_external_witness(
+                report,pub.read_bytes(),trusted,sig.read_bytes(),evidence_root=bundle)
+            self.assertTrue(candidate["witness_signature_verified"])
+            self.assertTrue(candidate["raw_log_digest_verified"])
+            self.assertTrue(candidate["ready_for_independent_hardware_review"])
+            self.assertFalse(candidate["physical_hardware_qualified"])
+            self.assertFalse(candidate["general_windows_compatibility"])
+
     def test_external_ed25519_signature_tampering_and_independent_trust(self):
         if not shutil.which("openssl"):
             raise AssertionError("OpenSSL required: no signature verification bypass")
@@ -116,7 +196,8 @@ class ExternalWitnessAuditTests(unittest.TestCase):
                            check=True,capture_output=True,timeout=15)
             proved=verify_external_witness(report,pub.read_bytes(),trusted,sig.read_bytes())
             self.assertTrue(proved["witness_signature_verified"])
-            self.assertTrue(proved["ready_for_independent_hardware_review"])
+            self.assertFalse(proved["ready_for_independent_hardware_review"])
+            self.assertFalse(proved["raw_log_digest_verified"])
             self.assertFalse(proved["physical_hardware_qualified"])
             # Self-generated keys are synthetic tests, NOT trusted witnesses.
             with self.assertRaises(ValueError):

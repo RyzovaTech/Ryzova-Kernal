@@ -41,3 +41,20 @@ Source-of-truth references:
 - Microsoft PE/ARM64 ABI specification — separate execution scope
 
 This feature must not alter existing driver-agent code or upstream sync.
+
+## W9 original raw-log bundle gate
+
+A signed manifest with hash-shaped strings is **not enough**. The W9
+validator CLI now also requires `--evidence-directory` containing each
+independent cycle's `flush-ack.serial`, `power-cut.serial` and
+`reboot.serial` plus `negative/flush-fault.serial` and
+`negative/flush-sticky.serial`. Files must be nonempty regular files,
+within 1 MiB, opened via non-following directory/file handles and must
+exactly match the SHA-256 digest signed in the witness manifest. Duplicate,
+missing, mutated, symlinked or oversized evidence is rejected.
+The CLI now marks `ready_for_independent_hardware_review=true` only when
+both Ed25519 signature **and actual raw log bundle** verify. All tests use
+synthetic temporary data and self-generated test keys, explicitly *not*
+physical measurements. Even a correctly signed and hashed bundle still
+reports `physical_hardware_qualified=false` until separately witnessed
+real power-cut tests and human review have actually occurred.

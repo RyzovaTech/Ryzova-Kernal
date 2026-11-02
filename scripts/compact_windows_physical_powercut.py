@@ -11,6 +11,8 @@ import argparse
 import base64
 from datetime import datetime
 import hashlib
+import os
+import stat
 import json
 from pathlib import Path
 import re
@@ -126,7 +128,78 @@ def audit_report(report):
     }
 
 
-def verify_external_witness(report,pubkey_pem,pinned_der_sha256,signature):
+# Never trust hash-looking manifest strings without their original
+# external witness/serial logs. All paths are fixed names below, and only
+# regular, nonempty, bounded files opened without symlink traversal qualify.
+MAX_WITNESS_LOG_BYTES=1024*1024
+CYCLE_FILES=(
+    ("flush-ack.serial","flush_ack_serial_log_sha256"),
+    ("power-cut.serial","witness_cut_log_sha256"),
+    ("reboot.serial","post_reboot_serial_log_sha256"),
+)
+NEGATIVE_FILES=("flush-fault","flush-sticky")
+
+
+def verify_raw_evidence_bundle(report,evidence_root):
+    """Hash all 3x3 independent cycle + 2 negative original file logs.
+
+    This is file integrity, NOT evidence the experiment physically occurred.
+    Parent and log components are opened relative to no-follow dir handles.
+    """
+    audit_report(report)
+    flags=os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC
+    folder_flags=flags|os.O_DIRECTORY
+    hashes=[]
+    count=0
+    def check_one(folder_fd,name,expected,identifier):
+        nonlocal count
+        handle=os.open(name,flags,dir_fd=folder_fd)
+        try:
+            meta=os.fstat(handle)
+            if (not stat.S_ISREG(meta.st_mode) or meta.st_size<1 or
+                    meta.st_size>MAX_WITNESS_LOG_BYTES):
+                raise ValueError("unsafe or over-limit hardware witness file: "+identifier)
+            with os.fdopen(os.dup(handle),"rb") as stream:
+                contents=stream.read(MAX_WITNESS_LOG_BYTES+1)
+            if len(contents)!=meta.st_size:
+                raise ValueError("truncated hardware witness file: "+identifier)
+            digest=hashlib.sha256(contents).hexdigest()
+            if digest!=expected:
+                raise ValueError("hardware evidence SHA mismatch: "+identifier)
+            hashes.append(identifier+":"+digest)
+            count+=1
+        finally:
+            os.close(handle)
+
+    rootfd=os.open(os.fspath(evidence_root),folder_flags)
+    try:
+        for c in report["power_cycles"]:
+            name=c["cycle_id"]  # already validated against strict safe-name regex
+            fd=os.open(name,folder_flags,dir_fd=rootfd)
+            try:
+                for file_name,digest_key in CYCLE_FILES:
+                    check_one(fd,file_name,c[digest_key],name+"/"+file_name)
+            finally:
+                os.close(fd)
+        fd=os.open("negative",folder_flags,dir_fd=rootfd)
+        try:
+            for name in NEGATIVE_FILES:
+                check_one(fd,name+".serial",
+                    report["negative_cases"][name]["independent_event_log_sha256"],
+                    "negative/"+name)
+        finally:
+            os.close(fd)
+    finally:
+        os.close(rootfd)
+    return {
+        "raw_log_digest_verified":True,
+        "raw_logs_checked":count,
+        "raw_logs_bundle_sha256":hashlib.sha256(
+            "\\n".join(sorted(hashes)).encode("ascii")).hexdigest(),
+    }
+
+
+def verify_external_witness(report,pubkey_pem,pinned_der_sha256,signature,evidence_root=None):
     """Ed25519 signer authenticity (not proof the claimed experiment occurred)."""
     candidate=audit_report(report)
     require_hex(pinned_der_sha256,HEX64,"out-of-band witness key fingerprint")
@@ -150,8 +223,14 @@ def verify_external_witness(report,pubkey_pem,pinned_der_sha256,signature):
         if check.returncode:
             raise ValueError("external power-cut witness signature invalid")
     candidate["witness_signature_verified"]=True
-    candidate["ready_for_independent_hardware_review"]=True
-    candidate["scope"]="Signed device-bound evidence candidate only; actual physical test independently reviewed, not software-certified"
+    if evidence_root is not None:
+        candidate.update(verify_raw_evidence_bundle(report,evidence_root))
+        candidate["ready_for_independent_hardware_review"]=True
+        candidate["scope"]="Signed device-specific bundle of raw SHA-verified log files; external physical event still requires independent human review"
+    else:
+        candidate["raw_log_digest_verified"]=False
+        candidate["ready_for_independent_hardware_review"]=False
+        candidate["scope"]="Signature valid but original power-cut/serial logs missing; not ready for physical review"
     return candidate
 
 
@@ -161,11 +240,12 @@ def main():
     parser.add_argument("--trusted-public-key",type=Path,required=True)
     parser.add_argument("--trusted-key-sha256",required=True)
     parser.add_argument("--signature",type=Path,required=True)
+    parser.add_argument("--evidence-directory",type=Path,required=True)
     args=parser.parse_args()
     report=json.loads(args.report.read_text())
     result=verify_external_witness(
         report,args.trusted_public_key.read_bytes(),args.trusted_key_sha256,
-        args.signature.read_bytes())
+        args.signature.read_bytes(),evidence_root=args.evidence_directory)
     print(json.dumps(result,indent=2,sort_keys=True))
 
 
