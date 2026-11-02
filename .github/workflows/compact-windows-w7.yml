@@ -6,6 +6,7 @@ on:
       - 'ryzova/compat/windows/arm64_probe*'
       - 'tests/test_compact_windows_w7_arm64.py'
       - 'tests/fixtures/windows_w7_arm64_reference.c'
+      - 'tests/fixtures/windows_w7_arm64_call_reference.c'
       - '.github/workflows/compact-windows-w7.yml'
   workflow_dispatch:
 permissions:

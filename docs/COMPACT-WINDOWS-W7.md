@@ -97,3 +97,14 @@ evidence.
 W7 remains a draft until exact-head tests pass and a complete, scoped
 acceptance review authorizes any merge. Do not overwrite W1–W6 acceptance
 metadata or mark the seven release requirements complete.
+
+## W7.2 bounded compiler ABI / function call probe
+
+A second independent `aarch64-windows-msvc` source uses an explicitly
+non-inlined C function and a volatile stack local; both -O0 and -O2 PE
+builds are executed by the original Ryzova interpreter and must return 37.
+The -O0 binary contains an actual `BL` to another function and a saved
+and restored `X30` link register across 16-byte-aligned SP memory.
+This validates a **finite no-import ARM64 GPR / call / stack subset** only;
+Windows ARM64 TEB/x18, volatile/nonvolatile SIMD, platform exceptions,
+stack probing, imports and native kernel/board execution remain unqualified.

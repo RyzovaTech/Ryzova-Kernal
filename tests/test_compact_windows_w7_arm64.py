@@ -45,6 +45,22 @@ class RealWindowsArm64Tests(unittest.TestCase):
                             "/out:"+str(pe),str(obj)],
                            check=True,capture_output=True,timeout=30)
             cls.real[optimize]=pe.read_bytes()
+        # Separate source with a genuine non-inlined call and volatile
+        # stack variable. On Clang/LLD -O0 it emits BL, saves/restores LR
+        # and crosses the ARM64 16-byte-aligned stack; -O2 tail-branches.
+        cls.calls={}
+        callsource=ROOT/"tests/fixtures/windows_w7_arm64_call_reference.c"
+        for optimize in ("O0","O2"):
+            obj=cls.d/("call-"+optimize+".obj")
+            pe=cls.d/("call-"+optimize+".exe")
+            subprocess.run([clang,"--target=aarch64-windows-msvc",
+                            "-"+optimize,"-c",str(callsource),"-o",str(obj)],
+                           check=True,capture_output=True,timeout=30)
+            subprocess.run([linker,"/machine:arm64","/entry:main",
+                            "/subsystem:console","/nodefaultlib",
+                            "/out:"+str(pe),str(obj)],
+                           check=True,capture_output=True,timeout=30)
+            cls.calls[optimize]=pe.read_bytes()
     @classmethod
     def tearDownClass(cls):cls.tmp.cleanup()
     def run_pe(self,bytes_):
@@ -63,6 +79,27 @@ class RealWindowsArm64Tests(unittest.TestCase):
                 self.assertEqual(self.run_pe(exe)[:3],(0,0,37))
         self.assertGreater(self.run_pe(self.real["O0"])[3],
                            self.run_pe(self.real["O2"])[3])
+
+    def test_compiler_call_link_register_and_stack_abi_subset(self):
+        # The -O0 program saves X30, invokes a separately compiled
+        # non-inlined C function via BL, restores LR and returns 37.
+        # Never conflate this with full Windows ARM64 ABI qualification.
+        for mode,binary in self.calls.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(self.run_pe(binary)[:3],(0,0,37))
+                self.assertGreater(self.run_pe(binary)[3],4)
+        self.assertGreater(self.run_pe(self.calls["O0"])[3],
+                           self.run_pe(self.calls["O2"])[3])
+        blob=self.calls["O0"]
+        header=u32(blob,0x3c)
+        first=header+24+u16(blob,header+20)
+        raw=u32(blob,first+20)
+        size=u32(blob,first+16)
+        insns=[u32(blob,i) for i in range(raw,raw+size-3,4)]
+        self.assertTrue(any((opcode & 0xfc000000)==0x94000000
+                            for opcode in insns),"O0 must exercise real BL")
+        self.assertTrue(any(opcode==0xd65f03c0 for opcode in insns),
+                        "nested call must actually RET")
 
     def test_architecture_import_and_tls_denials(self):
         b=self.real["O0"];p=u32(b,0x3c);op=p+24
