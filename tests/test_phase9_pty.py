@@ -50,6 +50,11 @@ class GuestPtyTests(unittest.TestCase):
         self.assertEqual(guest.stdout,host.stdout)
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
 
+    def test_guest_nonblocking_pty_queue_and_poll_are_bounded(self):
+        result=self.run_guest('nonblock')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',result.stderr)
+
     def test_guest_locked_slave_and_bad_ioctl_denied_without_host_forward(self):
         result=self.run_guest('deny')
         self.assertEqual(result.returncode,0,result.stderr)
