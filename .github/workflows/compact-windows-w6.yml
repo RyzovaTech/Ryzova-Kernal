@@ -1,0 +1,94 @@
+name: Compact Windows W6 native qualification
+on:
+  pull_request:
+    paths:
+      - 'ryzova/compat/windows/**'
+      - 'ryzova/compact/windows-v1-plan.json'
+      - 'scripts/compact_windows_w*.py'
+      - 'scripts/compact_windows_w*.ps1'
+      - 'tests/test_compact_windows_w*.py'
+      - 'tests/fixtures/windows_w*.c'
+      - 'docs/COMPACT-WINDOWS*'
+      - '.github/workflows/compact-windows-w6.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  hosted-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -p 'test_compact_windows_w*.py' -v
+      - env:
+          PHASE5_SANITIZE: '1'
+        run: python -m unittest discover -s tests -p test_phase5_5_pe.py -v
+  windows-reference:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_w3_reference.ps1
+            /scripts/compact_windows_w4_reference.ps1
+            /scripts/compact_windows_w5_reference.ps1
+            /scripts/compact_windows_w6_reference.ps1
+            /tests/fixtures/windows_w3_reference.c
+            /tests/fixtures/windows_w4_reference.c
+            /tests/fixtures/windows_w5_reference.c
+            /tests/fixtures/windows_w6_limits.c
+      - shell: pwsh
+        run: ./scripts/compact_windows_w6_reference.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w6-compiler-fixtures
+          if-no-files-found: error
+          path: |
+            artifacts/compact-windows/w6-fixtures/*.exe
+            artifacts/compact-windows/w6-fixtures/*.json
+            artifacts/compact-windows/w6-fixtures/*.log
+  native-qemu:
+    needs: [hosted-regression, windows-reference]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-w6-compiler-fixtures
+          path: artifacts/w6-fixtures
+      - name: Install isolated QEMU dependencies
+        run: |
+          sudo apt-get -o Acquire::Retries=2 update -qq
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends qemu-system-x86 qemu-utils mtools
+      - name: Verify foundation and pinned native build guest
+        run: |
+          bash scripts/verify-foundation.sh
+          curl --fail --location --retry 3 --max-time 900 https://build.9front.org/release/9front-11952.amd64.qcow2.gz -o 9front.qcow2.gz
+          echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  9front.qcow2.gz' | sha256sum -c -
+          gzip -dc 9front.qcow2.gz > 9front.qcow2
+          qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-windows.qcow2
+      - name: Native 6c build, source kernel reboot, exact PE and resource tests
+        run: python3 scripts/compact_windows_w6_native.py native-windows.qcow2 --bootstrap-gzip 9front.qcow2.gz --fixtures artifacts/w6-fixtures
+      - name: Verify exact source-bound 22-case native QEMU and crash/fault receipts
+        run: python3 scripts/compact_windows_w6_acceptance.py artifacts/compact-windows/w6-native --source-sha "$(git rev-parse HEAD)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-w6-native-evidence
+          path: |
+            artifacts/compact-windows/w6-native/*.json
+            artifacts/compact-windows/w6-native/*.log
+          if-no-files-found: warn

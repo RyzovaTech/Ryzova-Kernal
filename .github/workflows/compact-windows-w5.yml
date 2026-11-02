@@ -1,0 +1,77 @@
+name: Compact Windows W5
+on:
+  pull_request:
+    paths:
+      - 'ryzova/compat/windows/**'
+      - 'ryzova/compact/windows-v1-plan.json'
+      - 'scripts/compact_windows_w[2345]*'
+      - 'tests/test_compact_windows_w[2345].py'
+      - 'tests/fixtures/windows_w5_reference.c'
+      - 'docs/COMPACT-WINDOWS*'
+      - '.github/workflows/compact-windows-w5.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  workload-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -p 'test_compact_windows_w*.py' -v
+      - name: Preserve legacy metadata regressions
+        env:
+          PHASE5_SANITIZE: '1'
+        run: python -m unittest discover -s tests -p test_phase5_5_pe.py -v
+  windows-reference:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - name: Preserve source bytes and excluded Plan 9 index names
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_w5_reference.ps1
+            /tests/fixtures/windows_w5_reference.c
+      - name: Compile and execute six compiler/CRT Windows references
+        shell: pwsh
+        run: ./scripts/compact_windows_w5_reference.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w5-compiler-reference
+          if-no-files-found: error
+          path: |
+            artifacts/compact-windows/w5-reference/*.exe
+            artifacts/compact-windows/w5-reference/native-suite.json
+            artifacts/compact-windows/w5-reference/build.log
+  identical-pe-comparison:
+    needs: [workload-boundaries, windows-reference]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-w5-compiler-reference
+          path: artifacts/w5-reference
+      - name: Compare six identical PEs, CRT API calls and native fault classes
+        run: >-
+          python scripts/compact_windows_w5.py
+          --reference-dir artifacts/w5-reference
+          --receipt artifacts/w5-reference/native-suite.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w5-hosted-comparison
+          if-no-files-found: error
+          path: artifacts/compact-windows/w5/comparison.json
