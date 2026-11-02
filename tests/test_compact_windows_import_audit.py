@@ -77,6 +77,7 @@ class ImportAuditTests(unittest.TestCase):
         image[0x500:0x50b]=b"USER32.DLL\0"
         struct.pack_into("<Q",image,0x520,0x2140)
         image[0x540:0x54e]=b"\x00\x00MessageBoxW\x00"
+        report=discover(bytes(image),PLAN)
         self.assertEqual(report["delay_load_modules"],["user32.dll"])
         self.assertEqual(report["delay_load_imports"],["user32.dll!MessageBoxW"])
         self.assertTrue(report["delay_load_requires_runtime_resolver"])
