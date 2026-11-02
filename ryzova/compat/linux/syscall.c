@@ -370,6 +370,7 @@ static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, i
     enum RyzLinuxNode kind=RYZ_NS_NONE;
     unsigned char data[144], *out;
     uint64_t bytes=0, mode=0, device=0, inode;
+    unsigned int pty_slot=0;
     int code;
     if(by_fd){
         if(key>=RYZ_LINUX_FD_MAX || !p->fds[key].open)return -L_EBADF;
@@ -378,13 +379,27 @@ static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, i
         else inode=(uint64_t)kind+1;
     }else{
         code=guest_path(p,key,&path,&length);if(code)return code;
-        if(p->world){int trailing;code=ryz_linux_path(p,dirfd,key,canonical,1,&trailing);if(code)return code;path=canonical;length=strlen(path)+1;}
-        code=resolve(p,path,length,&kind,&bytes,&inode);if(code)return code;
-        if(kind!=RYZ_NS_EXEC)inode=(uint64_t)kind+1;
+        if(p->world && dirfd==L_AT_FDCWD && strcmp(path,"/dev/ptmx")==0){
+            kind=RYZ_NS_PTY_MASTER;inode=800;
+        }else if(p->world && dirfd==L_AT_FDCWD && strncmp(path,"/dev/pts/",9)==0
+                 && strlen(path)==10 && path[9]>='0'
+                 && path[9]<'0'+(int)RYZ_WORLD_PTYS){
+            pty_slot=(unsigned int)(path[9]-'0');
+            if(!p->world->ptys[pty_slot].used ||
+               p->world->ptys[pty_slot].namespace_id!=p->ns.namespace_id ||
+               p->world->ptys[pty_slot].uid!=p->ns.uid)return -L_ENOENT;
+            kind=RYZ_NS_PTY_SLAVE;inode=801+pty_slot*2;
+        }else{
+            if(p->world){int trailing;code=ryz_linux_path(p,dirfd,key,canonical,1,&trailing);if(code)return code;path=canonical;length=strlen(path)+1;}
+            code=resolve(p,path,length,&kind,&bytes,&inode);if(code)return code;
+            if(kind!=RYZ_NS_EXEC)inode=(uint64_t)kind+1;
+        }
     }
     if(kind==RYZ_NS_SOCKET){mode=0140000|0777;inode=2000+p->fds[key].socket;}
     if(kind==RYZ_NS_PIPE){mode=0010000|0600;inode=500+p->fds[key].pipe;}
-    if(kind==RYZ_NS_PTY_MASTER || kind==RYZ_NS_PTY_SLAVE){mode=0020000|0600;inode=800+(by_fd?p->fds[key].pty:0)*2+(kind==RYZ_NS_PTY_SLAVE);device=kind==RYZ_NS_PTY_MASTER?0x502:0x880;}
+    if(kind==RYZ_NS_PTY_MASTER || kind==RYZ_NS_PTY_SLAVE){mode=0020000|0600;
+        if(by_fd)inode=800+p->fds[key].pty*2+(kind==RYZ_NS_PTY_SLAVE);
+        device=kind==RYZ_NS_PTY_MASTER?0x502:0x880;}
     if(kind==RYZ_NS_EXEC){mode=0100000|0555;if(by_fd){inode=1000+p->fds[key].vnode;bytes=p->world->execs[p->fds[key].vnode].size;}}
     if(kind==RYZ_NS_INPUT){mode=0100000|0444;bytes=p->files->input_size;}
     if(kind==RYZ_NS_OUTPUT){mode=0100000|0222;bytes=p->files->output_size;}
