@@ -121,6 +121,11 @@ def discover(data,plan):
                 if j>=MAX_SYMBOLS or len(symbols)>=MAX_SYMBOLS:
                     raise ValueError("unbounded import thunk table")
                 if value>>63:
+                    # PE32+ ordinal import encoding uses only bit 63 and
+                    # the low 16 bits. Bits 16..62 MUST be zero; treating
+                    # forged high-bit RVAs as ordinals hides invalid input.
+                    if value & 0x7fffffffffff0000:
+                        raise ValueError("invalid PE32+ ordinal import reserved bits")
                     symbol="#"+str(value&0xffff)
                 else:
                     if value>0xffffffff:
