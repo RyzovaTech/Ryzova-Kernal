@@ -42,7 +42,7 @@ class W8VirtualIdentityTests(unittest.TestCase):
         cfg=w3.launch()
         cfg.api_mask=mask
         return self.base.context(cfg,blob=imported_pe(
-            b"\\xc3",names=VIRTUAL_IDS,payload=bytes(512)))
+            b"\xc3",names=VIRTUAL_IDS,payload=bytes(512)))
 
     def invoke(self,ctx,api):
         m,s,arena,heap=ctx
@@ -80,13 +80,18 @@ class W8VirtualIdentityTests(unittest.TestCase):
         cfg=w3.launch()
         cfg.api_mask=(1<<28)-1
         m,arena=self.base.loaded(imported_pe(
-            b"\\xc3",names=VIRTUAL_IDS,payload=bytes(512)))
+            b"\xc3",names=VIRTUAL_IDS,payload=bytes(512)))
         s=w3.Services()
         heap=C.create_string_buffer(4096)
+        original_code=bytes(arena[:256])
+        original_steps=m.instructions
         self.assertEqual(self.lib.cw_attach_services(C.byref(m),C.byref(s),
                          C.byref(cfg),heap,4096),10)
         self.assertFalse(m.services)
-        self.assertEqual(bytes(arena[:4]),bytes(arena[:4]))
+        self.assertEqual(m.instructions,original_steps)
+        self.assertEqual(bytes(arena[:256]),original_code)
+        self.assertEqual(s.calls[28],0)
+        self.assertEqual(s.calls[29],0)
 
 if __name__=="__main__":
     unittest.main()
