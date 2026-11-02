@@ -33,7 +33,7 @@ static int64_t pty_open(RyzLinuxProcess *p,const char *path,uint64_t dirfd,uint6
     }else{
         size_t n=strlen(path);
         if(n!=10 || strncmp(path,"/dev/pts/",9)!=0 || path[9]<'0'
-           || path[9]>='0'+RYZ_WORLD_PTYS)return -L_ENOENT;
+           || path[9]>='0'+(int)RYZ_WORLD_PTYS)return -L_ENOENT;
         slot=(unsigned int)(path[9]-'0');
         if(!p->world->ptys[slot].used || p->world->ptys[slot].locked
            || p->world->ptys[slot].namespace_id!=p->ns.namespace_id
