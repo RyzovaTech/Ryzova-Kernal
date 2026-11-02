@@ -178,6 +178,24 @@ long app_main(long argc,char **argv,char **env)
   length=4;CHECK(!call(55,fd,1,3,(long)&result,(long)&length,0) && result==1);
   result=0;length=2;CHECK(!call(55,fd,1,3,(long)&result,(long)&length,0) && result==1 && length==2);
   CHECK(call(54,fd,1,65535,(long)&value,4,0)==-92);
+ }else if(equal(argv[1],"ipv6-v6only") || equal(argv[1],"ipv6-dualstack-deny")){
+  int domain=10,on=1,off=0,actual=0;unsigned int len=4;
+  fd=C(41,domain,2,0);CHECK(fd>=0);
+  if(equal(argv[1],"ipv6-v6only")){
+   CHECK(!call(54,fd,41,26,(long)&on,4,0));
+   CHECK(!call(55,fd,41,26,(long)&actual,(long)&len,0));
+   CHECK(actual==1 && len==4);
+   CHECK(call(54,fd,41,26,(long)&on,2,0)==-22);
+   address[0]=10;address[23]=1;
+   CHECK(!C(49,fd,address,28));
+   CHECK(call(54,fd,41,26,(long)&on,4,0)==-22);
+  }else{
+   CHECK(call(54,fd,41,26,(long)&off,4,0)==-95);
+   CHECK(call(54,fd,41,26,(long)&on,2,0)==-22);
+   CHECK(call(54,fd,41,26,1,4,0)==-14);
+   CHECK(!call(55,fd,41,26,(long)&actual,(long)&len,0) && actual==1);
+  }
+  CHECK(!C(3,fd,0,0));
  }else if(equal(argv[1],"accept4")){
   address[4]=127;address[7]=1;server=C(41,2,1|04000,0);CHECK(server>=0 && !C(49,server,address,16) && !C(50,server,4,0));
   CHECK(C(43,server,0,0)==-11);length=16;CHECK(!C(51,server,address,&length));

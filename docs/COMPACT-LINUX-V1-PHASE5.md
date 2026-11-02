@@ -27,3 +27,15 @@ A source-built unmodified AMD64 socket fixture verifies both directions
 binds and post-close reuse. This preserves the prohibition on off-link
 transmission and does not qualify DNS, real inter-node UDP, guest TLS, or
 CLX-05 release acceptance.
+
+## CLX-05 — Explicit IPv6-only socket option (additional bounded increment)
+
+The existing AF_INET6 TCP/UDP network namespace intentionally cannot route
+IPv4-mapped addresses. The Linux `IPPROTO_IPV6/IPV6_V6ONLY` (41/26) option
+is now exposed for AF_INET6 sockets only. `setsockopt(...,1)` before bind and
+`getsockopt` returning 1 are verified against the same Linux executable.
+Disabling IPv6-only mode fails closed with `EOPNOTSUPP` rather than claiming
+unsupported dual-stack routing; malformed pointers and option lengths are
+rejected. The behavior is a **restricted Linux profile**, not transparent
+compatibility with all Linux dual-stack programs. It does not qualify DNS,
+real cross-node UDP, IPv6 internet access, or native TLS/NET-PEERS acceptance.

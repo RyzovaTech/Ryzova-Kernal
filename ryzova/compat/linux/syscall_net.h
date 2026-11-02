@@ -508,6 +508,29 @@ static int64_t net_call(RyzLinuxProcess *p,const RyzLinuxRegs *r)
     }
     if(r->rax==54 || r->rax==55){
         unsigned int option=(unsigned int)r->rdx,value=0,count;
+        /* IPv6 is deliberately isolated from IPv4. Expose IPV6_V6ONLY
+         * only in strict enabled mode: disabling it would incorrectly
+         * promise dual-stack IPv4-mapped routing that is not implemented. */
+        if(r->rsi==41 && option==26 && s->domain==10){
+            if(r->rax==54){
+                if(r->r8<4)return -22;
+                if(!buffer(p,r->r10,4,0,&out))return -14;
+                value=(unsigned int)out[0]|((unsigned int)out[1]<<8)|
+                      ((unsigned int)out[2]<<16)|((unsigned int)out[3]<<24);
+                if(value!=1)return -95; /* dual stack not authorized */
+                if(s->bound || s->connected || s->listening)return -22;
+                return 0;
+            }
+            if(!buffer(p,r->r8,4,0,&out) || !buffer(p,r->r8,4,1,&out))return -14;
+            count=(unsigned int)out[0]|((unsigned int)out[1]<<8)|
+                  ((unsigned int)out[2]<<16)|((unsigned int)out[3]<<24);
+            if(count>4)count=4;
+            {unsigned char *value_out=NULL,*length_out=out;
+             if(count && !buffer(p,r->r10,count,1,&value_out))return -14;
+             if(count)encode(value_out,1,count);
+             encode(length_out,count,4);}
+            return 0;
+        }
         if(r->rsi!=1 && !(r->rsi==6 && s->type==1 && (s->domain==2 || s->domain==10) && option==1))return -92;
         if(r->rax==54){
             if(s->external)return -95;
