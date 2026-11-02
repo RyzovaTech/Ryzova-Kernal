@@ -15,7 +15,7 @@ static unsigned char flood[4096];
 static int eq(const char *a,const char *b){while(*a&&*a==*b){a++;b++;}return *a==*b;}
 long app_main(long argc,char **argv,char **env)
 {
- long master,slave,index=99,lock=0,r;unsigned char readback[8],tc[36],size[8];
+ long master,slave,index=99,lock=0,r;unsigned char readback[8],tc[36],size[8],st[144];unsigned int mode;
  unsigned int i;char path[]="/dev/pts/0";
  (void)env;CHECK(argc==3);
  master=C(257,-100,"/dev/ptmx",2);CHECK(master>=0);
@@ -54,6 +54,12 @@ long app_main(long argc,char **argv,char **env)
  path[9]=(char)('0'+index);
  CHECK(!C(16,master,0x40045431,&lock));
  slave=C(257,-100,path,2);CHECK(slave>=0);
+ CHECK(!C(5,slave,st,0));
+ mode=(unsigned int)st[24]|((unsigned int)st[25]<<8)|((unsigned int)st[26]<<16)|((unsigned int)st[27]<<24);
+ CHECK((mode&0170000)==0020000);
+ CHECK(!C(4,path,st,0));
+ mode=(unsigned int)st[24]|((unsigned int)st[25]<<8)|((unsigned int)st[26]<<16)|((unsigned int)st[27]<<24);
+ CHECK((mode&0170000)==0020000);
  CHECK(!C(16,slave,0x5401,tc));
  for(i=0;i<36;i++)tc[i]=0;
  tc[8]=0xb0;tc[23]=1;
