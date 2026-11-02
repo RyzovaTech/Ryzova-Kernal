@@ -142,6 +142,72 @@ def discover(data,plan):
         if not completed:
             raise ValueError("unterminated PE import descriptor array")
 
+    # PE directory 13: delay-load imports. These are audit-only; the
+    # finite Ryzova runtime has NO delay-load resolver. Reading their
+    # names prevents a "fully covered imports" false positive.
+    delay_rva=field(data,optional+112+13*8,4) if count>=14 else 0
+    delay_size=field(data,optional+112+13*8+4,4) if count>=14 else 0
+    if bool(delay_rva)!=bool(delay_size):
+        raise ValueError("partial delay-load directory")
+    delayed_modules=[]
+    delayed=[]
+    if delay_rva:
+        if delay_size<32 or delay_size>(MAX_MODULES+1)*32:
+            raise ValueError("unbounded delay import descriptors")
+        base=image_rva(delay_rva,delay_size)
+        terminated=False
+        for i in range(MAX_MODULES+1):
+            if (i+1)*32>delay_size:
+                break
+            off=base+i*32
+            descriptor=[field(data,off+4*k,4) for k in range(8)]
+            if not any(descriptor):
+                terminated=True
+                break
+            attributes,dll_rva,hmod,iat,int_rva,bound,unload,timestamp=descriptor
+            if (i>=MAX_MODULES or attributes!=1 or not dll_rva
+                    or not hmod or not iat or not int_rva):
+                # Older delay descriptors use absolute VAs; audit refuses
+                # to guess an image base or treat them as RVAs.
+                raise ValueError("unsupported delay import descriptor")
+            image_rva(hmod,8)
+            image_rva(iat,8)
+            name=cstr(data,image_rva(dll_rva)).lower()
+            if not name.endswith(".dll") or len(name)>128 or name in delayed_modules:
+                raise ValueError("invalid/duplicate delay-load module")
+            delayed_modules.append(name)
+            ended=False
+            for j in range(MAX_SYMBOLS+1):
+                value=field(data,image_rva(int_rva+j*8,8),8)
+                if not value:
+                    ended=True
+                    break
+                if j>=MAX_SYMBOLS or len(symbols)+len(delayed)>=MAX_SYMBOLS:
+                    raise ValueError("unbounded delay-load thunk list")
+                if value>>63:
+                    if value & 0x7fffffffffff0000:
+                        raise ValueError("invalid delay-load ordinal reserved bits")
+                    symbol="#"+str(value&0xffff)
+                else:
+                    if value>0xffffffff:
+                        raise ValueError("invalid delay-load name RVA")
+                    hint=image_rva(value,2)
+                    symbol=cstr(data,hint+2)
+                ident=name+"!"+symbol
+                if ident in delayed:
+                    raise ValueError("duplicate delayed import")
+                delayed.append(ident)
+            if not ended:
+                raise ValueError("unterminated delay-load thunk list")
+        if not terminated:
+            raise ValueError("unterminated delay-load descriptors")
+    # A CLR runtime or TLS directory cannot be qualified by mere direct
+    # import coverage; preserve the bounded audit result as non-executable.
+    special_dirs=[]
+    for index in (9,14):
+        if count>index and (field(data,optional+112+index*8,4) or
+                            field(data,optional+116+index*8,4)):
+            special_dirs.append(index)
     supported=sorted(x for x in symbols if x in approved)
     missing=sorted(x for x in symbols if x not in approved)
     return {
@@ -149,12 +215,16 @@ def discover(data,plan):
         "architecture":SUPPORTED_MACHINES[machine],
         "direct_imports":len(symbols),
         "modules":modules,
+        "delay_load_modules":delayed_modules,
+        "delay_load_imports":sorted(delayed),
+        "delay_load_requires_runtime_resolver":bool(delayed_modules),
+        "runtime_directories_unqualified":special_dirs,
         "supported_declared_imports":supported,
         "missing_or_ordinal_imports":missing,
-        "declared_import_profile_covered":not missing,
+        "declared_import_profile_covered":not missing and not delayed_modules and not special_dirs,
         "guest_executable_verified":False,
         "general_windows_compatibility":False,
-        "limitations":"Only direct PE imports; delay-load, transitive DLLs, TEB, resources, exceptions, ISA, runtime and hardware not qualified",
+        "limitations":"Direct and RVA-based delay-load imports are audit-only; delay resolver, transitive DLLs, TEB, resources, exceptions, ISA, runtime and hardware not qualified",
     }
 
 

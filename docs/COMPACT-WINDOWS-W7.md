@@ -108,3 +108,18 @@ and restored `X30` link register across 16-byte-aligned SP memory.
 This validates a **finite no-import ARM64 GPR / call / stack subset** only;
 Windows ARM64 TEB/x18, volatile/nonvolatile SIMD, platform exceptions,
 stack probing, imports and native kernel/board execution remain unqualified.
+
+## W8 direct + delay-load Win32 dependency inventory
+
+The read-only PE audit now decodes standard direct PE32+ thunks and
+RVA-based MSVC `ImgDelayDescr` tables (PE directory 13). Delay-load
+DLL names and imports are reported **separately**; no automatic dynamic
+resolver exists, so even familiar `kernel32.dll` names within a delay
+import do not qualify the application as runnable. Old VA-based delay
+imports, nonzero reserved descriptor/ordinal bits, bad RVAs, unterminated
+thunks, and unbounded module/symbol counts fail closed. Nonempty TLS and
+CLR runtime directories also prevent a false profile-covered result.
+This is a **compatibility inventory**, not an implemented delay loader,
+Win32 networking, GUI/registry, or application execution claim.
+
+PE layout reference: https://learn.microsoft.com/en-us/windows/win32/debug/pe-format

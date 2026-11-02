@@ -65,6 +65,50 @@ class ImportAuditTests(unittest.TestCase):
         self.assertEqual(report["direct_imports"],0)
         self.assertFalse(report["guest_executable_verified"])
 
+    def test_delay_load_imports_do_not_prove_win32_execution(self):
+        # A classic RVA-based ImgDelayDescr (PE directory index 13).
+        # Even if the name matches a declared API, the actual
+        # LoadLibrary/GetProcAddress delay resolver is NOT implemented.
+        image=bytearray(sample())
+        opt=0x80+24
+        struct.pack_into("<II",image,opt+112+13*8,0x20c0,64)
+        struct.pack_into("<8I",image,0x4c0,1,0x2100,0x2110,0x2130,
+                         0x2120,0,0,0)
+        image[0x500:0x50b]=b"USER32.DLL\\0".replace(b"\\0",b"\\x00")
+        struct.pack_into("<Q",image,0x520,0x2140)
+        image[0x540:0x54e]=b"\\x00\\x00MessageBoxW\\x00".decode(
+            "unicode_escape").encode("latin1")
+        report=discover(bytes(image),PLAN)
+        self.assertEqual(report["delay_load_modules"],["user32.dll"])
+        self.assertEqual(report["delay_load_imports"],["user32.dll!MessageBoxW"])
+        self.assertTrue(report["delay_load_requires_runtime_resolver"])
+        self.assertFalse(report["declared_import_profile_covered"])
+        self.assertFalse(report["guest_executable_verified"])
+        self.assertFalse(report["general_windows_compatibility"])
+
+        for mutation in (
+            (0x4c0,0),                 # old VA-based form unsupported
+            (0x4c0,2),                 # reserved descriptor flags
+            (0x4c0+16,0),              # no INT
+            (0x4c0+4,0xfffffff0),     # DLL outside input
+            (0x520,0xffffffffffffffe0), # forged ordinal reserved bits
+        ):
+            at,value=mutation
+            with self.subTest(at=at,value=value),self.assertRaises(ValueError):
+                broken=bytearray(image)
+                struct.pack_into("<Q" if at==0x520 else "<I",broken,at,value)
+                discover(bytes(broken),PLAN)
+
+    def test_clr_and_tls_directories_prevent_unsupported_coverage_claims(self):
+        original=sample()
+        for index in (9,14):
+            with self.subTest(directory=index):
+                img=bytearray(original)
+                struct.pack_into("<II",img,0x80+24+112+index*8,0x2060,16)
+                report=discover(bytes(img),PLAN)
+                self.assertEqual(report["runtime_directories_unqualified"],[index])
+                self.assertFalse(report["declared_import_profile_covered"])
+
     def test_unbounded_or_inconsistent_imports_fail_closed(self):
         b=sample()
         p=0x80;q=p+24
