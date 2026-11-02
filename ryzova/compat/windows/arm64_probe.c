@@ -115,7 +115,9 @@ static int exec_instruction(Machine *m) {
        (word&0xffc00000U)==0xf9000000U ||
        (word&0xffc00000U)==0xf9400000U) {
         /* LDR/STR unsigned offset Wt/Xt (load-store grant checks). */
-        int wide=(word>>30)!=0,isload=!!(word&0x00400000U);
+        /* Size field [31:30] is 10 for W and 11 for X: bit30 alone
+         * differentiates widths. Shifting both bits makes W look 64-bit. */
+        int wide=!!(word&0x40000000U),isload=!!(word&0x00400000U);
         unsigned int bytes=wide?8U:4U,rt=rd;
         uint64_t addr=getreg(m,rn,1)+(((word>>10)&4095U)*bytes);
         if(!range(m,addr,bytes,isload?CW_A64_R:CW_A64_W))
