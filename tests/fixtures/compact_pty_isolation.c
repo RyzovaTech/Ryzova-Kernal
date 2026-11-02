@@ -40,6 +40,7 @@ int main(void)
     memset(ma+256,0,4);
     CHECK(invoke(a,16,(uint64_t)master,0x40045431U,BASE+256)==0);
     CHECK(open_path(foreign,mf,"/dev/pts/0")==-13);
+    CHECK(invoke(foreign,4,BASE,BASE+128,0)==-2); /* no stat metadata leak */
     CHECK(open_path(uid,mu,"/dev/pts/0")==-13);
     slave=open_path(a,ma,"/dev/pts/0");CHECK(slave>=0);
     CHECK(invoke(a,3,(uint64_t)slave,0,0)==0);
