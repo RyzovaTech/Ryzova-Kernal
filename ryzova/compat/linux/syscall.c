@@ -202,6 +202,7 @@ static int64_t duplicate_min(RyzLinuxProcess *p, uint64_t old, uint64_t minimum,
     return -L_EMFILE;
 }
 static int64_t net_io(RyzLinuxProcess *,uint64_t,uint64_t,uint64_t,uint64_t,int);
+static void encode(unsigned char *,uint64_t,unsigned int);
 #include "syscall_pty.h"
 static int64_t vfs_write(RyzLinuxProcess *,uint64_t,uint64_t,uint64_t);
 static int64_t do_write(RyzLinuxProcess *p, uint64_t fd,
