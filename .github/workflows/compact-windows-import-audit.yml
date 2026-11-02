@@ -5,6 +5,7 @@ on:
     paths:
       - 'scripts/compact_windows_import_audit.py'
       - 'tests/test_compact_windows_import_audit.py'
+      - 'tests/fixtures/windows_w8_import_reference.c'
       - '.github/workflows/compact-windows-import-audit.yml'
   workflow_dispatch:
 permissions:
@@ -17,7 +18,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Require real LLVM Windows PE linker
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y lld
+          command -v clang
+          command -v lld-link
       - name: Audit declared imports vs supported Windows console profile
+        env:
+          CW_W8_IMPORT_STRICT: '1'
         run: |
           python3 -m unittest discover -s tests -p 'test_compact_windows_import_audit.py' -v
           python3 -m py_compile scripts/compact_windows_import_audit.py

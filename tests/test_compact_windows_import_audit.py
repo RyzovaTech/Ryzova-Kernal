@@ -2,6 +2,10 @@
 """Direct Windows PE import inventory tests; every result stays non-executable."""
 import copy
 import json
+import os
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 import struct
 import sys
@@ -131,6 +135,52 @@ def byte_swap(data,at,value,width=4):
     x=bytearray(data)
     x[at:at+width]=value.to_bytes(width,"little")
     return bytes(x)
+
+class CompilerBuiltPeImportAuditTests(unittest.TestCase):
+    """Real Windows AMD64 PE import table built using LLVM, not fake PE bytes.
+
+    A locally generated import library is used ONLY as PE metadata. Running
+    the executable or emulating WriteFile is not claimed by this audit.
+    """
+    @classmethod
+    def setUpClass(cls):
+        cls.clang=shutil.which("clang")
+        cls.linker=shutil.which("lld-link")
+        if not cls.clang or not cls.linker:
+            if os.environ.get("CW_W8_IMPORT_STRICT")=="1":
+                raise AssertionError("dedicated W8 real-PE compiler/linker required")
+            raise unittest.SkipTest("Real PE import compiler not installed in legacy workflow")
+        cls.temp=tempfile.TemporaryDirectory()
+        cls.d=Path(cls.temp.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp.cleanup()
+
+    def test_actual_clang_lld_pe_has_declared_writefile_import(self):
+        definition=self.d/"KERNEL32.def"
+        definition.write_text("LIBRARY KERNEL32.dll\\nEXPORTS\\nWriteFile\\n".replace("\\n","\n"))
+        library=self.d/"kernel32.lib"
+        subprocess.run([self.linker,"/machine:x64","/dll","/noentry",
+            "/def:"+str(definition),"/out:"+str(self.d/"kernel32.dll"),
+            "/implib:"+str(library)],check=True,capture_output=True,timeout=30)
+        source=ROOT/"tests/fixtures/windows_w8_import_reference.c"
+        obj=self.d/"main.obj"
+        exe=self.d/"main.exe"
+        subprocess.run([self.clang,"--target=x86_64-windows-msvc",
+            "-O2","-c",str(source),"-o",str(obj)],
+            check=True,capture_output=True,timeout=30)
+        subprocess.run([self.linker,"/machine:x64","/entry:main",
+            "/subsystem:console","/nodefaultlib","/out:"+str(exe),
+            str(obj),str(library)],check=True,capture_output=True,timeout=30)
+        report=discover(exe.read_bytes(),PLAN)
+        self.assertEqual(report["architecture"],"amd64")
+        self.assertEqual(report["direct_imports"],1)
+        self.assertEqual(report["supported_declared_imports"],["kernel32.dll!WriteFile"])
+        self.assertEqual(report["delay_load_imports"],[])
+        self.assertTrue(report["declared_import_profile_covered"])
+        self.assertFalse(report["guest_executable_verified"])
+        self.assertFalse(report["general_windows_compatibility"])
 
 if __name__=="__main__":
     unittest.main()

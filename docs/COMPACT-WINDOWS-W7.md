@@ -138,3 +138,15 @@ their historical indices. The declared W1–W6 stable API subset and seven
 release requirements remain unchanged, and this extension is **not** a
 Windows process/thread creation/scheduler, general compatibility or
 physical hardware qualification.
+
+## W8 compiler-built PE import-inventory differential
+
+The import auditor now includes a **real x86_64 Windows PE32+ binary**
+compiled by Clang and linked with `lld-link` against a metadata-only
+`KERNEL32.dll` import library. The analyzer must independently discover
+`kernel32.dll!WriteFile` and match it to the W1–W6 declared profile.
+This proves parsing of a genuine toolchain-generated thunk/descriptor,
+**not execution**, Win32 API coverage beyond that one import, or actual
+Windows guest compatibility. The dedicated audit CI requires the LLVM
+linker and cannot quietly skip this test; older suites may skip the
+cross-compile test if they do not install a Windows-target linker.
