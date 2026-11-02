@@ -18,10 +18,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Install independent LLVM PE linker
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y lld
       - name: Require real C compiler and ARM64 Windows linker
         run: |
           command -v cc
           command -v clang
           command -v lld-link
       - name: Run real compiler-built ARM64 PE and malformed image/ISA denials
+        env:
+          CW_W7_STRICT: '1'
         run: python3 -m unittest discover -s tests -p 'test_compact_windows_w7_arm64.py' -v
