@@ -11,6 +11,7 @@ static long call(long nr,long a,long b,long c,long d,long e,long f)
 }
 #define C(n,a,b,c) call(n,(long)(a),(long)(b),(long)(c),0,0,0)
 #define CHECK(expr) do{if(!(expr))return __LINE__;}while(0)
+static unsigned char flood[4096];
 static int eq(const char *a,const char *b){while(*a&&*a==*b){a++;b++;}return *a==*b;}
 long app_main(long argc,char **argv,char **env)
 {
@@ -18,11 +19,33 @@ long app_main(long argc,char **argv,char **env)
  unsigned int i;char path[]="/dev/pts/0";
  (void)env;CHECK(argc==3);
  master=C(257,-100,"/dev/ptmx",2);CHECK(master>=0);
+ if(eq(argv[1],"nonblock")){
+  struct {int fd;unsigned short events,revents;} polling;
+  CHECK(!C(72,master,4,04000));
+  CHECK(!C(16,master,0x80045430,&index) && index<2);
+  path[9]=(char)('0'+index);
+  CHECK(!C(16,master,0x40045431,&lock));
+  slave=C(257,-100,path,2|04000);CHECK(slave>=0);
+  CHECK(C(1,master,flood,sizeof flood)==sizeof flood);
+  CHECK(C(1,master,"x",1)==-11);
+  polling.fd=(int)slave;polling.events=1;polling.revents=0;
+  CHECK(C(7,&polling,1,0)==1 && (polling.revents&1));
+  CHECK(C(0,slave,flood,sizeof flood)==sizeof flood);
+  CHECK(C(1,master,"x",1)==1);
+  CHECK(C(0,slave,readback,1)==1 && readback[0]=='x');
+  CHECK(!C(3,slave,0,0) && !C(3,master,0,0));
+  return 0;
+ }
  if(eq(argv[1],"deny")){
   CHECK(C(257,-100,path,2)<0);
   lock=2;CHECK(C(16,master,0x40045431,&lock)==-22);
   lock=0;CHECK(!C(16,master,0x40045431,&lock));
   CHECK(C(16,master,0x5402,1)==-14);
+  for(i=0;i<36;i++)tc[i]=0;
+  tc[8]=0xb0;tc[12]=8;tc[23]=1;
+  CHECK(C(16,master,0x5402,tc)==-95);
+  for(i=0;i<8;i++)size[i]=0;
+  CHECK(C(16,master,0x5414,size)==-22);
   CHECK(C(16,master,0x7777,&lock)==-25);
   CHECK(!C(3,master,0,0));return 0;
  }
