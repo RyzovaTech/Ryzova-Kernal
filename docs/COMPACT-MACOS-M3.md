@@ -60,3 +60,16 @@ The dedicated test corpus includes a *genuine* Clang Darwin x86_64
 `MH_OBJECT` with an unresolved external symbol `_missing_symbol`.
 This illustrates why actual dyld/linker work and kernel trust policies
 remain essential rather than substituting a host implementation.
+
+## Reproducible source-built metadata evidence
+
+`python3 scripts/compact_macos_m3_demo.py` compiles a genuine
+Clang x86_64-apple-macosx13.0 relocatable Mach-O object with an
+unresolved `_missing_symbol`, builds the original Ryzova C symbol
+metadata parser and classifies `_ryz_entry` and `_missing_symbol`
+as defined/undefined without binding. It separately scans an original
+synthetic executable dependency manifest naming `libSystem.B.dylib`
+and literal `/usr/lib/dyld` **without loading either library**.
+The JSON evidence contains independent SHA-256 digests and explicitly
+false flags for dynamic linking, guest execution, and application
+compatibility. The macOS-host MAC-3 CI job archives that result.

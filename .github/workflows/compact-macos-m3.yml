@@ -7,6 +7,7 @@ on:
       - 'ryzova/compat/macos/**'
       - 'tests/test_compact_macos_m3.py'
       - 'tests/test_compact_macos_m3_symbols.py'
+      - 'scripts/compact_macos_m3_demo.py'
       - 'docs/COMPACT-MACOS-M3.md'
       - '.github/workflows/compact-macos-m3.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
       - 'ryzova/compat/macos/**'
       - 'tests/test_compact_macos_m3.py'
       - 'tests/test_compact_macos_m3_symbols.py'
+      - 'scripts/compact_macos_m3_demo.py'
       - 'docs/COMPACT-MACOS-M3.md'
       - '.github/workflows/compact-macos-m3.yml'
   workflow_dispatch:
@@ -44,6 +46,17 @@ jobs:
             ryzova/compat/macos/macho_symbol_meta.c \
             ryzova/compat/macos/macho_symbol_meta_probe.c \
             -o /tmp/ryz-mac3-symbols
+      - name: Reproducible source-built Darwin symbol/import metadata proof
+        run: |
+          mkdir -p artifacts/mac3
+          python3 scripts/compact_macos_m3_demo.py | tee artifacts/mac3/m3-evidence.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac3a-macos-source-provenance
+          path: artifacts/mac3/m3-evidence.json
+          if-no-files-found: ignore
+          retention-days: 14
   mac3a-linux-host-metadata:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
