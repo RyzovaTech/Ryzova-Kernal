@@ -1900,8 +1900,9 @@ hdareset1(Audio *adev, Ctlr *ctlr)
 		pcicfgw8(p, 0x44, pcicfgr8(p, 0x44) & 0xf8);
 	}
 
-	if(p->mem[0].bar & 1){
-		print("hda: bar0 %llux: not memory\n", p->mem[0].bar);
+	if((p->mem[0].bar & 1) || p->mem[0].size == 0
+	|| (p->mem[0].bar & ~0xFULL) == 0){
+		print("hda: invalid or unassigned memory BAR0 %llux\n", p->mem[0].bar);
 		return -1;
 	}
 	ctlr->size = p->mem[0].size;
