@@ -246,6 +246,111 @@ static unsigned int compare_binary32_eflags(uint32_t a,uint32_t b)
         return a>b?CF:0; /* reversed order for negative floats */
     return a<b?CF:0;
 }
+/* IEEE-754 binary64 default round-to-nearest/ties-even soft arithmetic.
+ * Host FPU and long double are never used. Only scalar value semantics
+ * are modeled: MXCSR exception, DAZ/FTZ and nondefault rounding states
+ * are NOT supported by this finite AMD64 interpreter. */
+static uint64_t right_jam64(uint64_t value,unsigned int count)
+{
+    if(count==0)return value;
+    if(count>=64)return value!=0;
+    return (value>>count)|((value&((UINT64_C(1)<<count)-1U))!=0);
+}
+static void unpack64(uint64_t raw,int *exponent,uint64_t *mantissa)
+{
+    unsigned int e=(unsigned int)((raw>>52U)&2047U);
+    uint64_t m=raw&UINT64_C(0x000fffffffffffff);
+    if(e){*exponent=(int)e-1023;*mantissa=m|(UINT64_C(1)<<52U);}
+    else{
+        *exponent=-1022;
+        if(m)while(m<(UINT64_C(1)<<52U)){m<<=1U;--*exponent;}
+        *mantissa=m;
+    }
+}
+static uint64_t pack64_round_even(unsigned int sign,int exponent,uint64_t sig)
+{
+    uint64_t mantissa,low;
+    if(!sig)return (uint64_t)sign<<63U;
+    if(exponent>1023)return ((uint64_t)sign<<63U)|UINT64_C(0x7ff0000000000000);
+    if(exponent< -1022){
+        sig=right_jam64(sig,(unsigned int)(-1022-exponent));
+        exponent=-1022;
+    }
+    low=sig&7U;
+    mantissa=(sig>>3U)+((low>4U)||(low==4U&&((sig>>3U)&1U)));
+    if(mantissa>=(UINT64_C(1)<<53U)){mantissa>>=1U;exponent++;}
+    if(exponent>1023)return ((uint64_t)sign<<63U)|UINT64_C(0x7ff0000000000000);
+    if(exponent<=-1022 && mantissa<(UINT64_C(1)<<52U))
+        return ((uint64_t)sign<<63U)|mantissa;
+    return ((uint64_t)sign<<63U)|((uint64_t)(exponent+1023)<<52U)|
+           (mantissa&UINT64_C(0x000fffffffffffff));
+}
+static int isnan_binary64(uint64_t value)
+{
+    return (value&UINT64_C(0x7ff0000000000000))==UINT64_C(0x7ff0000000000000) &&
+           (value&UINT64_C(0x000fffffffffffff))!=0;
+}
+static uint64_t add_binary64(uint64_t a,uint64_t b)
+{
+    uint64_t ma,mb,sig;
+    unsigned int sa=(unsigned int)(a>>63U),sb=(unsigned int)(b>>63U);
+    unsigned int xa=(unsigned int)((a>>52U)&2047U),xb=(unsigned int)((b>>52U)&2047U);
+    int ea,eb;
+    if(isnan_binary64(a))return a|UINT64_C(0x0008000000000000);
+    if(isnan_binary64(b))return b|UINT64_C(0x0008000000000000);
+    if(xa==2047U || xb==2047U){
+        if(xa==2047U && xb==2047U && sa!=sb)return UINT64_C(0x7ff8000000000000);
+        return xa==2047U?a:b;
+    }
+    unpack64(a,&ea,&ma);unpack64(b,&eb,&mb);
+    if(!ma && !mb)return ((uint64_t)(sa==sb?sa:0))<<63U;
+    if(!ma)return b;
+    if(!mb)return a;
+    if(ea<eb || (ea==eb && ma<mb)){
+        uint64_t temp=ma;int exp=ea;unsigned int sign=sa;
+        ma=mb;mb=temp;ea=eb;eb=exp;sa=sb;sb=sign;
+    }
+    ma<<=3U;mb=right_jam64(mb<<3U,(unsigned int)(ea-eb));
+    if(sa==sb){
+        sig=ma+mb;
+        if(sig&(UINT64_C(1)<<56U)){sig=right_jam64(sig,1);ea++;}
+    }else{
+        sig=ma-mb;
+        if(!sig)return 0;
+        while(sig<(UINT64_C(1)<<55U)){sig<<=1U;ea--;}
+    }
+    return pack64_round_even(sa,ea,sig);
+}
+static uint64_t divide_binary64(uint64_t a,uint64_t b)
+{
+    unsigned int xa=(unsigned int)((a>>52U)&2047U);
+    unsigned int xb=(unsigned int)((b>>52U)&2047U);
+    unsigned int sign=(unsigned int)((a^b)>>63U),i;
+    uint64_t ma,mb,remainder,sig;
+    int ea,eb,exponent;
+    if(isnan_binary64(a))return a|UINT64_C(0x0008000000000000);
+    if(isnan_binary64(b))return b|UINT64_C(0x0008000000000000);
+    if((xa==2047U && xb==2047U) ||
+       ((a&UINT64_C(0x7fffffffffffffff))==0 &&
+        (b&UINT64_C(0x7fffffffffffffff))==0))
+        return UINT64_C(0x7ff8000000000000);
+    if(xa==2047U || (b&UINT64_C(0x7fffffffffffffff))==0)
+        return ((uint64_t)sign<<63U)|UINT64_C(0x7ff0000000000000);
+    if((a&UINT64_C(0x7fffffffffffffff))==0 || xb==2047U)
+        return (uint64_t)sign<<63U;
+    unpack64(a,&ea,&ma);unpack64(b,&eb,&mb);
+    exponent=ea-eb;
+    if(ma<mb){ma<<=1U;exponent--;}
+    remainder=ma-mb;
+    sig=UINT64_C(1)<<55U;
+    for(i=55U;i>0;){
+        i--;
+        remainder<<=1U;
+        if(remainder>=mb){remainder-=mb;sig|=UINT64_C(1)<<i;}
+    }
+    if(remainder)sig|=1U; /* sticky bit for exact RN-even */
+    return pack64_round_even(sign,exponent,sig);
+}
 static uint64_t resultflags(Cpu *c,uint64_t v,unsigned int size)
 {
     unsigned int parity=0, i;
@@ -652,6 +757,25 @@ static int step(Cpu *c)
             rm=decode(c,&reg,&group,16);
             if(c->operand16 && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
             vector_move(c,rm,reg,op2==0x7f);
+        }
+        else if((op2==0x58 || op2==0x5e) &&
+                c->repeat==0xf2 && !c->operand16){
+            /* F2 0F 58 ADDSD, F2 0F 5E DIVSD xmm, xmm/m64.
+             * Only scalar low double changes, all EFLAGS/XMM high bits
+             * remain untouched. Pure unsigned-integer IEEE value model. */
+            uint64_t left=0,right,out;unsigned int i;
+            rm=decode(c,&reg,&group,8);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            for(i=0;i<8;i++)left|=(uint64_t)c->xmm[reg][i]<<(i*8U);
+            if(rm.reg>=0){
+                right=0;
+                for(i=0;i<8;i++)right|=(uint64_t)c->xmm[rm.reg][i]<<(i*8U);
+            }else{
+                right=get(c,rm,8);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+            }
+            out=op2==0x58?add_binary64(left,right):divide_binary64(left,right);
+            for(i=0;i<8;i++)c->xmm[reg][i]=(unsigned char)(out>>(i*8U));
         }
         else if(op2==0x5e && c->repeat==0xf3 && !c->operand16){
             /* F3 0F 5E /r DIVSS xmm, xmm/m32; upper XMM & flags unchanged. */
