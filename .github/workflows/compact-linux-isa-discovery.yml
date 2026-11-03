@@ -40,3 +40,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_phase9_double_compare_trunc_differential.py' -v
       - name: Differential SSE2 PADDQ modular lanes and aligned m128 against Linux
         run: python -m unittest discover -s tests -p 'test_phase9_paddq_differential.py' -v
+      - name: Differential PCMPEQD packed equality, register alias and aligned m128
+        run: python -m unittest discover -s tests -p 'test_phase9_pcmpeqd_differential.py' -v

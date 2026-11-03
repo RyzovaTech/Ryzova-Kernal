@@ -350,3 +350,22 @@ An extended **test-only probe** does not close RESOURCE or APP-PYTHON
 requirements. Unmodified full Python application, stdlib,
 threads, subprocesses, TLS, native QEMU, installation and
 recovery acceptance remain independently required.
+
+## 4K — CPython code-probe PCMPEQD diagnostic increment
+
+The seven frozen target version smokes already pass. Their result is not
+APP-PYTHON qualification: the source-locked CPython code-execution probe
+still reports Ryzova status 3 and `66 0F 76`, the SSE2 PCMPEQD packed
+doubleword comparison. Original Ryzova CPU code now handles only the
+`66 0F 76 /r` XMM/XMM or aligned m128 variant, comparing 4 independent
+little-endian dword lanes and returning all-one or all-zero results. It
+preserves EFLAGS, supports XMM8+ and register self-alias, rejects unaligned
+legacy SSE2 loads and does not claim the unprefixed MMX variant.
+
+`test_phase9_pcmpeqd_differential.py` builds and executes the *same* static
+x86_64 ELF on host Linux and original Ryzova guest CPU interpreter, comparing
+all 72 bytes of results and carry-flag preservation, with independent
+negative misalignment/MMX tests. That micro-test, even after CI success,
+does not complete `AMD64-ABI` or `APP-PYTHON`; those gates require the
+pinned CPython code/stdlib and full application workflows under bounded
+resource budgets and native guest qualification.

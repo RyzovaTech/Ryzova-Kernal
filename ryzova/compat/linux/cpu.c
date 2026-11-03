@@ -968,6 +968,31 @@ static int step(Cpu *c)
             memcpy(out+12,src+4,4);
             memcpy(c->xmm[reg],out,16);
         }
+        else if(op2==0x76 && c->operand16 && !c->repeat){
+            /* 66 0F 76 /r PCMPEQD xmm, xmm/m128 (SSE2).
+             * Four little-endian dwords: equal -> all one bits; otherwise
+             * all zero bits. Read BOTH operands before writing the
+             * destination so xmmN,xmmN alias correctly produces ones.
+             * Legacy m128 requires 16-byte alignment. Never access
+             * an untrusted host pointer or silently accept MMX forms.
+             * This instruction does not change EFLAGS. */
+            unsigned char dst[16],src[16];
+            uint64_t at;
+            unsigned int lane;
+            rm=decode(c,&reg,&group,16);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            memcpy(dst,c->xmm[reg],16);
+            if(rm.reg>=0)memcpy(src,c->xmm[rm.reg],16);
+            else{
+                at=address(c,rm)+c->segment;
+                if((at&15U) || !ryz_memory_access(c->m,at,16,RYZ_READ))
+                    return RYZ_VM_MAP_ERROR;
+                memcpy(src,c->m->bytes+(size_t)(at-c->m->base),16);
+            }
+            for(lane=0;lane<4;lane++)
+                memset(c->xmm[reg]+lane*4U,
+                       memcmp(dst+lane*4U,src+lane*4U,4)==0?0xff:0,4);
+        }
         else if(op2==0x6c && c->operand16 && !c->repeat){
             unsigned char bytes[8];rm=decode(c,&reg,&group,16);
             if(rm.reg>=0)memcpy(bytes,c->xmm[rm.reg],8);
