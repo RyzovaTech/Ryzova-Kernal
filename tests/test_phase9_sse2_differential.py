@@ -265,14 +265,22 @@ unaligned: .long -42
         self.assertEqual(out.returncode,2,out.stderr)
         self.assertIn(b'COMPACT_JOBS_RESULT status=3',out.stderr)
 
-    def test_unimplemented_scalar_double_form_still_fails_closed(self):
+    def test_new_cvtsi2sd_scalar_double_form_executes_bounded_exit(self):
+        # F2 REX.W 0F 2A is now an implemented scalar conversion,
+        # not an invalid opcode. Use a complete program instead of
+        # letting an instruction-only fixture fall into unmapped bytes.
         from test_phase9_image_admission import executable
-        bad=self.root/'unsupported-cvtsi2sd.elf'
-        bad.write_bytes(executable(code=bytes([0xf2,0x48,0x0f,0x2a,0xc1])))
-        actual=subprocess.run([str(self.runner),str(bad)],
+        image=self.root/'supported-cvtsi2sd.elf'
+        code=bytes([
+            0x48,0xc7,0xc1,0xff,0xff,0xff,0xff, # mov rcx,-1
+            0xf2,0x48,0x0f,0x2a,0xc1,           # cvtsi2sd xmm0,rcx
+            0xb8,0x3c,0,0,0,0x31,0xff,0x0f,0x05 # exit(0)
+        ])
+        image.write_bytes(executable(code=code))
+        actual=subprocess.run([str(self.runner),str(image)],
                               capture_output=True,timeout=15)
-        self.assertEqual(actual.returncode,2,actual.stderr)
-        self.assertIn(b'COMPACT_JOBS_RESULT status=3',actual.stderr)
+        self.assertEqual(actual.returncode,0,actual.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',actual.stderr)
 
     def test_pshufd_register_memory_and_self_alias_linux_differential(self):
         # CPython 3.12.10 now reaches 66 0F 70 E8 E5.
