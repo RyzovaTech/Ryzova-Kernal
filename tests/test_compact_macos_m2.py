@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 import unittest
 
-from test_compact_macos_m1 import sample
+from test_compact_macos_m1 import sample, extract_freestanding_text_object
 
 ROOT=Path(__file__).resolve().parents[1]
 C=ROOT/"ryzova/compat/macos"
@@ -99,6 +99,41 @@ class BoundedDarwinServiceTests(unittest.TestCase):
         out=self.check(darwin_syscall_fixture(),0,message=STDOUT,exited=True)
         self.assertNotIn("Hello from Ryzova",out.stdout)
         self.assertIn("steps=8",out.stdout)
+
+    def test_real_clang_darwin_macho_object_hello_capture(self):
+        # Independently assemble a real Darwin-target MH_OBJECT using Clang.
+        # All local RIP-relative references are resolved at object build
+        # time; its __text has no relocations and is extracted fail closed.
+        source=self.root/"darwin-mac2-hello.s"
+        obj=self.root/"darwin-mac2-hello.o"
+        assembly=(
+            ".text\n"
+            ".globl _ryz_entry\n"
+            "_ryz_entry:\n"
+            " movl $0x02000004, %eax\n"
+            " movl $1, %edi\n"
+            " leaq Lmessage(%rip), %rsi\n"
+            " movl $18, %edx\n"
+            " syscall\n"
+            " movl $0x02000001, %eax\n"
+            " xorl %edi, %edi\n"
+            " syscall\n"
+            "Lmessage:\n"
+            ' .ascii "Hello from Ryzova\\\n"\\n'
+        )
+        source.write_text(assembly)
+        build=subprocess.run(
+            ["clang","-target","x86_64-apple-macosx13.0","-c",
+             str(source),"-o",str(obj)],
+            text=True,capture_output=True,timeout=30
+        )
+        self.assertEqual(build.returncode,0,build.stderr)
+        data=obj.read_bytes()
+        self.assertEqual(struct.unpack_from("<I",data,12)[0],1) # MH_OBJECT
+        code=extract_freestanding_text_object(data)
+        self.assertLessEqual(len(code),256)
+        result=self.check(sample(code),0,message=STDOUT,exited=True)
+        self.assertIn("host_syscall_forwarding=0",result.stdout)
 
     def test_default_mac1_mode_still_denies_identical_syscalls(self):
         # Exercise original MAC-1 probe as a separate process, not a mode
