@@ -228,3 +228,32 @@ and invalid guest pointers. All source-built QEMU/driver/security and
 frozen-application tests remain independent. CPython full stdlib,
 multi-module execution, threads, processes, TLS and `CLX-04` acceptance
 remain pending until actual complete end-to-end results are recorded.
+
+## 4F — Next pinned CPython `-c` barrier: CVTSI2SD, MOVSD
+
+After the COMISS increment, the next full source-pinned CPython
+`-c` probe advanced from **242,806** to **245,912** guest
+instruction steps but still failed with VM status 3 at RIP
+`58ac9d`. The SHA-verified main executable's candidate bytes begin
+`F2 48 0F 2A`, the signed quadword-to-double `CVTSI2SD` instruction.
+This is a candidate association; it does not alone prove why Python stops.
+
+The interpreter now supports `F2 [REX.W] 0F 2A` for
+signed r/m32 and r/m64 with pure-integer IEEE-754 binary64 encoding
+and default round-to-nearest ties-to-even. Upper 64 XMM bits and
+EFLAGS are preserved. `F2 0F 10/11` MOVSD now copies exactly 64
+bits and distinguishes memory-load zeroing of the upper half from
+register-to-register preservation; memory stores cannot overwrite
+the adjacent eight bytes.
+
+A single static AMD64 assembly ELF verifies both host Linux and the
+Ryzova interpreter byte-for-byte using extreme signed integers,
+2^53 tie-breaking, negative conversions, register/memory operand
+paths and memory-write boundaries. Unmapped guest memory access
+must fail closed. Nondefault MXCSR rounding and sticky FP exception
+semantics remain **unimplemented**, not silently declared correct.
+
+**Do not close APP-PYTHON, AMD64-ABI or overall Linux V1 gates** on
+this bounded subset. Only a fresh real CPython `-c` run and complete
+stdlib, filesystem, threads/processes and TLS application workflows
+can supply further acceptance evidence.
