@@ -4,6 +4,7 @@
 All executions use synthetic bounded MH_EXECUTE fixture code. These tests
 prove neither native Ryzova guest integration nor genuine macOS app support.
 """
+import json
 import os
 from pathlib import Path
 import struct
@@ -74,6 +75,25 @@ class BoundedDarwinServiceTests(unittest.TestCase):
             self.assertIn("capture_bytes="+str(len(message)),out.stdout)
             self.assertIn("MAC2_CAPTURE_HEX "+message.hex(),out.stdout)
         return out
+
+    def test_exact_opt_in_simulation_contract_is_not_native_runtime(self):
+        contract=json.loads((C/"mac2-contract.json").read_text(encoding="utf-8"))
+        self.assertEqual(contract["schema"],"ryzova-compact-macos-m2a/v1")
+        self.assertEqual(contract["phase"],"MAC-2A")
+        self.assertTrue(contract["default_mac1_syscalls_denied"])
+        self.assertEqual(contract["enabled_only_with_explicit_api"],"ryz_mac2_run")
+        self.assertEqual([row["number_hex"] for row in contract["simulated_syscalls"]],
+                         ["0x02000001","0x02000004"])
+        self.assertEqual(contract["captured_output_max_bytes"],256)
+        self.assertEqual(contract["maximum_guest_steps"],4096)
+        for key in (
+            "native_ryzova_guest_verified","real_macos_application_executed",
+            "dyld_libsystem_implemented","full_mach_ipc_implemented",
+            "host_syscall_forwarding","host_filesystem_network_access",
+            "mac2_phase_complete","production_release_allowed"
+        ):
+            with self.subTest(capability=key):
+                self.assertIs(contract[key],False)
 
     def test_hello_world_is_captured_not_forwarded_to_host(self):
         out=self.check(darwin_syscall_fixture(),0,message=STDOUT,exited=True)
