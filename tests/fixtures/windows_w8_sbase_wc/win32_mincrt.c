@@ -22,7 +22,7 @@ static void put_bytes(HANDLE out,const char *s,unsigned int n) {
     while(off<n) {
         DWORD done=0;
         if(!WriteFile(out,s+off,(DWORD)(n-off),&done,0) || !done)
-            ExitProcess(2);
+            ExitProcess(32); /* bounded Windows output failure */
         off+=(unsigned int)done;
     }
 }
@@ -68,7 +68,7 @@ static int put_decimal(size_t val) {
  * single literal spaces. Unknown libc formatting fails closed. */
 int cw_w8_printf(const char *format,...) {
     va_list ap;int n=0;const char *p;
-    if(!format)ExitProcess(2);
+    if(!format)ExitProcess(33);
     va_start(ap,format);
     for(p=format;*p;p++) {
         if(*p!='%')n+=(cw_w8_putchar(*p)>=0);
@@ -76,7 +76,7 @@ int cw_w8_printf(const char *format,...) {
             n+=put_decimal(va_arg(ap,size_t));p+=2;
         }else if(p[1]=='s') {
             n+=put_string(va_arg(ap,const char*));p++;
-        }else ExitProcess(2);
+        }else ExitProcess(34); /* unexpected CRT formatting */
     }
     va_end(ap);
     return n;
@@ -94,8 +94,8 @@ int fshut(FILE *stream,const char *name) {
 int efgetrune(Rune *value,FILE *stream,const char *name) {
     unsigned char c;DWORD got=0;
     (void)name;
-    if(!value || stream!=cw_w8_stdin())ExitProcess(2);
-    if(!ReadFile(GetStdHandle(STD_INPUT_HANDLE),&c,1,&got,0))ExitProcess(2);
+    if(!value || stream!=cw_w8_stdin())ExitProcess(35); /* invalid stream token */
+    if(!ReadFile(GetStdHandle(STD_INPUT_HANDLE),&c,1,&got,0))ExitProcess(36); /* inherited stdin failed */
     if(got==0)return 0;
     if(c>=128)fail_ascii();
     *value=(Rune)c;
