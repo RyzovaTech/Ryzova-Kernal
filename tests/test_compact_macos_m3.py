@@ -169,6 +169,23 @@ class Mach3MetadataTests(unittest.TestCase):
         r=subprocess.run([str(self.probe),str(f)],capture_output=True,text=True)
         self.assertEqual(r.returncode,65)
 
+    def test_overlapping_segments_and_unmapped_executable_entry_denied(self):
+        valid=program([string_command(0x0c,"/usr/lib/libSystem.B.dylib")])
+        bad=bytearray(valid)
+        # LC_MAIN entry offset beyond file-backed RX segment.
+        struct.pack_into("<Q",bad,32+72+8,0x2000)
+        self.denied(bad)
+        second=struct.pack("<II16sQQQQIIII",0x19,72,
+                           b"__COPY".ljust(16,bytes(1)),BASE,4096,
+                           0,4096,1,1,0,0)
+        self.denied(program([second]))
+        # Two RX mappings backed by the same entry bytes are ambiguous,
+        # regardless of whether their virtual address ranges overlap.
+        alias=struct.pack("<II16sQQQQIIII",0x19,72,
+                          b"__ALIAS".ljust(16,bytes(1)),BASE+4096,4096,
+                          0,4096,5,5,0,0)
+        self.denied(program([alias]))
+
     def test_deterministic_mutations_never_crash_host(self):
         rng=random.Random(0x4d414333)
         source=program([string_command(0x0c,"/usr/lib/libSystem.B.dylib")])
