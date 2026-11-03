@@ -60,6 +60,7 @@ def accept(native, windows, pe, fresh_log, source_commit):
         ("expected_stdout_sha256",sha256(EXPECTED)),
         ("native_qemu_same_windows_pe_verified",True),
         ("native_qemu_stdin_stdout_exit_verified",True),
+        ("native_qemu_implicit_stdin_denied_verified",True),
         ("transitive_windows_runtime_qualified",False),
         ("windows_v1_release_qualified",False),
         ("physical_hardware_qualified",False),
@@ -80,6 +81,13 @@ def accept(native, windows, pe, fresh_log, source_commit):
     actual=parse_cases(log,spec)["w8wc"]
     if actual!=w8.get("native_qemu_case"):
         raise ValueError("QEMU serial and W8 JSON disagree")
+    denied_spec={"w8wc_denied":{"status":0,"code":36,"out":"","err":""}}
+    denied=parse_cases(log,denied_spec)["w8wc_denied"]
+    if denied!=w8.get("native_qemu_missing_stdin_denied_case"):
+        raise ValueError("native guest stdin-denied serial receipt mismatch")
+    for api in ("GetStdHandle","ReadFile","GetLastError","ExitProcess"):
+        if denied.get("calls",{}).get(api,0)<1:
+            raise ValueError("ungranted stdin was silently inherited: "+api)
     for api in ("ReadFile","WriteFile","GetStdHandle","ExitProcess"):
         if actual.get("calls",{}).get(api,0)<1:
             raise ValueError("missing original Win32 user ABI call: "+api)
@@ -92,7 +100,8 @@ def accept(native, windows, pe, fresh_log, source_commit):
         "native_guest_stdout_sha256":sha256(EXPECTED),
         "source_built_amd64_kernel_qemu_verified":True,
         "genuine_mit_sbase_wc_ascii_profile_qualified":True,
-        "native_cases":1,
+        "native_cases":2,
+        "original_windows_PE_denied_implicit_stdin":True,
         "existing_w6_22_case_gate_unchanged":True,
         "full_windows_v1_release_qualified":False,
         "physical_hardware_qualified":False,
