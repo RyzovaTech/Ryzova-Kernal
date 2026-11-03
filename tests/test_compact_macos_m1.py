@@ -125,12 +125,11 @@ class MachoMac1Tests(unittest.TestCase):
     def test_unknown_and_truncated_instructions_denied(self):
         self.check(sample(b"\xf4\xc3"),4)
         self.check(sample(b"\x83\xd0\x01\xc3"),4)
-        code=sample(b"\x90")
-        # An instruction at the end of the file-backed __TEXT region
-        code[ENTRY]=0xeb
-        code[ENTRY+1]=0xff
-        self.check(code,3,steps=5) if False else None
-        # Truncated immediate must not borrow bytes from mapped BSS.
+        # A partial MOV immediate cannot fetch its operand from zero-filled
+        # memory beyond the executable segment's file-backed bytes.
+        truncated=sample(b"\xb8\xc3")
+        struct.pack_into("<Q",truncated,32+48,ENTRY+2)
+        self.check(truncated,3)
 
     def test_infinite_jmp_cannot_exhaust_host_cpu(self):
         r=self.check(sample(b"\xeb\xfe"),6,steps=32)
@@ -164,7 +163,7 @@ class MachoMac1Tests(unittest.TestCase):
         x=sample(b"\xc3")
         struct.pack_into("<Q",x,32+24,0x0000800000000000)
         self.check(x,1)
-        self.check(b"not a Mach-O",1)
+        self.check(b"not a Mach-O"+bytes(32),1)
         too_big=sample(b"\xc3")
         too_big.extend(bytes(4*1024*1024+1-len(too_big)))
         file=self.root/"too-big.macho"
