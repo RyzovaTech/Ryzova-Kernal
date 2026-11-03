@@ -139,6 +139,41 @@ class MachoMac1Tests(unittest.TestCase):
         result=self.check(sample(code),0,eax=42)
         self.assertIn("test_return=1",result.stdout)
 
+    def test_nested_call_matches_native_linux_integer_return(self):
+        # Linux's _start wrapper invokes the exact same instruction bytes.
+        # Only the *reference* ELF wrapper performs an exit syscall;
+        # the Mach-O interpreter itself has no syscall passthrough.
+        import sys
+        if sys.platform != "linux":
+            self.skipTest("reference uses Linux process exit ABI")
+        code=bytes([0x55,0x48,0x89,0xe5,0xe8,2,0,0,0,0x5d,0xc3,
+                    0xb8,40,0,0,0,0x83,0xc0,2,0xc3])
+        asm=self.root/"mac1-reference.S"
+        exe=self.root/"mac1-reference"
+        encoded=",".join("0x%02x"%byte for byte in code)
+        asm.write_text(
+            ".intel_syntax noprefix\\n"
+            ".global _start\\n"
+            ".text\\n"
+            "_start:\\n"
+            "  call _test\\n"
+            "  mov edi,eax\\n"
+            "  mov eax,60\\n"
+            "  syscall\\n"
+            "_test:\\n"
+            "  .byte "+encoded+"\\n"
+        )
+        compiler=os.environ.get("PHASE5_CC","cc")
+        result=subprocess.run(
+            [compiler,"-nostdlib","-static","-no-pie",str(asm),"-o",str(exe)],
+            text=True,capture_output=True,timeout=30)
+        if result.returncode:
+            raise AssertionError(result.stderr)
+        native=subprocess.run([str(exe)],text=True,capture_output=True,timeout=5)
+        self.assertEqual(native.returncode,42,native.stdout+native.stderr)
+        guest=self.check(sample(code),0,eax=native.returncode)
+        self.assertIn("test_return=1",guest.stdout)
+
     def test_stack_local_variables_and_leave(self):
         # Store/reload a local dword at [rbp-4] within the private RW stack.
         code=bytes([
@@ -154,6 +189,15 @@ class MachoMac1Tests(unittest.TestCase):
         # Each iteration pushes 2 qwords; stack exhaustion must be
         # detected before this branch exceeds the 4096-step CPU limit.
         self.check(sample(bytes([0x55,0x55,0xeb,0xfc])),9,steps=4096)
+
+    def test_recursive_call_depth_limit_and_noncanonical_frame_denial(self):
+        # CALL -5 recursively targets itself. Depth limit must fire before
+        # test/host process stack exhaustion or infinite execution.
+        self.check(sample(bytes([0xe8,0xfb,0xff,0xff,0xff])),9,steps=128)
+        # Invalid stack adjustment is explicitly outside the finite ABI.
+        self.check(sample(bytes([0x48,0x83,0xec,0xff,0xc3])),4)
+        # MOV EAX,[RBP-1] cannot borrow a host pointer: RBP starts at zero.
+        self.check(sample(bytes([0x8b,0x45,0xff,0xc3])),7)
 
     def test_synthetic_stack_never_executes_macho_controlled_code(self):
         # Real Mach-O segment at fixed private stack address is not admitted
