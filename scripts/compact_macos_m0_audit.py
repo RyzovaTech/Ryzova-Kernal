@@ -81,8 +81,9 @@ def inspect(root, contract=None):
     if not root.is_dir():
         raise ValueError("repository directory missing")
     contract_path = root / CONTRACT
-    if not contract_path.is_file() or contract_path.is_symlink():
-        raise ValueError("contract missing or symlinked")
+    if (not contract_path.is_file() or contract_path.is_symlink() or
+            not contract_path.resolve().is_relative_to(root)):
+        raise ValueError("contract missing or redirected outside root")
     if contract is None:
         contract = json.loads(contract_path.read_text(encoding="utf-8"))
     validate_contract(contract)
