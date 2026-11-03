@@ -1,0 +1,225 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+"""W8: compile genuine MIT sbase wc source on Windows and audit its PE.
+
+Original upstream wc.c/utf.h/arg.h/LICENSE are kept byte-for-byte at pinned
+Git blob IDs; only a separately labeled, ASCII-only Windows-host bridge is
+Ryzova-authored. This is not yet a native Ryzova/9P/Win32 app acceptance.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import re
+import subprocess
+
+from compact_windows_import_audit import discover
+
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURE = ROOT / "tests/fixtures/windows_w8_sbase_wc"
+UPSTREAM = "michaelforney/sbase"
+UPSTREAM_COMMIT = "b30fb56804bfed69b45ef0e944d2e029e4d26258"
+GIT_BLOBS = {
+    "wc.c": "c89d19f8d90073ca99462a06e679ab1816dfbd5c",
+    "arg.h": "0b23c53a9d2bcffc92e0e6db208ec65d7f13438d",
+    "utf.h": "8e0707a7028acf8ed5eb4b5deea685de1d5e7bb4",
+    "LICENSE": "bbbfa8c5e7d4b14a8ccc3bd53388a5232eb02fe8",
+}
+SCHEMA = "compact-windows-w8-sbase-wc-host/v1"
+CASES = (
+    ("default", (), b"alpha beta\nsecond\n", b"2 3 18\n"),
+    ("lines", ("-l",), b"a b\nc\n", b"2\n"),
+    ("words", ("-w",), b"a b\nc\n", b"3\n"),
+    ("bytes", ("-c",), b"a b\nc\n", b"6\n"),
+)
+
+
+def git_blob_sha(blob):
+    if type(blob) is not bytes:
+        raise TypeError("blob bytes required")
+    return hashlib.sha1(b"blob " + str(len(blob)).encode() + b"\0" + blob).hexdigest()
+
+
+def verify_upstream_sources(directory=FIXTURE):
+    directory = Path(directory)
+    observed = {}
+    for name, sha in GIT_BLOBS.items():
+        p = directory / "upstream" / name
+        if not p.is_file() or p.is_symlink() or p.stat().st_size > 16384:
+            raise ValueError("missing or oversized original upstream source " + name)
+        blob = p.read_bytes()
+        if git_blob_sha(blob) != sha:
+            raise ValueError("original upstream Git blob drift: " + name)
+        observed[name] = {
+            "git_blob_sha1": sha, "sha256": hashlib.sha256(blob).hexdigest(),
+            "bytes": len(blob),
+        }
+    if b"MIT License" not in (directory / "upstream/LICENSE").read_bytes():
+        raise ValueError("upstream MIT license missing")
+    for name in ("bridge.c", "util.h"):
+        p = directory / name
+        if not p.is_file() or p.is_symlink() or p.stat().st_size > 16384:
+            raise ValueError("missing bounded platform bridge")
+        observed[name] = {"sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+                          "bytes": p.stat().st_size}
+    return observed
+
+
+def verify_case(name, outcome):
+    expected = next((case[3] for case in CASES if case[0] == name), None)
+    if expected is None:
+        raise ValueError("unknown named sbase wc reference case")
+    if (type(outcome.returncode) is not int or outcome.returncode != 0 or
+            type(outcome.stdout) is not bytes or type(outcome.stderr) is not bytes or
+            len(outcome.stdout) > 4096 or len(outcome.stderr) > 4096):
+        raise ValueError("sbase wc reference failed: " + name)
+    normalized = outcome.stdout.replace(b"\r\n", b"\n")
+    if normalized != expected or outcome.stderr:
+        raise ValueError("sbase wc output mismatch: " + name)
+    return {
+        "case": name, "host_passed": True, "exit_code": 0,
+        "stdout_sha256": hashlib.sha256(outcome.stdout).hexdigest(),
+        "stdout_text_lf": normalized.decode("ascii"),
+        "stdout_bytes": len(outcome.stdout),
+    }
+
+
+def compile_windows(cl_path, root, output):
+    """Invoke Microsoft x64 tools, never arbitrary downloaded executables."""
+    if os.name != "nt" or platform.machine().lower() not in ("amd64", "x86_64"):
+        raise RuntimeError("Microsoft Windows AMD64 host compiler required")
+    if type(cl_path) is not str or not cl_path:
+        raise RuntimeError("Visual Studio vcvars64.bat path required")
+    vcvars = Path(cl_path)
+    if not vcvars.is_file() or vcvars.name.lower() != "vcvars64.bat":
+        raise RuntimeError("Visual Studio vcvars64.bat missing")
+    output.mkdir(parents=True, exist_ok=True)
+    executable = output / "sbase-wc.exe"
+    source = root / "upstream/wc.c"
+    bridge = root / "bridge.c"
+    batch = output / "build.cmd"
+    # Use absolute fixed source paths; every source byte is provenance checked.
+    # /MT is deliberate to reduce external CRT DLL dependencies, but native
+    # Ryzova PE import/ISA admission must still be measured independently.
+    parts = [
+        "@echo off", 'call "' + str(vcvars) + '"',
+        "if errorlevel 1 exit /b 1",
+        'cl /nologo /O1 /W3 /MT /D_CRT_SECURE_NO_WARNINGS ' +
+        '/I"' + str(root) + '" /I"' + str(root / "upstream") + '" ' +
+        '"' + str(source) + '" "' + str(bridge) + '" ' +
+        '/Fe:"' + str(executable) + '"',
+        "if errorlevel 1 exit /b 1",
+        "exit /b 0",
+    ]
+    batch.write_bytes(("\r\n".join(parts) + "\r\n").encode("utf-8"))
+    done = subprocess.run(["cmd.exe", "/d", "/c", str(batch)],
+                          cwd=output, capture_output=True, timeout=150)
+    if done.returncode != 0 or not executable.is_file():
+        raise RuntimeError("MSVC source build failed: " +
+                           (done.stdout + done.stderr)[-3500:].decode("utf-8", "replace"))
+    return executable
+
+
+def run_reference(app, plan, provenance, commit, runner_version):
+    if type(commit) is not str or re.fullmatch(r"[a-f0-9]{40}", commit) is None:
+        raise ValueError("exact source commit missing")
+    if type(runner_version) is not str or not 1 <= len(runner_version) <= 100:
+        raise ValueError("Windows image runner version missing")
+    if not app.is_file() or app.is_symlink() or app.stat().st_size > 4*1024*1024:
+        raise ValueError("produced PE exceeds bounded loader input size")
+    image = app.read_bytes()
+    cases = []
+    for name, args, data, _ in CASES:
+        outcome = subprocess.run([str(app), *args], input=data,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 timeout=12, check=False)
+        cases.append(verify_case(name, outcome))
+    # Non-ASCII is deliberately UNSUPPORTED by the bridge, not silently counted.
+    rejected = subprocess.run([str(app), "-m"], input=b"\xc3\xa9\n",
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              timeout=12, check=False)
+    if rejected.returncode == 0 or b"non-ASCII" not in rejected.stderr:
+        raise ValueError("host ASCII-only bridge failed closed")
+    audit = None
+    parser_rejection = None
+    try:
+        audit = discover(image, plan)
+        if audit.get("architecture") != "amd64":
+            raise ValueError("not AMD64 PE")
+    except ValueError as exc:
+        parser_rejection = str(exc)[:256]
+    direct = audit.get("direct_imports") if audit else None
+    missing = audit.get("missing_or_ordinal_imports", []) if audit else []
+    blockers = ["Original named application not run in native Ryzova QEMU",
+                "Platform bridge is ASCII-only and uses MSVC CRT on the Windows host",
+                "Transitive Windows DLL/CRT imports and instruction paths not qualified"]
+    if parser_rejection:
+        blockers.append("PE parser rejected Windows compiler output: " + parser_rejection)
+    if direct is not None and direct > 32:
+        blockers.append("Original native PE 32-import cap exceeded")
+    if missing:
+        blockers.append(str(len(missing)) + " missing Win32/CRT imports")
+    return {
+        "schema": SCHEMA,
+        "upstream_repo": UPSTREAM,
+        "upstream_commit": UPSTREAM_COMMIT,
+        "upstream_provenance": provenance,
+        "license": "MIT, original complete sbase LICENSE included",
+        "source_commit": commit,
+        "windows_os_version": platform.version(),
+        "runner_image_version": runner_version,
+        "windows_reference_qualified": True,
+        "named_workloads": cases,
+        "unsupported_non_ascii_rejected": True,
+        "pe_sha256": hashlib.sha256(image).hexdigest(),
+        "pe_bytes": len(image),
+        "pe_direct_imports": direct,
+        "pe_import_modules": audit.get("modules", []) if audit else [],
+        "pe_missing_direct_imports": missing,
+        "pe_parser_rejection": parser_rejection,
+        "native_ryzova_guest_executed": False,
+        "native_guest_execution_qualified": False,
+        "transitive_runtime_qualified": False,
+        "windows_v1_release_qualified": False,
+        "blocking_reasons": blockers,
+    }
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--output", type=Path, required=True)
+    args = ap.parse_args()
+    provenance = verify_upstream_sources()
+    if os.name != "nt":
+        raise RuntimeError("native Windows Server AMD64 reference runner required")
+    root = os.environ.get("ProgramFiles(x86)")
+    if not root:
+        raise RuntimeError("Visual Studio installation not found")
+    vswhere = Path(root) / "Microsoft Visual Studio/Installer/vswhere.exe"
+    found = subprocess.run([str(vswhere), "-latest", "-products", "*",
+                            "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                            "-property", "installationPath"],
+                           capture_output=True, timeout=15, check=True, text=True).stdout.strip()
+    if not found:
+        raise RuntimeError("MSVC toolchain missing")
+    output = ROOT / "artifacts/windows/w8-sbase"
+    app = compile_windows(str(Path(found)/"VC/Auxiliary/Build/vcvars64.bat"),
+                          FIXTURE, output)
+    plan = json.loads((ROOT/"ryzova/compact/windows-v1-plan.json").read_text())
+    report = run_reference(app, plan, provenance, os.environ.get("GITHUB_SHA", ""),
+                           os.environ.get("ImageVersion", ""))
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(report, indent=2, sort_keys=True)+"\n",
+                           encoding="utf-8")
+    print(json.dumps({
+        "name": "sbase wc (original MIT source, ASCII-only bridge)",
+        "reference_passed": report["windows_reference_qualified"],
+        "workloads": len(report["named_workloads"]),
+        "pe_bytes": report["pe_bytes"],
+        "pe_direct_imports": report["pe_direct_imports"],
+        "missing_direct_count": len(report["pe_missing_direct_imports"]),
+        "missing_import_sample": report["pe_missing_direct_imports"][:20],
+        "native_guest_execution_qualified": False,
+        "windows_v1_release_qualified": False,
+    }, sort_keys=True))
