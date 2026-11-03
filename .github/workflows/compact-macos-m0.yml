@@ -69,13 +69,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: macOS host compiles only original Ryzova metadata parser
+      - name: macOS Clang UBSan validates Mach-O metadata and static authority
         env:
           PHASE5_CC: clang
+          PHASE5_SANITIZE: '1'
         run: |
           python3 -m unittest discover -s tests -p 'test_phase5_7_macho.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m0.py' -v
           python3 scripts/compact_macos_m0_audit.py --output artifacts/mac0/m0-audit.json
+          clang -std=c11 -ffreestanding -fno-builtin -O2 -Wall -Wextra -Werror -pedantic -c ryzova/compat/macos/macho64.c -o /tmp/ryzova-mac0-macho.o
+          python3 -m py_compile scripts/compact_macos_m0_audit.py
       - name: Record no native Ryzova macOS app execution claim
         run: |
           python3 -c 'import json; r=json.load(open("artifacts/mac0/m0-audit.json")); assert r["application_execution_verified"] is False and r["production_release_allowed"] is False'
