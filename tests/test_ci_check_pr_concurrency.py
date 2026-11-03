@@ -41,6 +41,14 @@ class CIQueuePolicyTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     verify(root)
 
+    def test_duplicate_workflow_names_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            for file in ("a.yml", "b.yml"):
+                write(root, file, ["name: Same Workflow", "on:", "  pull_request:",
+                    "concurrency:", "  " + GROUP, "  " + CANCEL, "jobs:"])
+            with self.assertRaises(ValueError):
+                verify(root)
+
     def test_no_concurrency_and_duplicate_concurrency_rejected(self):
         with tempfile.TemporaryDirectory() as root:
             write(root,"a.yml",["name: A","on:","  pull_request:","jobs:"])

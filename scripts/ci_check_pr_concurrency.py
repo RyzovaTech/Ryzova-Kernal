@@ -12,11 +12,18 @@ def verify(root):
     paths = sorted((Path(root) / ".github" / "workflows").glob("*.yml"))
     if not paths:
         raise ValueError("missing Actions workflows")
-    checked, errors = [], []
+    checked, errors, workflow_names = [], [], {}
     for path in paths:
         lines = path.read_text(encoding="utf-8").splitlines()
         if not any(s.strip() == "pull_request:" for s in lines):
             continue
+        names = [s[5:].strip() for s in lines if s.startswith("name:")]
+        if len(names) != 1 or not names[0]:
+            errors.append(path.name + ": missing or duplicate display name")
+        elif names[0].lower() in workflow_names:
+            errors.append(path.name + ": display name collision with " + workflow_names[names[0].lower()])
+        else:
+            workflow_names[names[0].lower()] = path.name
         roots = [i for i, s in enumerate(lines) if s == "concurrency:"]
         if len(roots) != 1:
             errors.append(path.name + ": missing or duplicate root concurrency")
