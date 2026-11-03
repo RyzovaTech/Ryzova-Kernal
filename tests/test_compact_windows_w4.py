@@ -87,13 +87,13 @@ class WindowsW4Tests(unittest.TestCase):
     def test_trusted_bounded_stdin_grant_ReadFile_and_default_deny(self):
         # Explicit input token is private to one guest; 9P file grants and
         # inherited host stdin remain isolated. Default launch still denies.
-        source=imported_pe(b'\\xc3',names=(*FILE_IMPORTS,'GetStdHandle'),payload=bytes(512))
+        source=imported_pe(b'\xc3',names=(*FILE_IMPORTS,'GetStdHandle'),payload=bytes(512))
         first=self.context(blob=source,stdin_grant=True)
         second=self.context(blob=source)
         self.lib.cw_attach_console_input.argtypes=[
             C.POINTER(w2.Machine),C.c_void_p,C.c_size_t]
         self.lib.cw_attach_console_input.restype=C.c_int
-        data=C.create_string_buffer(b'orange\\napple\\n')
+        data=C.create_string_buffer(b'orange\napple\n')
         self.assertEqual(self.lib.cw_attach_console_input(
             C.byref(first[0]),data,13),0)
         self.assertEqual(self.lib.cw_attach_console_input(
@@ -108,7 +108,7 @@ class WindowsW4Tests(unittest.TestCase):
             length=struct.unpack('<I',self.read(first,count,4))[0]
             return result,length,self.read(first,address,length)
         self.assertEqual(read(6),(1,6,b'orange'))
-        self.assertEqual(read(20),(1,7,b'\\napple\\n'))
+        self.assertEqual(read(20),(1,7,b'\napple\n'))
         self.assertEqual(read(20),(1,0,b''))
         self.assertEqual(first[1].stdin_pos,13)
         self.assertEqual(first[1].stdin_bytes,13)
