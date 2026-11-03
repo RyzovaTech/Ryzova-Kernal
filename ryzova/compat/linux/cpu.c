@@ -246,6 +246,53 @@ static unsigned int compare_binary32_eflags(uint32_t a,uint32_t b)
         return a>b?CF:0; /* reversed order for negative floats */
     return a<b?CF:0;
 }
+/* EFLAGS-only COMISD/UCOMISD comparison of raw IEEE-754 binary64
+ * encodings. This does not synthesize MXCSR invalid-operation status or
+ * traps: unmasked exception handling remains an explicit acceptance gap. */
+static unsigned int compare_binary64_eflags(uint64_t a,uint64_t b)
+{
+    uint64_t ma=a&UINT64_C(0x7fffffffffffffff);
+    uint64_t mb=b&UINT64_C(0x7fffffffffffffff);
+    if(ma>UINT64_C(0x7ff0000000000000) ||
+       mb>UINT64_C(0x7ff0000000000000))return CF|PF|ZF;
+    if((ma==0 && mb==0) || a==b)return ZF;
+    if((a^b)&UINT64_C(0x8000000000000000))
+        return (a&UINT64_C(0x8000000000000000))?CF:0;
+    if(a&UINT64_C(0x8000000000000000))
+        return a>b?CF:0;
+    return a<b?CF:0;
+}
+/* F2 0F 2C /r CVTTSD2SI: truncation toward zero for both 32- and
+ * 64-bit GPR destinations. Negative-indefinite for NaN/out of range;
+ * the integer min value is also the correctly truncated boundary.
+ * No host FP or nondefault MXCSR control is consulted. */
+static uint64_t trunc_binary64_to_signed(uint64_t raw,unsigned int width)
+{
+    unsigned int e=(unsigned int)((raw>>52U)&2047U);
+    unsigned int sign=(unsigned int)(raw>>63U),shift;
+    int exponent=(int)e-1023;
+    uint64_t mantissa,magnitude,invalid=(UINT64_C(1)<<(width*8U-1U));
+    if(e==2047U)return invalid;
+    if(exponent<0)return 0;
+    if(exponent>= (int)(width*8U)){
+        return invalid;
+    }
+    mantissa=raw&UINT64_C(0x000fffffffffffff);
+    if(e)mantissa|=UINT64_C(1)<<52U;
+    if(exponent>=52){
+        shift=(unsigned int)(exponent-52);
+        if(shift>=64U || mantissa>UINT64_MAX>>shift)return invalid;
+        magnitude=mantissa<<shift;
+    }else{
+        magnitude=mantissa>>(unsigned int)(52-exponent);
+    }
+    if(sign){
+        if(magnitude>invalid)return invalid;
+        return (-magnitude)&mask(width);
+    }
+    if(magnitude>=invalid)return invalid;
+    return magnitude&mask(width);
+}
 /* IEEE-754 binary64 default round-to-nearest/ties-even soft arithmetic.
  * Host FPU and long double are never used. Only scalar value semantics
  * are modeled: MXCSR exception, DAZ/FTZ and nondefault rounding states
@@ -811,6 +858,40 @@ static int step(Cpu *c)
             }
             c->flags=(c->flags&~(uint64_t)(CF|PF|AF|ZF|SF|OF))|
                      compare_binary32_eflags(left,right);
+        }
+        else if((op2==0x2e || op2==0x2f) && c->operand16 && !c->repeat){
+            /* 66 0F 2E /r UCOMISD, 66 0F 2F /r COMISD.
+             * Only scalar low binary64 EFLAGS comparison; no MXCSR traps. */
+            uint64_t left=0,right;unsigned int i;
+            rm=decode(c,&reg,&group,8);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            for(i=0;i<8;i++)left|=(uint64_t)c->xmm[reg][i]<<(8U*i);
+            if(rm.reg>=0){
+                right=0;
+                for(i=0;i<8;i++)right|=(uint64_t)c->xmm[rm.reg][i]<<(8U*i);
+            }else{
+                right=get(c,rm,8);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+            }
+            c->flags=(c->flags&~(uint64_t)(CF|PF|AF|ZF|SF|OF))|
+                     compare_binary64_eflags(left,right);
+        }
+        else if(op2==0x2c && c->repeat==0xf2 && !c->operand16){
+            /* F2 [REX.W] 0F 2C /r CVTTSD2SI r32/r64,xmm/m64.
+             * Actual truncate-to-zero, including integer-indefinite,
+             * without changing EFLAGS or source XMM registers. */
+            unsigned int width=(c->rex&8U)?8U:4U,i;
+            uint64_t bits=0;
+            rm=decode(c,&reg,&group,8);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(rm.reg>=0){
+                for(i=0;i<8;i++)bits|=(uint64_t)c->xmm[rm.reg][i]<<(8U*i);
+            }else{
+                bits=get(c,rm,8);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+            }
+            put(c,regop(c,reg,width),width,
+                trunc_binary64_to_signed(bits,width));
         }
         else if(op2==0x2a && c->repeat==0xf2 && !c->operand16){
             /* F2 [REX.W] 0F 2A /r CVTSI2SD xmm, r/m32|r/m64.
