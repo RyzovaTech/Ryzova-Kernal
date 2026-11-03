@@ -155,10 +155,10 @@ class BoundedDarwinServiceTests(unittest.TestCase):
         payload=b"A"*128
         start=(b"\xb8"+struct.pack("<I",0x02000004)
                +b"\xbf"+struct.pack("<I",1))
-        lea=b"\x48\\x8d\\x35"
-        first=b"\xba"+struct.pack("<I",len(payload))+b"\x0f\\x05"
-        second=b"\xb8"+struct.pack("<I",0x02000004)+b"\x0f\\x05"
-        exitcode=b"\xb8"+struct.pack("<I",0x02000001)+b"\x31\\xff"+b"\x0f\\x05"
+        lea=b"\x48\x8d\x35"
+        first=b"\xba"+struct.pack("<I",len(payload))+b"\x0f\x05"
+        second=b"\xb8"+struct.pack("<I",0x02000004)+b"\x0f\x05"
+        exitcode=b"\xb8"+struct.pack("<I",0x02000001)+b"\x31\xff"+b"\x0f\x05"
         tail=first+second+exitcode
         instruction=start+lea+struct.pack("<i",len(tail))+tail+payload
         self.assertLessEqual(len(instruction),256)
@@ -166,7 +166,7 @@ class BoundedDarwinServiceTests(unittest.TestCase):
         self.assertIn("capture_bytes=256",out.stdout)
         # A third identical write must be rejected with the 256 bytes
         # still confined to private diagnostic storage.
-        third=b"\xb8"+struct.pack("<I",0x02000004)+b"\x0f\\x05"
+        third=b"\xb8"+struct.pack("<I",0x02000004)+b"\x0f\x05"
         tail=first+second+third+exitcode
         instruction=start+lea+struct.pack("<i",len(tail))+tail+payload
         failed=self.check(sample(instruction),2)
