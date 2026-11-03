@@ -46,6 +46,55 @@ def sample(code, *, data=False, data_file_bytes=4096):
     return b
 
 
+def extract_freestanding_text_object(binary):
+    """Read only relocation-free __TEXT,__text from an MH_OBJECT fixture.
+
+    The object is a genuine clang-generated Darwin Mach-O; extraction does
+    not turn it into a loaded macOS application or authorize LC_LOAD_DYLIB.
+    """
+    if not isinstance(binary,(bytes,bytearray)) or len(binary)>65536:
+        raise ValueError("bounded compiler Mach-O object required")
+    if len(binary)<32 or struct.unpack_from("<I",binary)[0]!=0xfeedfacf:
+        raise ValueError("Mach-O64 little-endian required")
+    if (struct.unpack_from("<I",binary,4)[0]!=0x01000007
+            or struct.unpack_from("<I",binary,12)[0]!=1):
+        raise ValueError("only Darwin x86_64 MH_OBJECT source accepted")
+    ncmds,cmdbytes=struct.unpack_from("<II",binary,16)
+    if not 1<=ncmds<=32 or not 8*ncmds<=cmdbytes<=16384 or 32+cmdbytes>len(binary):
+        raise ValueError("bounded object commands required")
+    commands_end=32+cmdbytes
+    p=32
+    found=[]
+    for _ in range(ncmds):
+        if p+8>commands_end:
+            raise ValueError("truncated object command")
+        cmd,sz=struct.unpack_from("<II",binary,p)
+        if sz<8 or sz%8 or sz>commands_end-p:
+            raise ValueError("malformed object command")
+        if cmd==0x19:
+            if sz<72:
+                raise ValueError("malformed segment")
+            nsections=struct.unpack_from("<I",binary,p+64)[0]
+            if nsections>16 or sz!=72+80*nsections:
+                raise ValueError("unbounded object section count")
+            for n in range(nsections):
+                sec=p+72+80*n
+                name=binary[sec:sec+16].split(bytes(1),1)[0]
+                seg=binary[sec+16:sec+32].split(bytes(1),1)[0]
+                size=struct.unpack_from("<Q",binary,sec+40)[0]
+                offset=struct.unpack_from("<I",binary,sec+48)[0]
+                relocations=struct.unpack_from("<I",binary,sec+60)[0]
+                if name==b"__text" and seg==b"__TEXT":
+                    if (relocations!=0 or size==0 or size>256 or
+                            offset>len(binary) or size>len(binary)-offset):
+                        raise ValueError("relocatable or unbounded text bytes")
+                    found.append(bytes(binary[offset:offset+size]))
+        p+=sz
+    if p!=commands_end or len(found)!=1:
+        raise ValueError("requires exactly one relocation-free text section")
+    return found[0]
+
+
 class MachoMac1Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -81,6 +130,53 @@ class MachoMac1Tests(unittest.TestCase):
         if eax is not None:
             self.assertIn("eax="+str(eax),r.stdout)
         return r
+
+    def test_real_clang_generated_darwin_macho_object_integer_function(self):
+        # Freestanding actual Darwin-target object produced with Clang;
+        # only its relocation-free __TEXT,__text is loaded into our
+        # independently created restricted MH_EXECUTE test image.
+        # This proves generated AMD64 instruction compatibility, not
+        # native Ryzova boot or a linked Apple application.
+        source=self.root/"real-darwin-entry.c"
+        binary=self.root/"real-darwin-entry.o"
+        source.write_text("int ryz_entry(void) { return 40 + 2; }\n")
+        command=["clang","-target","x86_64-apple-macosx13.0",
+                 "-ffreestanding","-fno-stack-protector",
+                 "-fno-asynchronous-unwind-tables",
+                 "-fno-omit-frame-pointer","-O2",
+                 "-c",str(source),"-o",str(binary)]
+        build=subprocess.run(command,text=True,capture_output=True,timeout=30)
+        if build.returncode:
+            raise AssertionError(build.stderr)
+        real_object=binary.read_bytes()
+        code=extract_freestanding_text_object(real_object)
+        self.assertIn(b"\xc3",code)
+        self.check(sample(code),0,eax=42)
+        self.assertEqual(struct.unpack_from("<I",real_object,12)[0],1)
+
+    def test_macho_object_extractor_rejects_relocated_or_forged_headers(self):
+        good=bytearray(512)
+        struct.pack_into("<8I",good,0,0xfeedfacf,0x01000007,3,1,1,152,0,0)
+        struct.pack_into("<II16sQQQQIIII",good,32,0x19,152,
+                         b"__TEXT".ljust(16,bytes(1)),0,256,0,256,5,5,1,0)
+        struct.pack_into("<16s16sQQIIIIIIII",good,104,
+                         b"__text".ljust(16,bytes(1)),
+                         b"__TEXT".ljust(16,bytes(1)),
+                         0,1,240,0,0,0,0,0,0,0)
+        good[240]=0xc3
+        self.assertEqual(extract_freestanding_text_object(good),b"\xc3")
+        bad=bytearray(good)
+        struct.pack_into("<I",bad,104+60,1)   # no relocation execution
+        with self.assertRaises(ValueError):
+            extract_freestanding_text_object(bad)
+        bad=bytearray(good)
+        struct.pack_into("<Q",bad,104+40,1000)  # image range overflow
+        with self.assertRaises(ValueError):
+            extract_freestanding_text_object(bad)
+        bad=bytearray(good)
+        struct.pack_into("<I",bad,12,6)  # MH_DYLIB is not a static object
+        with self.assertRaises(ValueError):
+            extract_freestanding_text_object(bad)
 
     def test_integer_entry_produces_42_without_host_exec(self):
         # x86_64: mov eax,40; add eax,2; ret
