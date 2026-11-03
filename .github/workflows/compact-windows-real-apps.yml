@@ -5,7 +5,9 @@ on:
     paths:
       - 'scripts/compact_windows_real_apps.py'
       - 'scripts/compact_windows_import_audit.py'
+      - 'scripts/compact_windows_w8_triage.py'
       - 'tests/test_compact_windows_real_apps.py'
+      - 'tests/test_compact_windows_w8_triage.py'
       - 'ryzova/compact/windows-v1-plan.json'
       - '.github/workflows/compact-windows-real-apps.yml'
   workflow_dispatch:
@@ -26,6 +28,7 @@ jobs:
       - name: Verify fixed application set and no guest-execution claims
         run: |
           python -m unittest discover -s tests -p 'test_compact_windows_real_apps.py' -v
+          python -m unittest discover -s tests -p 'test_compact_windows_w8_triage.py' -v
           python -m unittest discover -s tests -p 'test_compact_windows_import_audit.py' -v
           python -m py_compile scripts/compact_windows_real_apps.py
   genuine-windows-system32-reference:
@@ -47,6 +50,9 @@ jobs:
           sparse-checkout: |
             /scripts/compact_windows_real_apps.py
             /scripts/compact_windows_import_audit.py
+            /scripts/compact_windows_w8_triage.py
+            /tests/test_compact_windows_w8_triage.py
+            /ryzova/compat/windows/runtime.h
             /tests/test_compact_windows_real_apps.py
             /ryzova/compact/windows-v1-plan.json
       - uses: actions/setup-python@v5
@@ -58,10 +64,14 @@ jobs:
           python -m unittest discover -s tests -p 'test_compact_windows_real_apps.py' -v
           python scripts/compact_windows_real_apps.py --output artifacts/windows/w8-real-system32-apps.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/compact_windows_w8_triage.py --reference artifacts/windows/w8-real-system32-apps.json --output artifacts/windows/w8-candidate-triage.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload only hashed JSON evidence; never proprietary Windows executables
         uses: actions/upload-artifact@v4
         with:
           name: w8-real-windows-app-reference
-          path: artifacts/windows/w8-real-system32-apps.json
+          path: |
+            artifacts/windows/w8-real-system32-apps.json
+            artifacts/windows/w8-candidate-triage.json
           if-no-files-found: error
           retention-days: 14
