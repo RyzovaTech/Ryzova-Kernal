@@ -89,8 +89,8 @@ class PcmpeqdDifferentialTests(unittest.TestCase):
         native=subprocess.run([str(self.binary)],capture_output=True,timeout=8)
         guest=subprocess.run([str(self.runner),str(self.binary)],
                              capture_output=True,timeout=25)
-        mask=b'\\xff'*4+b'\\x00'*4+b'\\xff'*4+b'\\x00'*4
-        expected=mask+mask+b'\\xff'*16+mask+(1).to_bytes(8,'little')
+        mask=b'\xff'*4+b'\x00'*4+b'\xff'*4+b'\x00'*4
+        expected=mask+mask+b'\xff'*16+mask+(1).to_bytes(8,'little')
         self.assertEqual(native.returncode,0,native.stderr)
         self.assertEqual(native.stdout,expected)
         self.assertEqual(guest.returncode,0,guest.stderr)
@@ -98,7 +98,7 @@ class PcmpeqdDifferentialTests(unittest.TestCase):
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
 
     def test_misaligned_m128_denied_like_linux_and_mmx_not_claimed(self):
-        badasm=ASSEMBLY.replace('.balign 16\\nright:', '.balign 16\\n.byte 11\\nright:')
+        badasm=ASSEMBLY.replace('.balign 16\nright:', '.balign 16\n.byte 11\nright:')
         source=self.root/'unaligned.S'
         binary=self.root/'unaligned'
         source.write_text(badasm)
