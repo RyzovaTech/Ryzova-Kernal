@@ -53,3 +53,15 @@ and sandboxed native Ryzova guest execution are **OPEN**.
 Format/numbering references:
 - Apple XNU open-source syscall class definitions, `osfmk/mach/syscall_sw.h`.
 - Apple/XNU BSD `syscalls.master` numbers for `exit` and `write`.
+
+## Reproducible Clang-generated Darwin-host-only demonstration
+
+Run `python3 scripts/compact_macos_m2_demo.py` on a developer machine
+with Clang and a C compiler. It assembles a real relocation-free x86_64
+Darwin `MH_OBJECT` from original source, extracts its bounded text
+bytes, wraps them in a **synthetic static Mach-O test image**, builds
+the host-only C interpreter, and verifies that simulated Darwin
+`write(1,...)` captured exactly `Hello from Ryzova\\n`.
+The output is a JSON evidence record with explicitly **false** native
+Ryzova guest and linked macOS application verification fields.
+This is **not** installing, launching or linking a macOS application.
