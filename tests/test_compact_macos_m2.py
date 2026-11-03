@@ -199,6 +199,22 @@ class BoundedDarwinServiceTests(unittest.TestCase):
         struct.pack_into("<I",x,32+60,4)  # RX->X-only initial protection
         self.check(x,7)
 
+    def test_seeded_forged_macho_messages_never_crash_host(self):
+        import random
+        rng=random.Random(0x4d414332)
+        original=darwin_syscall_fixture()
+        for case in range(128):
+            mutated=bytearray(original)
+            for _ in range(1+rng.randrange(5)):
+                position=rng.randrange(0,len(mutated))
+                mutated[position]=rng.randrange(256)
+            with self.subTest(case=case):
+                result=self.run_guest(mutated)
+                self.assertIn(result.returncode,(0,2),result.stdout+result.stderr)
+                self.assertIn("MAC2_VM status=",result.stdout)
+                self.assertIn("native_guest=0 host_syscall_forwarding=0",result.stdout)
+                self.assertNotIn("Hello from Ryzova",result.stdout)
+
     def test_unsupported_exit_status_is_captured_not_host_exit(self):
         x=darwin_syscall_fixture()
         # XOR EDI,EDI is replaced by MOV EDI,42, shifts trailing SYS.
