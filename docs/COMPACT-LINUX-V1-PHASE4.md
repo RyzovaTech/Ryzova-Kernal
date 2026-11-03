@@ -203,3 +203,28 @@ native Linux and the Ryzova VM. The F2 DIVSD form remains unsupported.
 MXCSR nondefault rounding, precise FP exceptions/signalling NaN effects,
 IEEE status flags and the full CPython workflow are **not** qualified;
 guest code acceptance requires a new actual target-profile result.
+
+## 4E — Actual CPython `-c` blocker and COMISS/UCOMISS comparison subset
+
+The checksum-locked CPython 3.12.10 target passes the 7/7 startup smokes,
+but its *real* `-c 'print("CLX_PYTHON_CODE_OK")'` guest execution probe
+still fails. The prior exact pinned image's `last_rip_hex=58afa7` maps to
+the candidate `0F 2F 05 ...`, an AMD64 COMISS XMM/m32 scalar
+comparison. That location is a **candidate**, not proof of the faulting
+instruction or full Python interpreter functionality.
+
+An original Ryzova COMISS (`0F 2F /r`) and UCOMISS (`0F 2E /r`)
+binary32 EFLAGS implementation now compares IEEE-754 encoded values without
+host floating point. It handles +0/-0 equality, signed finite values,
+infinities, subnormals and NaNs; it writes ZF/PF/CF and clears OF/SF/AF
+without modifying XMM registers. It deliberately does **not** implement
+MXCSR exception flags, unmasked invalid-operation traps, COMISD scalar
+double, nondefault rounding or full SSE/IEEE compliance.
+
+One original static AMD64 assembly ELF is run on native Linux and through
+Ryzova's bounded interpreter and compared byte-for-byte across ten
+representative cases. Negative cases enforce unsupported prefixed COMISD
+and invalid guest pointers. All source-built QEMU/driver/security and
+frozen-application tests remain independent. CPython full stdlib,
+multi-module execution, threads, processes, TLS and `CLX-04` acceptance
+remain pending until actual complete end-to-end results are recorded.
