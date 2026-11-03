@@ -87,7 +87,8 @@ static int duplicate(const char *name,char arr[][RYZ_MAC3_NAME_MAX],
 int ryz_mac3_scan(const unsigned char *image,size_t length,RyzMac3Manifest *out) {
     uint32_t type,ncmd,cmdbytes,i,segments=0,main_count=0,id_count=0,dyld=0;
     uint32_t version=0;
-    uint64_t offset=32;
+    uint64_t offset=32,entry_offset=0;
+    struct {uint64_t address,size,file_offset,file_size;uint32_t protection;} ranges[M3_LIMIT_SEGMENTS];
     RyzMac3Manifest m;
     if(out!=NULL)memset(out,0,sizeof(*out));
     if(out==NULL || image==NULL || length<32 || length>RYZ_MAC3_MAX_INPUT)
@@ -133,6 +134,15 @@ int ryz_mac3_scan(const unsigned char *image,size_t length,RyzMac3Manifest *out)
                (mx&~7U)!=0 || (init&~7U)!=0 ||
                (init&~mx)!=0 || (mx&6U)==6U || (init&6U)==6U)
                 return 4;
+            for(uint32_t j=0;j<segments;j++) {
+                uint64_t old=ranges[j].address,oldsz=ranges[j].size;
+                if(va<old+oldsz && old<va+vm)return 4;
+            }
+            ranges[segments].address=va;
+            ranges[segments].size=vm;
+            ranges[segments].file_offset=fo;
+            ranges[segments].file_size=fs;
+            ranges[segments].protection=init;
             /* No section relocation/fixup bytes are interpreted here. */
             for(uint32_t j=0;j<sec;j++) {
                 const unsigned char *sc=cmd+72U+80U*j;
@@ -151,6 +161,7 @@ int ryz_mac3_scan(const unsigned char *image,size_t length,RyzMac3Manifest *out)
         }else if(op==M3_MAIN) {
             if(type!=M3_EXECUTE || main_count || bytes!=24 ||
                get64(cmd+16)!=0)return 4;
+            entry_offset=get64(cmd+8);
             ++main_count;
         }else if(op==M3_LOAD_DYLIB || op==M3_ID_DYLIB) {
             char name[RYZ_MAC3_NAME_MAX]={0};
@@ -204,6 +215,16 @@ int ryz_mac3_scan(const unsigned char *image,size_t length,RyzMac3Manifest *out)
        (type==M3_EXECUTE && !main_count) ||
        (type==M3_DYLIB && !id_count))
         return 4;
+    if(type==M3_EXECUTE) {
+        uint32_t entry_matches=0;
+        for(i=0;i<segments;i++) {
+            if((ranges[i].protection&4U)!=0 &&
+               entry_offset>=ranges[i].file_offset &&
+               entry_offset-ranges[i].file_offset<ranges[i].file_size)
+                ++entry_matches;
+        }
+        if(entry_matches!=1)return 4;
+    }
     m.segment_count=segments;
     m.dyld_seen=dyld;
     *out=m;
