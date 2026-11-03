@@ -149,8 +149,8 @@ class MachoTests(unittest.TestCase):
         struct.pack_into("<I",x,96,1)
         struct.pack_into("<I",x,20,176)
         struct.pack_into("<16s16sQQIIIIIIII",x,104,
-                         b"__text".ljust(16,b"\\0"),
-                         b"__TEXT".ljust(16,b"\\0"),
+                         b"__text".ljust(16,bytes(1)),
+                         b"__TEXT".ljust(16,bytes(1)),
                          0x100000200,4,0x200,0,0,0,0,0,0,0)
         self.assertEqual(self.probe(x).returncode,0)
         bad=bytearray(x)
