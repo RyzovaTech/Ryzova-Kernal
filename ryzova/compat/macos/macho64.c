@@ -88,6 +88,24 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
                 return 4;
             if (!span(length,fo,fs) || (va%PAGE)!=(fo%PAGE))
                 return 3;
+            /* section_64 is 80 bytes. Reject claims outside its enclosing
+             * segment or unbounded relocation data. No relocations are
+             * interpreted in this deliberately static metadata profile. */
+            for(j=0;j<sections;++j) {
+                const unsigned char *sec=image+(size_t)offset+72U+80U*j;
+                uint64_t sa=u64(sec+32),ss=u64(sec+40);
+                uint32_t so=u32(sec+48),align=u32(sec+52);
+                uint32_t nreloc=u32(sec+60),stype=u32(sec+64)&0xffU;
+                int zerofill=(stype==1U || stype==12U || stype==18U);
+                if (memcmp(sec+16,image+(size_t)offset+8,16)!=0 ||
+                    sa<va || sa-va>vsize || ss>vsize-(sa-va) ||
+                    align>31U || nreloc!=0U)
+                    return 4;
+                if (!zerofill &&
+                    ((uint64_t)so<fo || (uint64_t)so-fo>fs ||
+                     ss>fs-((uint64_t)so-fo)))
+                    return 4;
+            }
             for(j=0;j<count;++j)
                 if (overlap(va,vsize,plan.segments[j].virtual_address,
                             plan.segments[j].virtual_bytes))
