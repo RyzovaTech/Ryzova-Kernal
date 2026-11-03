@@ -47,6 +47,32 @@ Win32/CRT APIs. The compiled executable is not uploaded from the Windows
 reference workflow; only JSON evidence is uploaded. The source is
 redistributable under the copied MIT license.
 
+## Additional no-CRT Windows PE candidate
+
+The first source-built Windows-host PE with MSVC `/MT` passed all **four**
+named `sbase wc` workflows, but measured **80 direct imports / 68 missing**
+at 154,624 bytes. This is **not** compatible with the existing 32-import
+PE loader limit.
+
+Instead of widening that limit, `win32_mincrt.c` implements a narrowly
+scoped `GetStdHandle`, `ReadFile`, `WriteFile` and `ExitProcess`
+adapter for the **same byte-for-byte original upstream `wc.c`**, compiled
+with MSVC `/nodefaultlib`, `/entry:cw_wc_entry`, and an explicit Kernel32
+import library. It builds a second PE and executes the default ASCII
+stdin workflow on a real Windows host. Its output must match the original
+source-linked `/MT` Windows-host reference. It explicitly fails on
+non-ASCII, unsupported file arguments and other dynamic CRT behaviour.
+Option parsing for `-l/-w/-c` is presently only qualified for the
+original `/MT` build, not the separate no-CRT entry point.
+
+The second PE's import count and unsupported import names are **measured**;
+the candidate gets only a *structural investigation* flag, never a native
+guest acceptance flag. The fixed Ryzova W3 console grants explicitly lack
+`STD_INPUT_HANDLE` currently: a trusted bounded stdin resource, genuine
+Windows `ReadFile` semantics and source-built native QEMU runtime must be
+implemented and independently verified. Never connect the interpreter to
+an untrusted host descriptor or bypass per-application API authorization.
+
 ## Native Ryzova status (never conflate with host success)
 
 **No proof of native Ryzova/QEMU guest execution is claimed.** MSVC's
