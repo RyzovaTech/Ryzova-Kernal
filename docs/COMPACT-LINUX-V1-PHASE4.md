@@ -304,3 +304,27 @@ Still **not** provided: architectural MXCSR sticky flags/unmasked traps,
 unrestricted IEEE-754 compliance, complete CPython runtime, stdlib,
 TLS, platform ABI and production kernel application execution.
 Completion gates stay open until end-to-end evidence exists.
+
+## 4I — Next frozen CPython `-c` candidate: SSE2 PADDQ
+
+At exact PR head `5d645f8f91e226b435ecbf069dda7d67d7bd6f5d`,
+the checksum-pinned CPython 3.12.10 `-c` probe executed **620,127**
+guest instructions (previously 245,929) and still failed status 3
+at RIP `4bd946`. Candidate initial main-ELF bytes were
+`66 0F D4 C1 41 0F 11 84 24...`; first instruction is
+SSE2 PADDQ xmm,xmm/m128. RIP is a candidate and is *not* itself
+proof of the faulting instruction.
+
+The interpreter now implements only `66 0F D4 /r` packed
+quadword addition: 64-bit modular addition independently in
+two lanes, preserved EFLAGS, register alias-safe reads and
+bounded aligned 16-byte guest memory operands. Unprefixed MMX
+`0F D4` is not supported. One identical source-built static
+AMD64 ELF is executed on real Linux and in the bounded
+Ryzova VM; it compares exact byte output, independent carry
+wrap and preserved carry flags. Deliberately unaligned m128
+must fault on real Linux and fail closed in the VM.
+
+This is **not** full SSE2, native CPython stdlib workflow,
+MXCSR or production CPU/ABI qualification. APP-PYTHON,
+AMD64-ABI and other acceptance requirements stay open.
