@@ -57,6 +57,16 @@ class Mac0AuditTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_contract(item)
 
+    def test_extra_completion_claim_or_rewritten_policy_is_denied(self):
+        item = copy.deepcopy(self.contract)
+        item["full_macos_compatibility"] = True
+        with self.assertRaises(ValueError):
+            validate_contract(item)
+        item = copy.deepcopy(self.contract)
+        item["completion_policy"] = "macOS V1 finished and release ready"
+        with self.assertRaises(ValueError):
+            validate_contract(item)
+
     def test_increase_of_unreviewed_limits_or_extra_commands_is_denied(self):
         for name, value in (
             ("input_bytes", 1024 * 1024 * 1024),
@@ -100,6 +110,17 @@ class Mac0AuditTests(unittest.TestCase):
             outside = Path(temp) / "out-of-tree-source.c"
             outside.write_text("/* SPDX-License-Identifier: AGPL-3.0-only */\n")
             target.symlink_to(outside)
+            with self.assertRaises(ValueError):
+                inspect(root)
+            # Parent-directory redirection must not circumvent the source
+            # provenance root (contract file itself is not a symlink).
+            target.unlink()
+            shutil.copy2(ROOT / SOURCES[0], target)
+            macdir = root / "ryzova/compat/macos"
+            redirected = Path(temp) / "outside-macos-directory"
+            shutil.copytree(macdir, redirected)
+            shutil.rmtree(macdir)
+            macdir.symlink_to(redirected, target_is_directory=True)
             with self.assertRaises(ValueError):
                 inspect(root)
 
