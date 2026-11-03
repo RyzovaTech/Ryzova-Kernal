@@ -167,7 +167,15 @@ def run_mincrt_reference(app, plan, full_reference):
     name,args,input_bytes,expected=CASES[0]
     outcome=subprocess.run([str(app)],input=input_bytes,
                            capture_output=True,timeout=12,check=False)
-    verified=verify_case(name,outcome)
+    try:
+        verified=verify_case(name,outcome)
+    except ValueError as error:
+        raise RuntimeError(
+            "CRTless Windows app execution mismatch; "
+            "exit_code="+str(outcome.returncode)+
+            " stdout_hex="+outcome.stdout[:80].hex()+
+            " stderr_excerpt="+outcome.stderr[:120].decode("utf-8","replace")
+        ) from error
     ref=full_reference["named_workloads"][0]
     if verified["stdout_text_lf"]!=ref["stdout_text_lf"]:
         raise ValueError("no-CRT output not equal original source Windows-host reference")
