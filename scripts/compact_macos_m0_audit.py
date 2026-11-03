@@ -12,6 +12,9 @@ SOURCES = (
     "ryzova/compat/macos/macho64_probe.c",
     "tests/test_phase5_7_macho.py",
     ".github/workflows/phase5-macho.yml",
+    ".github/workflows/compact-macos-m0.yml",
+    "tests/test_compact_macos_m0.py",
+    "docs/COMPACT-MACOS-M0.md",
 )
 SCHEMA = "ryzova-compact-macos-m0/v1"
 LIMITS = {
