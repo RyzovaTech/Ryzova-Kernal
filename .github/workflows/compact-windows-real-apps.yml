@@ -1,0 +1,54 @@
+name: Compact Windows W8 real Windows named-app reference inventory
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/compact_windows_real_apps.py'
+      - 'scripts/compact_windows_import_audit.py'
+      - 'tests/test_compact_windows_real_apps.py'
+      - 'ryzova/compact/windows-v1-plan.json'
+      - '.github/workflows/compact-windows-real-apps.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fail-closed-offline-inventory-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify fixed application set and no guest-execution claims
+        run: |
+          python -m unittest discover -s tests -p 'test_compact_windows_real_apps.py' -v
+          python -m unittest discover -s tests -p 'test_compact_windows_import_audit.py' -v
+          python -m py_compile scripts/compact_windows_real_apps.py
+  genuine-windows-system32-reference:
+    runs-on: windows-2022
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Execute only named System32 references and audit original PE binaries
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -p 'test_compact_windows_real_apps.py' -v
+          python scripts/compact_windows_real_apps.py --output artifacts/windows/w8-real-system32-apps.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload only hashed JSON evidence; never proprietary Windows executables
+        uses: actions/upload-artifact@v4
+        with:
+          name: w8-real-windows-app-reference
+          path: artifacts/windows/w8-real-system32-apps.json
+          if-no-files-found: error
+          retention-days: 14
