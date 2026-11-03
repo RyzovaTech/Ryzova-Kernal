@@ -9,20 +9,39 @@ static unsigned char *readimage(char *path,size_t *size) {
     while(got<*size){n=read(fd,bytes+got,*size-got);if(n<=0)sysfatal("executable read: %r");got+=n;}
     close(fd);return bytes;
 }
+/* Read a trusted, explicitly named Plan 9 guest resource. No host FD,
+ * shared global stdin, or application-provided path is ever consulted. */
+static int readstdin(char *path,unsigned char *buf,size_t *used) {
+    int fd;long n;size_t got=0;unsigned char extra;
+    if(!path || !*path || !buf || !used)return -1;
+    fd=open(path,OREAD);if(fd<0)return -1;
+    while(got<CW_STDIN_LIMIT){
+        n=read(fd,buf+got,CW_STDIN_LIMIT-got);
+        if(n<0){close(fd);return -1;}
+        if(n==0)break;
+        got+=(size_t)n;
+    }
+    if(got==CW_STDIN_LIMIT) {
+        n=read(fd,&extra,1);
+        if(n!=0){close(fd);return -1;}
+    }
+    close(fd);*used=got;return 0;
+}
 static void text16(uint16_t *out,const char *in,size_t capacity) {
     size_t i;for(i=0;in[i] && i+1<capacity;i++)out[i]=(unsigned char)in[i];out[i]=0;
 }
 void main(int argc,char **argv) {
     CwMachine *m;CwServices *s;CwLaunch *launch;CwFileNamespace *ns=nil;CwFileNative *provider=nil;
     CwDirectoryGrant grant;CwPlan plan;unsigned char *file,*arena,*heap;size_t size,owned;
-    uint32_t budget=CW_MAX_STEPS,rights=31,apis=CW_ALL_APIS,committed=0;int status,syncfd=-1,i=1;char *root=nil,*syncpath=nil,*end,capability[512];
+    uint32_t budget=CW_MAX_STEPS,rights=31,apis=CW_ALL_APIS,committed=0;int status,syncfd=-1,i=1;char *root=nil,*syncpath=nil,*stdinpath=nil,*end,capability[512];unsigned char *stdinbuf=nil;size_t stdinlength=0;
     while(i<argc && argv[i][0]=='-') {
         if(!strcmp(argv[i],"-b") && i+1<argc){budget=strtoul(argv[++i],&end,0);if(*end || !budget || budget>CW_MAX_STEPS)sysfatal("instruction limit");}
         else if(!strcmp(argv[i],"-r") && i+1<argc)root=argv[++i];
         else if(!strcmp(argv[i],"-s") && i+1<argc)syncpath=argv[++i];
         else if(!strcmp(argv[i],"-R") && i+1<argc){rights=strtoul(argv[++i],&end,0);if(*end || !rights || rights>31)sysfatal("rights");}
+        else if(!strcmp(argv[i],"-I") && i+1<argc)stdinpath=argv[++i];
         else if(!strcmp(argv[i],"-a") && i+1<argc){apis=strtoul(argv[++i],&end,0);if(*end || apis>CW_ALL_APIS)sysfatal("API mask");}
-        else sysfatal("usage: compact-windows [-b steps] [-r root [-s cw-hjfs-control] [-R rights]] [-a API-mask] PE");
+        else sysfatal("usage: compact-windows [-b steps] [-r root [-s control] [-R rights]] [-I trusted-stdin] [-a API-mask] PE");
         i++;
     }
     if(i!=argc-1 || (syncpath && !root))sysfatal("executable or grant arguments");
@@ -35,11 +54,18 @@ void main(int argc,char **argv) {
     m=mallocz(sizeof(*m),1);s=mallocz(sizeof(*s),1);launch=mallocz(sizeof(*launch),1);
     arena=malloc((size_t)plan.image_bytes+CW_STACK);heap=malloc(CW_HEAP_LIMIT);
     if(!m || !s || !launch || !arena || !heap)sysfatal("bounded runtime allocation");
-    launch->api_mask=apis;launch->console_mask=3;
+    launch->api_mask=apis;launch->console_mask=stdinpath?7:3;
     text16(launch->command_line,"flex.exe --w3-test two words",CW_COMMAND_UNITS);
     launch->environment_count=1;text16(launch->environment[0].name,"FLEX_W3_PROBE",64);text16(launch->environment[0].value,"ready",256);
     status=cw_load(file,size,0,arena,(size_t)plan.image_bytes+CW_STACK,m);
     if(!status)status=cw_attach_services(m,s,launch,heap,CW_HEAP_LIMIT);
+    if(!status && stdinpath) {
+        stdinbuf=malloc(CW_STDIN_LIMIT);
+        if(!stdinbuf)sysfatal("bounded guest stdin allocation");
+        if(readstdin(stdinpath,stdinbuf,&stdinlength))sysfatal("trusted stdin capability not readable or oversized");
+        status=cw_attach_console_input(m,stdinbuf,stdinlength);
+        free(stdinbuf);stdinbuf=nil;
+    }
     if(root && !status) {
         ns=mallocz(sizeof(*ns),1);if(!ns)sysfatal("namespace state");
         if(syncpath) {
