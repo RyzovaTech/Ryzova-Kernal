@@ -57,7 +57,7 @@ def verify_upstream_sources(directory=FIXTURE):
         }
     if b"MIT License" not in (directory / "upstream/LICENSE").read_bytes():
         raise ValueError("upstream MIT license missing")
-    for name in ("bridge.c", "util.h"):
+    for name in ("bridge.c", "util.h", "win32_mincrt.c"):
         p = directory / name
         if not p.is_file() or p.is_symlink() or p.stat().st_size > 16384:
             raise ValueError("missing bounded platform bridge")
@@ -119,6 +119,95 @@ def compile_windows(cl_path, root, output):
         raise RuntimeError("MSVC source build failed: " +
                            (done.stdout + done.stderr)[-3500:].decode("utf-8", "replace"))
     return executable
+
+
+
+def compile_mincrt_windows(vcvars_path, root, output):
+    """Build real upstream wc.c with only four explicitly imported Win32 APIs.
+
+    No UCRT/MSVCRT DLL or custom dynamic loader; this is NOT a guest proof.
+    """
+    if os.name != "nt" or platform.machine().lower() not in ("amd64", "x86_64"):
+        raise RuntimeError("real Windows AMD64 compiler required")
+    if not Path(vcvars_path).is_file():
+        raise RuntimeError("missing VS x64 toolchain setup")
+    output.mkdir(parents=True, exist_ok=True)
+    upstream = root/"upstream/wc.c"
+    adapter = root/"win32_mincrt.c"
+    wcobj=output/"mincrt-wc.obj"
+    bridgeobj=output/"mincrt-bridge.obj"
+    executable=output/"sbase-wc-mincrt.exe"
+    batch=output/"build-mincrt.cmd"
+    opts=(' /nologo /c /O1 /W3 /GS- /Zl /Oi- /D_CRT_SECURE_NO_WARNINGS '
+          '/DCW_W8_MINCRT /I"'+str(root)+'" /I"'+str(root/"upstream")+'" ')
+    lines=[
+        "@echo off",'call "'+str(vcvars_path)+'"','if errorlevel 1 exit /b 1',
+        'cl'+opts+'"'+str(upstream)+'" /Fo:"'+str(wcobj)+'"',
+        "if errorlevel 1 exit /b 1",
+        'cl'+opts+'"'+str(adapter)+'" /Fo:"'+str(bridgeobj)+'"',
+        "if errorlevel 1 exit /b 1",
+        'link /nologo /machine:x64 /entry:cw_wc_entry /subsystem:console '
+        '/nodefaultlib /fixed /dynamicbase:no /debug:none "'+
+        str(wcobj)+'" "'+str(bridgeobj)+'" kernel32.lib /out:"'+str(executable)+'"',
+        "if errorlevel 1 exit /b 1","exit /b 0",
+    ]
+    batch.write_bytes(("\r\n".join(lines)+"\r\n").encode("utf-8"))
+    process=subprocess.run(["cmd.exe","/d","/c",str(batch)],cwd=output,
+                           capture_output=True,timeout=150)
+    if process.returncode != 0 or not executable.is_file():
+        raise RuntimeError("CRTless original sbase source compiler failed: "+
+                           (process.stdout+process.stderr)[-5000:].decode("utf-8","replace"))
+    return executable
+
+
+def run_mincrt_reference(app, plan, full_reference):
+    if not app.is_file() or app.is_symlink() or not 256 <= app.stat().st_size <= 4*1024*1024:
+        raise ValueError("out-of-bound MSVC no-CRT PE")
+    data=app.read_bytes()
+    name,args,input_bytes,expected=CASES[0]
+    outcome=subprocess.run([str(app)],input=input_bytes,
+                           capture_output=True,timeout=12,check=False)
+    verified=verify_case(name,outcome)
+    ref=full_reference["named_workloads"][0]
+    if verified["stdout_text_lf"]!=ref["stdout_text_lf"]:
+        raise ValueError("no-CRT output not equal original source Windows-host reference")
+    bad=subprocess.run([str(app)],input=b"\xc3\xa9\n",capture_output=True,
+                       timeout=12,check=False)
+    if bad.returncode==0 or b"non-ASCII" not in bad.stderr:
+        raise ValueError("no-CRT adapter silently misinterpreted non-ASCII")
+    audit=None;rejection=None
+    try:
+        audit=discover(data,plan)
+        if audit.get("architecture")!="amd64":
+            raise ValueError("no-CRT PE not AMD64")
+    except ValueError as exc:
+        rejection=str(exc)[:256]
+    direct=audit.get("direct_imports") if audit else None
+    missing=audit.get("missing_or_ordinal_imports",[]) if audit else []
+    modules=audit.get("modules",[]) if audit else []
+    # Structural eligibility is ONLY a triage signal. cw_plan may reject
+    # other PE metadata, and current Ryzova lacks console stdin access.
+    eligible=bool(
+        audit is not None and rejection is None and
+        type(direct) is int and direct<=32 and len(missing)==0 and
+        len(modules)<=4 and not audit.get("delay_load_modules") and
+        not audit.get("runtime_directories_unqualified")
+    )
+    return {
+        "strategy":"original sbase wc.c + separate Win32 no-CRT stdin bridge",
+        "windows_reference_default_passed":True,
+        "unsupported_utf8_rejected":True,
+        "same_default_stdout_as_crt_host_reference":True,
+        "source_binary_sha256":hashlib.sha256(data).hexdigest(),
+        "pe_bytes":len(data),"direct_imports":direct,
+        "import_modules":modules,"missing_or_ordinal_imports":missing,
+        "parser_rejection":rejection,
+        "candidate_structurally_eligible_for_native_investigation":eligible,
+        "current_guest_console_stdin_absent":True,
+        "requires_new_guest_resource_grant_before_native_execution":True,
+        "native_guest_execution_qualified":False,
+        "windows_v1_release_qualified":False,
+    }
 
 
 def run_reference(app, plan, provenance, commit, runner_version):
@@ -209,6 +298,9 @@ if __name__ == "__main__":
     plan = json.loads((ROOT/"ryzova/compact/windows-v1-plan.json").read_text())
     report = run_reference(app, plan, provenance, os.environ.get("GITHUB_SHA", ""),
                            os.environ.get("ImageVersion", ""))
+    mincrt = compile_mincrt_windows(str(Path(found)/"VC/Auxiliary/Build/vcvars64.bat"),
+                                   FIXTURE, output)
+    report["no_crt_candidate"] = run_mincrt_reference(mincrt, plan, report)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True)+"\n",
                            encoding="utf-8")
@@ -220,6 +312,10 @@ if __name__ == "__main__":
         "pe_direct_imports": report["pe_direct_imports"],
         "missing_direct_count": len(report["pe_missing_direct_imports"]),
         "missing_import_sample": report["pe_missing_direct_imports"][:20],
+        "no_crt_pe_imports": report["no_crt_candidate"]["direct_imports"],
+        "no_crt_missing_imports": len(report["no_crt_candidate"]["missing_or_ordinal_imports"]),
+        "no_crt_structural_candidate": report["no_crt_candidate"]["candidate_structurally_eligible_for_native_investigation"],
+        "no_crt_parser_rejection": report["no_crt_candidate"]["parser_rejection"],
         "native_guest_execution_qualified": False,
         "windows_v1_release_qualified": False,
     }, sort_keys=True))
