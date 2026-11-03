@@ -602,6 +602,24 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
     if (p->exited)
         return -L_EPERM;
     nr = regs->rax;
+    /* Reserved, namespace-owned virtual PTY endpoints must be resolved
+     * before the generic VFS. Generic VFS has no devpts entry and would
+     * reject them with ENOENT, even when an unlocked pair exists.
+     * Only exact /dev/ptmx or /dev/pts/{N} prefixes are intercepted;
+     * no host or resource mount may silently supply a PTY handle. */
+    if(p->world && (nr==2 || nr==4 || nr==6 || nr==257 || nr==262)){
+        uint64_t at=(nr==257 || nr==262)?regs->rsi:regs->rdi;
+        const char *path=NULL;size_t length=0;int error;
+        error=guest_path(p,at,&path,&length);
+        if(!error && (strcmp(path,"/dev/ptmx")==0 ||
+                      strncmp(path,"/dev/pts/",9)==0)){
+            if(nr==2)return do_openat(p,L_AT_FDCWD,at,regs->rsi);
+            if(nr==257)return do_openat(p,regs->rdi,at,regs->rdx);
+            if(nr==262 && (regs->r10 & ~UINT64_C(256)))return -L_EINVAL;
+            return do_stat(p,at,nr==262?regs->rdx:regs->rsi,0,
+                           nr==262?regs->rdi:L_AT_FDCWD);
+        }
+    }
     if(p->world){
         int handled;int64_t answer=resource_dispatch(p,regs,&handled);
         if(handled)return answer;
