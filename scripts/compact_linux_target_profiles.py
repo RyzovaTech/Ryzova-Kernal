@@ -14,6 +14,22 @@ ROOT=Path(__file__).resolve().parents[1]
 # Keep these in lockstep with process.h; unit tests assert both ceilings.
 IMAGE_MAX_BYTES=32*1024*1024
 IMAGE_TOTAL_BYTES=48*1024*1024
+# Probe-only limit, below audited jobs_probe -b hard ceiling of 16M.
+# Unmodified production defaults and other locked targets are unchanged.
+GUEST_VERSION_STEPS=1_048_576
+PYTHON_CODE_STEPS=8_388_608
+PYTHON_CODE_TIMEOUT_SECONDS=120
+GUEST_HARD_STEP_CEILING=16_777_216
+
+def probe_step_limit(target,full_code=False):
+    if target not in TARGETS:raise ValueError('unknown source-locked target')
+    if full_code and target!='python':
+        raise ValueError('only pinned CPython has the code execution probe')
+    limit=PYTHON_CODE_STEPS if full_code else GUEST_VERSION_STEPS
+    if type(limit) is not int or not 1<=limit<=GUEST_HARD_STEP_CEILING:
+        raise ValueError('unsafe unbounded guest instruction ceiling')
+    return limit
+
 TARGETS={
  'busybox':('/bin/busybox',['--help'],'1.35.0'),
  'python':('/usr/bin/python3.12',['-c','import json,pathlib,tempfile,threading,multiprocessing,subprocess,socket,ssl,hashlib,zlib; print(json.dumps({"version":__import__("sys").version,"ssl":ssl.OPENSSL_VERSION})); p=pathlib.Path("/tmp/python-proof"); p.write_text("proof"); assert p.read_text()=="proof"'],'3.12.10'),
@@ -98,7 +114,8 @@ def main(directory,output):
             if file is None:raise ValueError('missing target dependency '+target+': '+name)
             dep=elf_info(file.read_bytes());virtual='/'+str(file.relative_to(root));libraries.append({'path':virtual,**dep});grants+=['-x',virtual+'='+str(file)];pending.extend(dep['needed'])
         guest_args=['--version'] if target=='python' else args
-        guest=subprocess.run([str(runner),'-r','-b','1048576',*grants,str(binary),*guest_args],env=env,capture_output=True,timeout=30)
+        version_limit=probe_step_limit(target)
+        guest=subprocess.run([str(runner),'-r','-b',str(version_limit),*grants,str(binary),*guest_args],env=env,capture_output=True,timeout=30)
         (logs/(target+'-guest.stdout')).write_bytes(guest.stdout);(logs/(target+'-guest.stderr')).write_bytes(guest.stderr)
         result=re.search(rb'COMPACT_JOBS_RESULT status=([0-9]+) exited=([01]) exit=([0-9]+) steps=([0-9]+) syscalls=([0-9]+)',guest.stderr)
         actual={key:int(value) for key,value in zip(('status','exited','exit','steps','syscalls'),result.groups())} if result else None
@@ -122,32 +139,46 @@ def main(directory,output):
         # from the limited --version smoke. Never relabel as full stdlib V1.
         python_code_probe=None
         if target=='python':
-            command=[str(runner),'-r','-b','1048576',*grants,str(binary),
+            code_limit=probe_step_limit('python',full_code=True)
+            command=[str(runner),'-r','-b',str(code_limit),*grants,str(binary),
                      '-c','print("CLX_PYTHON_CODE_OK")']
-            attempt=subprocess.run(command,env=env,capture_output=True,timeout=30)
-            (logs/'python-guest-code.stdout').write_bytes(attempt.stdout)
-            (logs/'python-guest-code.stderr').write_bytes(attempt.stderr)
-            record=re.search(rb'COMPACT_JOBS_RESULT status=([0-9]+) exited=([01]) exit=([0-9]+) steps=([0-9]+) syscalls=([0-9]+)',attempt.stderr)
+            code_started=time.monotonic()
+            timed_out=False
+            try:
+                attempt=subprocess.run(command,env=env,capture_output=True,
+                                       timeout=PYTHON_CODE_TIMEOUT_SECONDS)
+                out,err,runner_exit=attempt.stdout,attempt.stderr,attempt.returncode
+            except subprocess.TimeoutExpired as timeout:
+                timed_out=True
+                out,err=timeout.stdout or b'',timeout.stderr or b''
+                runner_exit=124
+            code_elapsed=time.monotonic()-code_started
+            (logs/'python-guest-code.stdout').write_bytes(out)
+            (logs/'python-guest-code.stderr').write_bytes(err)
+            record=re.search(rb'COMPACT_JOBS_RESULT status=([0-9]+) exited=([01]) exit=([0-9]+) steps=([0-9]+) syscalls=([0-9]+)',err)
             measured={key:int(value) for key,value in zip(
                 ('status','exited','exit','steps','syscalls'),record.groups())} if record else None
             if measured:
-                rip=re.search(rb' rip=([0-9a-f]+)',attempt.stderr)
+                rip=re.search(rb' rip=([0-9a-f]+)',err)
                 measured['last_rip_hex']=rip.group(1).decode() if rip else None
-                denied=re.search(rb' unsupported_syscall=([0-9]+) unsupported_syscall_valid=([01])',attempt.stderr)
+                denied=re.search(rb' unsupported_syscall=([0-9]+) unsupported_syscall_valid=([01])',err)
                 measured['unsupported_syscall_nr']=int(denied.group(1)) if denied and denied.group(2)==b'1' else None
-                guest_io=re.search(rb'COMPACT_GUEST_IO network_bytes=([0-9]+) resource_bytes=([0-9]+) output_bytes=([0-9]+)',attempt.stderr)
+                guest_io=re.search(rb'COMPACT_GUEST_IO network_bytes=([0-9]+) resource_bytes=([0-9]+) output_bytes=([0-9]+)',err)
                 measured['guest_io']={key:int(value) for key,value in zip(('network_bytes','resource_bytes','output_bytes'),guest_io.groups())} if guest_io else None
             passed=bool(measured and measured['status']==0 and measured['exited']==1
                         and measured['exit']==0 and
-                        b'CLX_PYTHON_CODE_OK\n' in attempt.stdout)
+                        not timed_out and b'CLX_PYTHON_CODE_OK\n' in out)
             python_code_probe={'passed':passed,'actual':measured,
-                               'runner_exit':attempt.returncode,
+                               'runner_exit':runner_exit,'timed_out':timed_out,
+                               'step_budget':code_limit,
+                               'timeout_seconds':PYTHON_CODE_TIMEOUT_SECONDS,
+                               'elapsed_seconds':round(code_elapsed,4),
                                'expected_output':'CLX_PYTHON_CODE_OK',
                                'full_stdlib_workflow_qualified':False}
             if not passed:
                 blockers.append('actual guest CPython -c code execution not yet qualified')
         if not success:blockers.append('guest smoke failed: '+str(actual if actual else {'runner_exit':guest.returncode}))
-        records.append({'target':target,'version':version,'elf':info,'startup_libraries':libraries,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_output_excerpt':text[:2048],'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode, 'guest_probe_args':guest_args,'guest_blockers':blockers,'python_code_probe':python_code_probe,'full_target_workflows_qualified':False})
+        records.append({'target':target,'version':version,'elf':info,'startup_libraries':libraries,'linux_reference_passed':reference_ok,'linux_reference_exit':reference.returncode,'linux_reference_output_excerpt':text[:2048],'linux_reference_metrics':metrics,'guest_smoke_passed':success,'guest_actual_result':actual,'guest_runner_exit':guest.returncode,'guest_step_budget':version_limit, 'guest_probe_args':guest_args,'guest_blockers':blockers,'python_code_probe':python_code_probe,'full_target_workflows_qualified':False})
     report={'schema':'compact-linux-target-profiles/v1','source_lock_sha256':build['source_lock_sha256'],'abi':build['abi'],'targets':records,'phase4_entry_ready':all(r['linux_reference_passed'] for r in records),'phase3_complete':False,'resource_qualified':False,'full_target_workflows_qualified':False,'limitations':['Reference smoke measurements are not full target workflow budgets','max_child_rss is not aggregate process-tree RAM','Target networking/certificate and PTY workflows remain unqualified','Guest failures are recorded, never promoted to successful measurements','Guest I/O counters are bounded emulator model totals, never actual physical NIC/host RSS measurements']}
     Path(output).write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
     return 0 if report['phase4_entry_ready'] else 1

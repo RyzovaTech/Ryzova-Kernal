@@ -328,3 +328,25 @@ must fault on real Linux and fail closed in the VM.
 This is **not** full SSE2, native CPython stdlib workflow,
 MXCSR or production CPU/ABI qualification. APP-PYTHON,
 AMD64-ABI and other acceptance requirements stay open.
+
+## 4J — Source-locked CPython code-probe budget
+
+On exact head `43c3a13804d01bc2289cfce35e49f087fcf70f3f`,
+CPython 3.12.10 `-c 'print("CLX_PYTHON_CODE_OK")'`
+stopped at **status=4** after precisely **1,048,576**
+guest instructions: the arbitrary diagnostic step ceiling, not a
+verified unsupported instruction or successful application run.
+
+The *specific* CPython code-execution diagnostic now requests
+**8,388,608** instructions, below the audited hard maximum
+**16,777,216**, and at most **120 seconds** wall-clock. Startup
+smokes still use 1,048,576 steps. The logged evidence includes
+which step budget was used, elapsed seconds, timeout status and
+actual guest results. Timeouts fail closed with runner exit 124 and
+`passed=false`. This does not relax production defaults,
+native guest RAM, file, network or aggregate instruction controls.
+
+An extended **test-only probe** does not close RESOURCE or APP-PYTHON
+requirements. Unmodified full Python application, stdlib,
+threads, subprocesses, TLS, native QEMU, installation and
+recovery acceptance remain independently required.

@@ -9,6 +9,27 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
 from compact_linux_targets import validate,LOCK
 from compact_linux_target_profiles import elf_info,trace_metrics
+class GuestProbeBudgetTests(unittest.TestCase):
+ def test_source_locked_python_diagnostic_step_ceiling_is_explicit_and_finite(self):
+  import compact_linux_target_profiles as profile
+  self.assertEqual(profile.probe_step_limit('python'),1048576)
+  self.assertEqual(profile.probe_step_limit('python',True),8388608)
+  self.assertLessEqual(profile.PYTHON_CODE_STEPS,profile.GUEST_HARD_STEP_CEILING)
+  self.assertLessEqual(profile.PYTHON_CODE_TIMEOUT_SECONDS,120)
+  for target in ('busybox','git','gcc','binutils','make','musl'):
+   self.assertEqual(profile.probe_step_limit(target),1048576)
+   with self.assertRaises(ValueError):profile.probe_step_limit(target,True)
+  with self.assertRaises(ValueError):profile.probe_step_limit('unknown',False)
+ def test_step_probe_rejects_unbounded_or_invalid_harness_inputs(self):
+  import compact_linux_target_profiles as profile
+  from unittest.mock import patch
+  with patch.object(profile,'PYTHON_CODE_STEPS',16777217):
+   with self.assertRaises(ValueError):profile.probe_step_limit('python',True)
+  with patch.object(profile,'GUEST_VERSION_STEPS',0):
+   with self.assertRaises(ValueError):profile.probe_step_limit('git')
+  with patch.object(profile,'PYTHON_CODE_STEPS',True):
+   with self.assertRaises(ValueError):profile.probe_step_limit('python',True)
+
 class TargetLockTests(unittest.TestCase):
  def test_all_seven_frozen_targets_and_transitive_sources_are_locked(self):
   lock=json.loads(LOCK.read_text());self.assertEqual(validate(lock),[]);self.assertGreaterEqual(len(lock['sources']),14)
