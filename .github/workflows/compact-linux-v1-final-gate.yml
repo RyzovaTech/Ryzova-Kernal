@@ -11,6 +11,10 @@ on:
       - 'ryzova/compat/linux/**'
       - '.github/workflows/compact-linux-v1-final-gate.yml'
   workflow_dispatch:
+concurrency:
+  # Cancel only superseded revisions of this PR and this workflow.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:

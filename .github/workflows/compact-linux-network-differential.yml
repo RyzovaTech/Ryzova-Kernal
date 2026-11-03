@@ -9,6 +9,10 @@ on:
       - 'scripts/phase9_sockets.py'
       - 'tests/test_phase9_sockets.py'
       - '.github/workflows/compact-linux-network-differential.yml'
+concurrency:
+  # Cancel only superseded revisions of this PR and this workflow.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:

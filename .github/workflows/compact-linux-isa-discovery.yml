@@ -4,7 +4,18 @@ on:
     branches:
       - main
       - feature/compact-linux-phase3-target-profiles
+    paths:
+      - 'ryzova/compat/linux/**'
+      - 'ryzova/compact/linux-*'
+      - 'scripts/compact_linux_*.py'
+      - 'tests/test_compact_linux_*.py'
+      - 'tests/test_phase9_*.py'
+      - '.github/workflows/compact-linux-isa-discovery.yml'
   workflow_dispatch:
+concurrency:
+  # Cancel only superseded revisions of this PR and this workflow.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:
