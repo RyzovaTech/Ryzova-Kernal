@@ -151,6 +151,28 @@ class BoundedDarwinServiceTests(unittest.TestCase):
         self.assertEqual(result.returncode,2)
         self.assertIn("MAC1_VM status=5",result.stdout)
 
+    def test_exact_256_byte_capture_budget_and_repeated_write_limit(self):
+        payload=b"A"*128
+        start=(b"\xb8"+struct.pack("<I",0x02000004)
+               +b"\xbf"+struct.pack("<I",1))
+        lea=b"\x48\\x8d\\x35"
+        first=b"\xba"+struct.pack("<I",len(payload))+b"\x0f\\x05"
+        second=b"\xb8"+struct.pack("<I",0x02000004)+b"\x0f\\x05"
+        exitcode=b"\xb8"+struct.pack("<I",0x02000001)+b"\x31\\xff"+b"\x0f\\x05"
+        tail=first+second+exitcode
+        instruction=start+lea+struct.pack("<i",len(tail))+tail+payload
+        self.assertLessEqual(len(instruction),256)
+        out=self.check(sample(instruction),0,message=payload*2,exited=True)
+        self.assertIn("capture_bytes=256",out.stdout)
+        # A third identical write must be rejected with the 256 bytes
+        # still confined to private diagnostic storage.
+        third=b"\xb8"+struct.pack("<I",0x02000004)+b"\x0f\\x05"
+        tail=first+second+third+exitcode
+        instruction=start+lea+struct.pack("<i",len(tail))+tail+payload
+        failed=self.check(sample(instruction),2)
+        self.assertIn("capture_bytes=256",failed.stdout)
+        self.assertIn("exited=0",failed.stdout)
+
     def test_unknown_darwin_class_and_bsd_syscalls_are_denied(self):
         for syscall in (0x0100001f,0x02000005,0x02000014,0,0x2000000):
             with self.subTest(nr=syscall):
