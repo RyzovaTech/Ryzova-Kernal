@@ -256,14 +256,17 @@ unaligned: .long -42
         self.assertEqual(guest.stdout,expected)
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
 
-    def test_unimplemented_double_divsd_stays_explicitly_denied(self):
+    def test_new_scalar_double_division_is_an_implemented_instruction(self):
         from test_phase9_image_admission import executable
-        bad=self.root/'unsupported-divsd.elf'
-        bad.write_bytes(executable(code=bytes([0xf2,0x0f,0x5e,0xc1])))
-        out=subprocess.run([str(self.runner),str(bad)],
+        image=self.root/'supported-divsd.elf'
+        image.write_bytes(executable(code=bytes([
+            0xf2,0x0f,0x5e,0xc1,
+            0xb8,0x3c,0,0,0,0x31,0xff,0x0f,0x05
+        ])))
+        out=subprocess.run([str(self.runner),str(image)],
                            capture_output=True,timeout=15)
-        self.assertEqual(out.returncode,2,out.stderr)
-        self.assertIn(b'COMPACT_JOBS_RESULT status=3',out.stderr)
+        self.assertEqual(out.returncode,0,out.stderr)
+        self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',out.stderr)
 
     def test_new_cvtsi2sd_scalar_double_form_executes_bounded_exit(self):
         # F2 REX.W 0F 2A is now an implemented scalar conversion,

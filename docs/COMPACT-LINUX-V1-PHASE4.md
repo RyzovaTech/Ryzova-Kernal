@@ -257,3 +257,27 @@ semantics remain **unimplemented**, not silently declared correct.
 this bounded subset. Only a fresh real CPython `-c` run and complete
 stdlib, filesystem, threads/processes and TLS application workflows
 can supply further acceptance evidence.
+
+## 4G — Next pinned CPython dynamic-code blocker: scalar binary64 add/div
+
+Pinned CPython 3.12.10 `--version` passed, but the latest real
+`-c` probe failed after **245,914** executed guest steps,
+with the main-ELF candidate RIP `58acaa` showing bytes starting
+`F2 0F 58 C0 F2 0F 5E...`. These correspond to candidate
+`ADDSD xmm0,xmm0` and `DIVSD xmm0,m64` instructions. RIP is
+an initial-byte candidate, not proof of actual root cause.
+
+Original C interpreter now implements `F2 0F 58` ADDSD and
+`F2 0F 5E` DIVSD scalar binary64 values, preserving the high XMM
+quadword and EFLAGS. Integer-only normal/subnormal encoding, exponent
+alignment, sticky-bit arithmetic, 53-bit mantissa rounding with
+round-to-nearest/ties-even, signed-zero and infinity handling are
+differential-tested against a native Linux ELF for a finite set of
+real values. No host floating point is used inside interpreter math.
+Unmapped guest memory and malformed instructions continue to reject.
+
+**Unqualified:** complete MXCSR sticky/status/traps, DAZ/FTZ modes,
+nondefault rounding, exact signalling-NaN exception semantics,
+floating multiply/subtract or all AMD64 instructions; complete Python
+stdlib, threads, processes, networking and TLS remain separate.
+No application or release gates are marked passed by this step.

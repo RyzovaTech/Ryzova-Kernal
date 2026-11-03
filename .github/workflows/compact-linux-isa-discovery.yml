@@ -34,3 +34,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_phase9_comiss_differential.py' -v
       - name: Differential binary64 CVTSI2SD RN-even and MOVSD scalar register/memory
         run: python -m unittest discover -s tests -p 'test_phase9_double_scalar_differential.py' -v
+      - name: Differential ADDSD and DIVSD pure-integer IEEE binary64 against Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_double_arithmetic_differential.py' -v
