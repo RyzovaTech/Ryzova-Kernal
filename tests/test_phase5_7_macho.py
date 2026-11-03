@@ -141,6 +141,34 @@ class MachoTests(unittest.TestCase):
         struct.pack_into("<I",x,20,168)
         self.invalid(x)
 
+    def test_section64_metadata_must_fit_its_segment(self):
+        x=fixture()
+        # One 80-byte section64 after segment_command_64, before LC_MAIN.
+        x[184:208]=x[104:128]
+        struct.pack_into("<I",x,36,152)
+        struct.pack_into("<I",x,96,1)
+        struct.pack_into("<I",x,20,176)
+        struct.pack_into("<16s16sQQIIIIIIII",x,104,
+                         b"__text".ljust(16,b"\\0"),
+                         b"__TEXT".ljust(16,b"\\0"),
+                         0x100000200,4,0x200,0,0,0,0,0,0,0)
+        self.assertEqual(self.probe(x).returncode,0)
+        bad=bytearray(x)
+        struct.pack_into("<Q",bad,144,0x3000)  # section size out of segment
+        self.invalid(bad)
+        bad=bytearray(x)
+        struct.pack_into("<I",bad,152,0x2000)  # section file offset out of segment
+        self.invalid(bad)
+        bad=bytearray(x)
+        struct.pack_into("<I",bad,164,1)  # relocations unsupported
+        self.invalid(bad)
+        bad=bytearray(x)
+        struct.pack_into("<I",bad,156,32)  # alignment exponent overflow
+        self.invalid(bad)
+        bad=bytearray(x)
+        bad[120]=ord("Z")  # section segname mismatch
+        self.invalid(bad)
+
     def test_deterministic_mutation_corpus_does_not_crash(self):
         import random
         rng=random.Random(0x4d414330)
