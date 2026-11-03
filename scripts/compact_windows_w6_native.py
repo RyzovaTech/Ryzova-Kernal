@@ -325,6 +325,9 @@ def main():
         commands.append(f"echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows {spec.get('args','')} /tmp/cw-{spec['image']}.exe; echo CW_CASE_{name}_END")
     # One real PE and byte-identical input, never a synthetic guest fixture.
     commands.append("echo 'alpha beta' > /tmp/cw-w8-input; echo second >> /tmp/cw-w8-input; sha1sum -2 256 /tmp/cw-w8-input")
+    # Denied-by-default guest execution of the *same exact* PE must prove
+    # that the Windows application cannot inherit an implicit stdin stream.
+    commands.append('echo CW_CASE_w8wc_denied_BEGIN; /amd64/bin/compact-windows /tmp/cw-w8wc.exe; echo CW_CASE_w8wc_denied_END')
     commands.append('echo CW_CASE_w8wc_BEGIN; /amd64/bin/compact-windows -I /tmp/cw-w8-input /tmp/cw-w8wc.exe; echo CW_CASE_w8wc_END')
     commands+=['sha1sum -2 256 /tmp/cw-local/payload.bin /tmp/cw-ram/ram.bin',
       'test ! -e /tmp/cw-ro/payload.bin && test ! -e /tmp/cw-local/ram.bin && test ! -e /tmp/cw-ram/payload.bin && echo CW_NAMESPACE_ISOLATION_OK',
@@ -343,6 +346,11 @@ def main():
     if not re.search(rb'(?m)^'+w8_input_sha.encode()+rb'\s+/tmp/cw-w8-input\r?$',log):
         raise ValueError('W8 guest stdin not equal Windows-host reference bytes')
     w8_guest=parse_cases(log,{'w8wc':w8_spec})['w8wc']
+    w8_denied=parse_cases(log,{'w8wc_denied':{
+        'image':'w8wc','status':0,'code':36,'out':'','err':''}})['w8wc_denied']
+    if any(w8_denied.get('calls',{}).get(api,0)<1 for api in
+           ('GetStdHandle','ReadFile','GetLastError','ExitProcess')):
+        raise ValueError('W8 ungranted native stdin path did not fail closed')
     file_sha=hashlib.sha256(b'FLEX_WINDOWS_W4_FILE_OK\n').hexdigest();ram_sha=hashlib.sha256(bytes.fromhex('78563412')).hexdigest()
     for path,sha in [('/tmp/cw-local/payload.bin',file_sha),('/tmp/cw-ram/ram.bin',ram_sha)]:
         if not re.search(rb'(?m)^'+sha.encode()+rb'\s+'+path.encode()+rb'\r?$',log):raise ValueError('persistent/9P file mismatch')
@@ -392,6 +400,8 @@ def main():
       'stdin_sha256':w8_input_sha,
       'expected_stdout_sha256':hashlib.sha256(w8_host_out).hexdigest(),
       'native_qemu_case':w8_guest,
+      'native_qemu_missing_stdin_denied_case':w8_denied,
+      'native_qemu_implicit_stdin_denied_verified':True,
       'native_qemu_same_windows_pe_verified':True,
       'native_qemu_stdin_stdout_exit_verified':True,
       'transitive_windows_runtime_qualified':False,
