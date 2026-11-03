@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: D4 Wi-Fi firmware read safety regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/port/etheriwl.c'
+      - 'sys/src/9/pc/etherwpi.c'
+      - 'sys/src/9/pc/etherrt2860.c'
+      - 'tests/test_d4_wifi_firmware.py'
+      - '.github/workflows/d4-wifi-firmware.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  firmware-source-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tests -p 'test_d4_wifi_firmware.py' -v
