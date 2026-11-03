@@ -36,6 +36,12 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_real_apps.py
+            /scripts/compact_windows_import_audit.py
+            /tests/test_compact_windows_real_apps.py
+            /ryzova/compact/windows-v1-plan.json
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
