@@ -20,10 +20,20 @@ from compact_windows_w8_sbase_wc import (
 class SbaseW8SourceTests(unittest.TestCase):
     def test_upstream_exact_git_blobs_and_mit_license(self):
         original = verify_upstream_sources()
-        self.assertEqual(set(original), set(GIT_BLOBS)|{"bridge.c","util.h"})
+        self.assertEqual(set(original), set(GIT_BLOBS)|{"bridge.c","util.h","win32_mincrt.c"})
         self.assertIn("wc.c", original)
         self.assertIn(b"Permission is hereby granted",
                       (FIXTURE/"upstream/LICENSE").read_bytes())
+
+    def test_crtless_candidate_is_explicitly_import_limited_and_not_claimed_guest(self):
+        source = (FIXTURE/"win32_mincrt.c").read_text()
+        self.assertIn("GetStdHandle(STD_INPUT_HANDLE)", source)
+        self.assertIn("ReadFile(", source)
+        self.assertIn("WriteFile(", source)
+        self.assertIn("ExitProcess(", source)
+        self.assertIn("unsupported", source)
+        self.assertNotIn("LoadLibrary(", source)
+        self.assertNotIn("GetProcAddress(", source)
 
     def test_mutated_original_source_rejected_before_compiler(self):
         with tempfile.TemporaryDirectory() as temp:
