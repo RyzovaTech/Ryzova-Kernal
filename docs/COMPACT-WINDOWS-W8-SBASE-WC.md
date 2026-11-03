@@ -73,6 +73,33 @@ Windows `ReadFile` semantics and source-built native QEMU runtime must be
 implemented and independently verified. Never connect the interpreter to
 an untrusted host descriptor or bypass per-application API authorization.
 
+## Bounded guest stdin capability (W8 integration increment)
+
+The existing Windows service layer previously returned no handle for
+`STD_INPUT_HANDLE`. To support a real, stdin-based Windows executable
+without exposing host descriptors, the trusted native Plan 9 launcher now
+accepts **`-I trusted-stdin-resource`** as an opt-in input capability.
+It reads a maximum **4,096 bytes** from that specifically named guest
+resource, rejects oversized/unreadable inputs and copies the bytes into
+per-guest `CwServices` before execution.
+
+Only a launch with explicit console input mask bit 2 AND a successful,
+single-use `cw_attach_console_input` grant sees Win32 virtual handle
+`0x10000` from `GetStdHandle(STD_INPUT_HANDLE)`. Its `ReadFile`
+handles bounded stream reads, proper 0-byte EOF, requested-byte limits
+and guest-buffer rights. Invalid handles, excessive sizes, stale/sibling
+machine tokens, overlapping trusted memory and ungranted stdin remain
+fail-closed. Existing stdout/stderr grants stay separate.
+
+The source-built test suite includes isolated input buffer/EOF/default
+denial cases. **This is a new capability under test, not a claim that
+the entire sbase wc PE already executed in Ryzova native QEMU**.
+Native W8 witness requires pinning the no-CRT PE byte hash and staging
+that exact source-built application plus trusted stdin into a fresh
+source-built AMD64 Ryzova QEMU environment. Original W6's 22 native cases
+and security/driver CI must remain green, with separately recorded W8
+stdout/exit/resource receipt.
+
 ## Native Ryzova status (never conflate with host success)
 
 **No proof of native Ryzova/QEMU guest execution is claimed.** MSVC's
