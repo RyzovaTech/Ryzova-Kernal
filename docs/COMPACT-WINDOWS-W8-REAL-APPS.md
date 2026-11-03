@@ -45,6 +45,27 @@ transitive dependency closure, Win32 CRT/TEB/PEB support, TLS, exception
 handling, guest resource budgets, or physical hardware safety.
 The existing W6 native QEMU evidence remains separately valid.
 
+## First real Windows Server 2022 execution receipt
+
+The initial exact-branch W8 Windows reference job ran all **three genuine
+System32 executables successfully** with expected stdout and zero exit
+status. Only JSON evidence was uploaded; see [Windows-host CI run
+41661135525](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41661135525).
+
+At that snapshot the current Ryzova declared Win32 import profile covered
+**0 of 3** binaries and the strict triage selected **no structurally
+eligible first guest candidate**. The later W8 import-gap logger prints
+bounded imported module names, missing API samples, binary SHA256 and
+explicit parser rejection (when applicable); detailed signed-off provenance
+remains in the JSON artifact.
+
+This result is an engineering constraint, **not evidence that the real
+System32 applications ran under Ryzova**. Microsoft binaries cannot be
+silently redistributed to QEMU. If none of these genuine binaries fits the
+bounded native PE loader, choose a separately reviewed **source-available**
+Windows console application with reproducible PE build/host reference,
+then perform independent native QEMU execution and input/output comparisons.
+
 ## Next W8 qualification
 
 Use real missing-import reports to select an achievable genuine application;
