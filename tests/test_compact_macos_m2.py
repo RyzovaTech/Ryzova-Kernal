@@ -119,7 +119,7 @@ class BoundedDarwinServiceTests(unittest.TestCase):
             " xorl %edi, %edi\n"
             " syscall\n"
             "Lmessage:\n"
-            ' .ascii "Hello from Ryzova\\\n"\\n'
+            ' .ascii "Hello from Ryzova\\n"\n'
         )
         source.write_text(assembly)
         build=subprocess.run(
