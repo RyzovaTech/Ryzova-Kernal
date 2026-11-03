@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #include "macho_vm.h"
+#include "macho_darwin.h"
 #include "macho64.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -25,8 +26,9 @@ typedef struct Region {
 typedef struct Machine {
     Region segments[RYZ_MACHO_MAX_SEGMENTS + 1U];
     uint32_t count;
-    uint64_t rip, last, rsp, rbp;
+    uint64_t rip, last, rsp, rbp, rdi, rsi, rdx;
     uint32_t eax, steps, call_depth;
+    RyzMac2Result *darwin;
 } Machine;
 
 static void release_regions(Machine *machine) {
@@ -165,6 +167,16 @@ static int run_cpu(Machine *m,uint32_t step_limit,RyzMac1Result *out) {
                 if(m->rsp<SYNTH_STACK_BASE || m->rsp>SYNTH_STACK_TOP){
                     status=RYZ_MAC1_STACK_DENIED;goto done;
                 }
+            }else if(extra==0x8d){
+                /* REX.W LEA RSI,[RIP+disp32], bounded guest address. */
+                uint8_t mode;
+                if(!get_code_byte(m,&mode)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
+                if(mode!=0x35){status=RYZ_MAC1_OPCODE_DENIED;goto done;}
+                if(!get_code_dword(m,&imm)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
+                if(!move_signed(m->rip,(int64_t)(int32_t)imm,&target)){
+                    status=RYZ_MAC1_READ_DENIED;goto done;
+                }
+                m->rsi=target;
             }else if(extra==0x83){
                 uint8_t mode,amount;
                 if(!get_code_byte(m,&mode) || !get_code_byte(m,&amount)){
@@ -201,6 +213,14 @@ static int run_cpu(Machine *m,uint32_t step_limit,RyzMac1Result *out) {
             break;
         case 0x90: /* NOP */
             break;
+        case 0xbf: /* MOV EDI,imm32; zero extends RDI. */
+            if(!get_code_dword(m,&imm)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
+            m->rdi=imm;
+            break;
+        case 0xba: /* MOV EDX,imm32; zero extends RDX. */
+            if(!get_code_dword(m,&imm)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
+            m->rdx=imm;
+            break;
         case 0xb8: /* MOV EAX,imm32: architectural zero-extension to RAX */
             if(!get_code_dword(m,&imm)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
             m->eax=imm;
@@ -217,8 +237,9 @@ static int run_cpu(Machine *m,uint32_t step_limit,RyzMac1Result *out) {
             break;
         case 0x31: /* XOR EAX,EAX, only ModRM C0 */
             if(!get_code_byte(m,&extra)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
-            if(extra!=0xc0){status=RYZ_MAC1_OPCODE_DENIED;goto done;}
-            m->eax=0;
+            if(extra==0xc0)m->eax=0;
+            else if(extra==0xff)m->rdi=0;
+            else {status=RYZ_MAC1_OPCODE_DENIED;goto done;}
             break;
         case 0xff: /* INC EAX, only FF C0 */
             if(!get_code_byte(m,&extra)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
@@ -261,6 +282,7 @@ static int run_cpu(Machine *m,uint32_t step_limit,RyzMac1Result *out) {
             break;
         case 0xc3: /* Synthetic root sentinel OR bounded nested CALL return. */
             if(m->call_depth==0){
+                if(m->darwin!=NULL){status=RYZ_MAC1_SYSCALL_DENIED;goto done;}
                 if(m->rsp!=SYNTH_ENTRY_RSP){
                     status=RYZ_MAC1_STACK_DENIED;goto done;
                 }
@@ -276,7 +298,34 @@ static int run_cpu(Machine *m,uint32_t step_limit,RyzMac1Result *out) {
             break;
         case 0x0f:
             if(!get_code_byte(m,&extra)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
-            status=extra==0x05?RYZ_MAC1_SYSCALL_DENIED:RYZ_MAC1_OPCODE_DENIED;
+            if(extra!=0x05){status=RYZ_MAC1_OPCODE_DENIED;goto done;}
+            if(m->darwin==NULL){status=RYZ_MAC1_SYSCALL_DENIED;goto done;}
+            /* Only opt-in Darwin BSD 0x2000001 exit / 0x2000004 write.
+             * The service never calls the host OS, opens a descriptor,
+             * mounts a namespace or transfers bytes over a network. */
+            if(m->eax==UINT32_C(0x02000001)){
+                m->darwin->simulated_exited=1;
+                m->darwin->simulated_exit_code=(uint8_t)m->rdi;
+                status=RYZ_MAC1_OK;
+                goto done;
+            }
+            if(m->eax==UINT32_C(0x02000004)){
+                const unsigned char *from;
+                uint32_t used=m->darwin->captured_stdout_bytes;
+                if(m->rdi!=1){status=RYZ_MAC1_SYSCALL_DENIED;goto done;}
+                if(m->rdx>RYZ_MAC2_OUTPUT_MAX-used){
+                    status=RYZ_MAC1_RESOURCE_DENIED;goto done;
+                }
+                if(m->rdx!=0){
+                    from=access_region(m,m->rsi,(size_t)m->rdx,VM_READ,0);
+                    if(from==NULL){status=RYZ_MAC1_READ_DENIED;goto done;}
+                    memcpy(m->darwin->captured_stdout+used,from,(size_t)m->rdx);
+                }
+                m->darwin->captured_stdout_bytes=used+(uint32_t)m->rdx;
+                m->eax=(uint32_t)m->rdx;
+                break;
+            }
+            status=RYZ_MAC1_SYSCALL_DENIED;
             goto done;
         default:
             status=RYZ_MAC1_OPCODE_DENIED;
@@ -290,8 +339,9 @@ done:
     return status;
 }
 
-int ryz_mac1_run(const unsigned char *image,size_t size,
-                 uint32_t step_limit,RyzMac1Result *out) {
+static int run_restricted(const unsigned char *image,size_t size,
+                          uint32_t step_limit,RyzMac1Result *out,
+                          RyzMac2Result *darwin) {
     RyzMachoPlan plan;
     Machine *machine;
     uint64_t total=0;
@@ -310,6 +360,7 @@ int ryz_mac1_run(const unsigned char *image,size_t size,
     if(machine==NULL)return RYZ_MAC1_RESOURCE_DENIED;
     machine->rip=plan.entry;
     machine->rsp=SYNTH_ENTRY_RSP;
+    machine->darwin=darwin;
     for(i=0;i<plan.segment_count;++i) {
         const RyzMachoSegment *src=&plan.segments[i];
         Region *dst=&machine->segments[i];
@@ -361,4 +412,15 @@ done:
     release_regions(machine);
     free(machine);
     return status;
+}
+
+int ryz_mac1_run(const unsigned char *image,size_t size,
+                 uint32_t step_limit,RyzMac1Result *out) {
+    return run_restricted(image,size,step_limit,out,NULL);
+}
+int ryz_mac2_run(const unsigned char *image,size_t size,
+                 uint32_t step_limit,RyzMac2Result *out) {
+    if(out==NULL)return RYZ_MAC1_BAD_IMAGE;
+    memset(out,0,sizeof(*out));
+    return run_restricted(image,size,step_limit,&out->cpu,out);
 }
