@@ -32,6 +32,13 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 18
     steps:
+      # Existing W6 Windows workflow requires disabling Git's NTFS-name
+      # checkout rejection for legacy 9front con.scat; use with sparse paths.
+      - name: Apply Windows-safe Git checkout configuration
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.protectNTFS false
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
