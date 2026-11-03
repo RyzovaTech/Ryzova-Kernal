@@ -234,6 +234,25 @@ class MachoMac1Tests(unittest.TestCase):
         struct.pack_into("<Q",x,104+32,5*1024*1024)
         self.check(x,2)
 
+    def test_deterministic_macho_mutations_never_crash_or_escape_budget(self):
+        import random
+        rng=random.Random(0x4d414331)
+        template=sample(bytes([0x55,0x48,0x89,0xe5,0xe8,2,0,0,0,
+                               0x5d,0xc3,0xb8,40,0,0,0,0x83,0xc0,2,0xc3]),
+                        data=True)
+        for i in range(160):
+            candidate=bytearray(template)
+            for _ in range(1+rng.randrange(5)):
+                # Deliberately cover header, segment metadata, text, data
+                # and immutable permission fields.
+                offset=rng.randrange(0,len(candidate))
+                candidate[offset]=rng.randrange(256)
+            with self.subTest(seed_index=i):
+                out=self.execute(candidate,steps=128)
+                self.assertIn(out.returncode,(0,2),out.stdout+out.stderr)
+                self.assertIn("MAC1_VM status=",out.stdout)
+                self.assertIn("native_guest=0",out.stdout)
+
     def test_reject_forged_host_pointer_ranges_and_oversize_input(self):
         x=sample(b"\xc3")
         struct.pack_into("<Q",x,32+24,0x0000800000000000)
