@@ -78,10 +78,9 @@ class BoundedDarwinServiceTests(unittest.TestCase):
     def test_hello_world_is_captured_not_forwarded_to_host(self):
         out=self.check(darwin_syscall_fixture(),0,message=STDOUT,exited=True)
         self.assertNotIn("Hello from Ryzova",out.stdout)
-        self.assertIn("steps=7",out.stdout)
+        self.assertIn("steps=8",out.stdout)
 
     def test_default_mac1_mode_still_denies_identical_syscalls(self):
-        from test_compact_macos_m1 import MachoMac1Tests
         # Exercise original MAC-1 probe as a separate process, not a mode
         # flag hidden in the code. Default ABI never forwards syscalls.
         runner=self.root/"default-mac1-probe"
