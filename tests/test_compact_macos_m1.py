@@ -152,16 +152,16 @@ class MachoMac1Tests(unittest.TestCase):
         exe=self.root/"mac1-reference"
         encoded=",".join("0x%02x"%byte for byte in code)
         asm.write_text(
-            ".intel_syntax noprefix\\n"
-            ".global _start\\n"
-            ".text\\n"
-            "_start:\\n"
-            "  call _test\\n"
-            "  mov edi,eax\\n"
-            "  mov eax,60\\n"
-            "  syscall\\n"
-            "_test:\\n"
-            "  .byte "+encoded+"\\n"
+            ".intel_syntax noprefix\n"
+            ".global _start\n"
+            ".text\n"
+            "_start:\n"
+            "  call _test\n"
+            "  mov edi,eax\n"
+            "  mov eax,60\n"
+            "  syscall\n"
+            "_test:\n"
+            "  .byte "+encoded+"\n"
         )
         compiler=os.environ.get("PHASE5_CC","cc")
         result=subprocess.run(
