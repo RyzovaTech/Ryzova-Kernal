@@ -82,3 +82,21 @@ synthetic `RET` fixture.
 The single draft macOS integration PR remains the only merge vehicle.
 No changes to Linux, Windows, drivers or 9front sync are needed for
 this incremental, restricted research stage.
+
+## MAC-1B synthetic stack and bounded calls
+
+The second MAC-1 increment introduces a **private 16-KiB non-executable
+synthetic stack** at a reserved canonical guest virtual address, with
+RSP initialized to a test-entry calling-convention offset (RSP modulo 16
+is 8). Mach-O segments cannot overlap that stack; the VM never treats a
+guest stack address as a host pointer. Bounded PUSH/POP RBP, CALL rel32,
+nested RET, 64-bit RBP/RSP frame moves, positive byte-sized stack
+adjustments, LEAVE and selected RBP-relative dword loads/stores run
+only in the original interpreter. Recursive call depth is capped at 32;
+stack underflow/overflow and dirty-root RET return an explicit error.
+
+This is **not** dyld-initialized Darwin process startup, a real argc/argv
+environment, a system call dispatcher, native Ryzova guest process
+creation or an executable macOS application. The root RET only signals
+success for the synthetic test harness. Mandatory MAC-1 full ABI and
+MAC-2–7 qualification gates remain open.

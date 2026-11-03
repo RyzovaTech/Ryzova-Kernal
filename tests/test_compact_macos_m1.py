@@ -131,6 +131,37 @@ class MachoMac1Tests(unittest.TestCase):
         struct.pack_into("<Q",truncated,32+48,ENTRY+2)
         self.check(truncated,3)
 
+    def test_nested_call_and_synthetic_stack_frame(self):
+        # push rbp; mov rbp,rsp; call helper; pop rbp; ret
+        # helper: mov eax,40; add eax,2; ret.
+        code=bytes([0x55,0x48,0x89,0xe5,0xe8,2,0,0,0,0x5d,0xc3,
+                    0xb8,40,0,0,0,0x83,0xc0,2,0xc3])
+        result=self.check(sample(code),0,eax=42)
+        self.assertIn("test_return=1",result.stdout)
+
+    def test_stack_local_variables_and_leave(self):
+        # Store/reload a local dword at [rbp-4] within the private RW stack.
+        code=bytes([
+            0x55,0x48,0x89,0xe5,0x48,0x83,0xec,16,
+            0xb8,40,0,0,0,0x89,0x45,0xfc,
+            0x31,0xc0,0x8b,0x45,0xfc,0x83,0xc0,2,0xc9,0xc3
+        ])
+        self.check(sample(code),0,eax=42)
+
+    def test_stack_underflow_and_dirty_root_return_denied(self):
+        self.check(sample(bytes([0x5d,0xc3])),9)
+        self.check(sample(bytes([0x55,0xc3])),9)
+        # Each iteration pushes 2 qwords; stack exhaustion must be
+        # detected before this branch exceeds the 4096-step CPU limit.
+        self.check(sample(bytes([0x55,0x55,0xeb,0xfc])),9,steps=4096)
+
+    def test_synthetic_stack_never_executes_macho_controlled_code(self):
+        # Real Mach-O segment at fixed private stack address is not admitted
+        # as an executable or writable mapping overlapping the reserved stack.
+        image=sample(b"\xc3",data=True)
+        struct.pack_into("<Q",image,104+24,0x00007fff0000c000)
+        self.check(image,2)
+
     def test_infinite_jmp_cannot_exhaust_host_cpu(self):
         r=self.check(sample(b"\xeb\xfe"),6,steps=32)
         self.assertIn("steps=32",r.stdout)

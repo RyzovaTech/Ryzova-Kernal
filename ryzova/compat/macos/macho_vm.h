@@ -9,6 +9,7 @@
 #define RYZ_MAC1_INPUT_MAX (4U * 1024U * 1024U)
 #define RYZ_MAC1_MAPPED_MAX (8U * 1024U * 1024U)
 #define RYZ_MAC1_STEPS_MAX 4096U
+#define RYZ_MAC1_STACK_BYTES (16U * 1024U)
 
 enum RyzMac1Status {
     RYZ_MAC1_OK = 0,
@@ -19,7 +20,8 @@ enum RyzMac1Status {
     RYZ_MAC1_SYSCALL_DENIED = 5,
     RYZ_MAC1_STEP_LIMIT = 6,
     RYZ_MAC1_READ_DENIED = 7,
-    RYZ_MAC1_WRITE_DENIED = 8
+    RYZ_MAC1_WRITE_DENIED = 8,
+    RYZ_MAC1_STACK_DENIED = 9
 };
 typedef struct RyzMac1Result {
     uint64_t last_rip;

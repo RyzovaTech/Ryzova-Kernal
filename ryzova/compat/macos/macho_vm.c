@@ -11,6 +11,11 @@
 #define VM_READ 1U
 #define VM_WRITE 2U
 #define VM_EXECUTE 4U
+/* Private synthetic test stack, never a host pointer or a Darwin ABI. */
+#define SYNTH_STACK_TOP UINT64_C(0x00007fff00010000)
+#define SYNTH_STACK_BASE (SYNTH_STACK_TOP - RYZ_MAC1_STACK_BYTES)
+#define SYNTH_ENTRY_RSP (SYNTH_STACK_TOP - UINT64_C(8))
+#define SYNTH_CALL_DEPTH_MAX 32U
 
 typedef struct Region {
     uint64_t base, extent, backed;
@@ -18,10 +23,10 @@ typedef struct Region {
     unsigned char *buffer;
 } Region;
 typedef struct Machine {
-    Region segments[RYZ_MACHO_MAX_SEGMENTS];
+    Region segments[RYZ_MACHO_MAX_SEGMENTS + 1U];
     uint32_t count;
-    uint64_t rip, last;
-    uint32_t eax, steps;
+    uint64_t rip, last, rsp, rbp;
+    uint32_t eax, steps, call_depth;
 } Machine;
 
 static void release_regions(Machine *machine) {
@@ -95,6 +100,38 @@ static int write_dword(Machine *machine,uint64_t address,uint32_t value) {
     b[3]=(unsigned char)(value>>24);
     return 1;
 }
+static int store_qword(Machine *machine,uint64_t address,uint64_t value) {
+    unsigned char *b=access_region(machine,address,8,VM_WRITE,0);
+    unsigned int i;
+    if(b==NULL)return 0;
+    for(i=0;i<8;i++)b[i]=(unsigned char)(value>>(8*i));
+    return 1;
+}
+static int load_qword(Machine *machine,uint64_t address,uint64_t *value) {
+    unsigned char *b=access_region(machine,address,8,VM_READ,0);
+    unsigned int i;
+    uint64_t v=0;
+    if(b==NULL)return 0;
+    for(i=0;i<8;i++)v|=(uint64_t)b[i]<<(8*i);
+    *value=v;
+    return 1;
+}
+static int stack_push(Machine *machine,uint64_t value) {
+    if(machine->rsp<SYNTH_STACK_BASE+8 || machine->rsp>SYNTH_STACK_TOP)
+        return 0;
+    if(!store_qword(machine,machine->rsp-8,value))return 0;
+    machine->rsp-=8;
+    return 1;
+}
+static int stack_pop(Machine *machine,uint64_t *value) {
+    if(machine->rsp<SYNTH_STACK_BASE ||
+       machine->rsp>SYNTH_STACK_TOP-8 ||
+       !load_qword(machine,machine->rsp,value))
+        return 0;
+    machine->rsp+=8;
+    return 1;
+}
+
 static int run_cpu(Machine *m,uint32_t step_limit,RyzMac1Result *out) {
     uint8_t op,extra;
     uint32_t imm;
@@ -105,6 +142,63 @@ static int run_cpu(Machine *m,uint32_t step_limit,RyzMac1Result *out) {
         ++m->steps;
         if(!get_code_byte(m,&op)){status=RYZ_MAC1_EXEC_DENIED;break;}
         switch(op) {
+        case 0x55: /* PUSH RBP, on private synthetic guest stack. */
+            if(!stack_push(m,m->rbp)){status=RYZ_MAC1_STACK_DENIED;goto done;}
+            break;
+        case 0x5d: /* POP RBP */
+            if(!stack_pop(m,&m->rbp)){status=RYZ_MAC1_STACK_DENIED;goto done;}
+            break;
+        case 0xc9: /* LEAVE = RSP <- RBP; POP RBP */
+            if(m->rbp<SYNTH_STACK_BASE || m->rbp>SYNTH_STACK_TOP-8){
+                status=RYZ_MAC1_STACK_DENIED;goto done;
+            }
+            m->rsp=m->rbp;
+            if(!stack_pop(m,&m->rbp)){status=RYZ_MAC1_STACK_DENIED;goto done;}
+            break;
+        case 0x48: /* Restricted REX.W stack-frame integer operations. */
+            if(!get_code_byte(m,&extra)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
+            if(extra==0x89) {
+                if(!get_code_byte(m,&extra)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
+                if(extra==0xe5)m->rbp=m->rsp;          /* MOV RBP,RSP */
+                else if(extra==0xec)m->rsp=m->rbp;     /* MOV RSP,RBP */
+                else {status=RYZ_MAC1_OPCODE_DENIED;goto done;}
+                if(m->rsp<SYNTH_STACK_BASE || m->rsp>SYNTH_STACK_TOP){
+                    status=RYZ_MAC1_STACK_DENIED;goto done;
+                }
+            }else if(extra==0x83){
+                uint8_t mode,amount;
+                if(!get_code_byte(m,&mode) || !get_code_byte(m,&amount)){
+                    status=RYZ_MAC1_EXEC_DENIED;goto done;
+                }
+                /* Only positive imm8 stack adjustments in this finite ABI. */
+                if(amount>127 || (mode!=0xec && mode!=0xc4)){
+                    status=RYZ_MAC1_OPCODE_DENIED;goto done;
+                }
+                if(mode==0xec) {                     /* SUB RSP,imm8 */
+                    if(m->rsp<SYNTH_STACK_BASE+amount){
+                        status=RYZ_MAC1_STACK_DENIED;goto done;
+                    }
+                    m->rsp-=amount;
+                }else{                             /* ADD RSP,imm8 */
+                    if(m->rsp>SYNTH_STACK_TOP-amount){
+                        status=RYZ_MAC1_STACK_DENIED;goto done;
+                    }
+                    m->rsp+=amount;
+                }
+            }else{status=RYZ_MAC1_OPCODE_DENIED;goto done;}
+            break;
+        case 0xe8: /* CALL rel32; never jump to native/host code. */
+            if(!get_code_dword(m,&imm)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
+            if(!move_signed(m->rip,(int64_t)(int32_t)imm,&target)){
+                status=RYZ_MAC1_EXEC_DENIED;goto done;
+            }
+            if(m->call_depth==SYNTH_CALL_DEPTH_MAX ||
+               !stack_push(m,m->rip)){
+                status=RYZ_MAC1_STACK_DENIED;goto done;
+            }
+            ++m->call_depth;
+            m->rip=target;
+            break;
         case 0x90: /* NOP */
             break;
         case 0xb8: /* MOV EAX,imm32: architectural zero-extension to RAX */
@@ -134,11 +228,17 @@ static int run_cpu(Machine *m,uint32_t step_limit,RyzMac1Result *out) {
         case 0x8b: /* MOV EAX,[RIP+disp32], read permission required */
         case 0x89: /* MOV [RIP+disp32],EAX, write permission required */
             if(!get_code_byte(m,&extra)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
-            if(extra!=0x05){status=RYZ_MAC1_OPCODE_DENIED;goto done;}
-            if(!get_code_dword(m,&imm)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
-            if(!move_signed(m->rip,(int64_t)(int32_t)imm,&target)){
-                status=op==0x8b?RYZ_MAC1_READ_DENIED:RYZ_MAC1_WRITE_DENIED;goto done;
-            }
+            if(extra==0x05){
+                if(!get_code_dword(m,&imm)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
+                if(!move_signed(m->rip,(int64_t)(int32_t)imm,&target)){
+                    status=op==0x8b?RYZ_MAC1_READ_DENIED:RYZ_MAC1_WRITE_DENIED;goto done;
+                }
+            }else if(extra==0x45){
+                if(!get_code_byte(m,&extra)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
+                if(!move_signed(m->rbp,(int64_t)(int8_t)extra,&target)){
+                    status=op==0x8b?RYZ_MAC1_READ_DENIED:RYZ_MAC1_WRITE_DENIED;goto done;
+                }
+            }else {status=RYZ_MAC1_OPCODE_DENIED;goto done;}
             if(op==0x8b) {
                 if(!read_dword(m,target,&m->eax)){status=RYZ_MAC1_READ_DENIED;goto done;}
             }else if(!write_dword(m,target,m->eax)){
@@ -159,10 +259,21 @@ static int run_cpu(Machine *m,uint32_t step_limit,RyzMac1Result *out) {
             }
             m->rip=target;
             break;
-        case 0xc3: /* Synthetic test return sentinel; no Darwin stack exists. */
-            out->returned_from_test_entry=1;
-            status=RYZ_MAC1_OK;
-            goto done;
+        case 0xc3: /* Synthetic root sentinel OR bounded nested CALL return. */
+            if(m->call_depth==0){
+                if(m->rsp!=SYNTH_ENTRY_RSP){
+                    status=RYZ_MAC1_STACK_DENIED;goto done;
+                }
+                out->returned_from_test_entry=1;
+                status=RYZ_MAC1_OK;
+                goto done;
+            }
+            if(!stack_pop(m,&target)){
+                status=RYZ_MAC1_STACK_DENIED;goto done;
+            }
+            --m->call_depth;
+            m->rip=target;
+            break;
         case 0x0f:
             if(!get_code_byte(m,&extra)){status=RYZ_MAC1_EXEC_DENIED;goto done;}
             status=extra==0x05?RYZ_MAC1_SYSCALL_DENIED:RYZ_MAC1_OPCODE_DENIED;
@@ -198,6 +309,7 @@ int ryz_mac1_run(const unsigned char *image,size_t size,
     machine=(Machine *)calloc(1,sizeof(*machine));
     if(machine==NULL)return RYZ_MAC1_RESOURCE_DENIED;
     machine->rip=plan.entry;
+    machine->rsp=SYNTH_ENTRY_RSP;
     for(i=0;i<plan.segment_count;++i) {
         const RyzMachoSegment *src=&plan.segments[i];
         Region *dst=&machine->segments[i];
@@ -224,6 +336,25 @@ int ryz_mac1_run(const unsigned char *image,size_t size,
         if(src->file_bytes!=0)
             memcpy(dst->buffer,image+(size_t)src->file_offset,
                    (size_t)src->file_bytes);
+    }
+    /* A separate 16-KiB non-executable synthetic stack: it cannot be
+     * supplied, renamed or overlapped by arbitrary Mach-O segments. */
+    for(i=0;i<machine->count;++i) {
+        Region *s=&machine->segments[i];
+        if(s->base<SYNTH_STACK_TOP &&
+           SYNTH_STACK_BASE<s->base+s->extent) {
+            status=RYZ_MAC1_RESOURCE_DENIED;
+            goto done;
+        }
+    }
+    {
+        Region *stack=&machine->segments[machine->count];
+        stack->base=SYNTH_STACK_BASE;
+        stack->extent=RYZ_MAC1_STACK_BYTES;
+        stack->permissions=VM_READ|VM_WRITE;
+        stack->buffer=(unsigned char *)calloc(RYZ_MAC1_STACK_BYTES,1);
+        if(stack->buffer==NULL){status=RYZ_MAC1_RESOURCE_DENIED;goto done;}
+        ++machine->count;
     }
     status=run_cpu(machine,step_limit,out);
 done:
