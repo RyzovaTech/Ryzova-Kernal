@@ -205,6 +205,22 @@ static uint32_t divide_binary32(uint32_t left,uint32_t right)
     if(q>=(UINT64_C(1)<<23U))return sign|UINT32_C(0x00800000);
     return sign|(uint32_t)q;
 }
+/* Scalar binary32 ordered comparison: exact IEEE-754 magnitude/sign
+ * ordering from encoded bits. No host floating point or NaN quieting.
+ * The finite CPU does not implement MXCSR sticky/masked exceptions,
+ * so this models EFLAGS only (COMISS/UCOMISS #I remains unqualified). */
+static unsigned int compare_binary32_eflags(uint32_t a,uint32_t b)
+{
+    uint32_t ma=a&UINT32_C(0x7fffffff),mb=b&UINT32_C(0x7fffffff);
+    if((ma>UINT32_C(0x7f800000)) || (mb>UINT32_C(0x7f800000)))
+        return CF|PF|ZF; /* unordered: qNaN/sNaN */
+    if((ma==0 && mb==0) || a==b)return ZF; /* +0 == -0 */
+    if((a^b)&UINT32_C(0x80000000))
+        return (a&UINT32_C(0x80000000))?CF:0;
+    if(a&UINT32_C(0x80000000))
+        return a>b?CF:0; /* reversed order for negative floats */
+    return a<b?CF:0;
+}
 static uint64_t resultflags(Cpu *c,uint64_t v,unsigned int size)
 {
     unsigned int parity=0, i;
@@ -627,6 +643,25 @@ static int step(Cpu *c)
             }
             q=divide_binary32(a,b);
             for(k=0;k<4;k++)c->xmm[reg][k]=(unsigned char)(q>>(8U*k));
+        }
+        else if((op2==0x2e || op2==0x2f) && !c->repeat && !c->operand16){
+            /* 0F 2F /r COMISS and 0F 2E /r UCOMISS scalar float32.
+             * Compare XMM[31:0] with XMM/m32, update ZF/PF/CF, clear
+             * OF/SF/AF. Higher XMM bits and other EFLAGS stay unchanged.
+             * MXCSR exception traps/flags are explicitly NOT modeled. */
+            uint32_t left=0,right;unsigned int i;
+            rm=decode(c,&reg,&group,4);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            for(i=0;i<4;i++)left|=(uint32_t)c->xmm[reg][i]<<(8U*i);
+            if(rm.reg>=0){
+                right=0;
+                for(i=0;i<4;i++)right|=(uint32_t)c->xmm[rm.reg][i]<<(8U*i);
+            }else{
+                right=(uint32_t)get(c,rm,4);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+            }
+            c->flags=(c->flags&~(uint64_t)(CF|PF|AF|ZF|SF|OF))|
+                     compare_binary32_eflags(left,right);
         }
         else if(op2==0x2a && c->repeat==0xf3 && !c->operand16){
             /* F3 [REX.W] 0F 2A /r CVTSI2SS xmm, r/m32|r/m64.
