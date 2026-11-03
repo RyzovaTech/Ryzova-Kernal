@@ -121,3 +121,25 @@ uImage proves a QEMU boot, not shell/userland functionality, data-plane
 networking, block integrity, DMA/IOMMU reliability, physical devices
 or server release readiness. The M6.2 probe is research-only while
 the corresponding actual guest observations remain incomplete.
+
+## M6.2 exact-head functional I/O acceptance (strict draft-only gate)
+
+`scripts/m6_arm64_virtio_acceptance.py` implements a separate, fail-closed
+GitHub Actions check on the M5.5-owned PR. It accepts M6.2 only if the
+**same checkout** has SHA-256-verified M6.1 kernel boot, verified uImage
+digest in the second QEMU guest, a reachable guest shell, attached VirtIO
+devices, a real host HTTP request matched to the guest's payload SHA-256,
+and a guest block-write/read SHA-256 independently corroborated by the
+host's ephemeral disk bytes. Zero physical models are certified.
+
+This gate always writes
+`artifacts/phase3/m6-arm64-virtio-acceptance.json`, returning nonzero
+for missing or inconsistent evidence; its report is included in the
+native guest CI artifacts even if the job fails. Synthetic tests
+(`tests/test_m6_arm64_virtio_acceptance.py`) are contract tests,
+**not** proof of functioning hardware or guest userland.
+
+M6.1 boot remains independently accepted under its SHA-256 gate.
+M6.2 requires real datapath evidence, which may remain blocked until
+ARM64 userland boot, guest root filesystem and VirtIO enumeration work.
+Neither CI nor this PR relaxes release or physical-hardware certification.

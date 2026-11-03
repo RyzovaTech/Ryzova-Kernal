@@ -14,6 +14,8 @@ on:
       - 'scripts/m6_arm64_boot_acceptance.py'
       - 'tests/test_m6_arm64_boot_acceptance.py'
       - 'scripts/m6_arm64_virtio_probe.py'
+      - 'scripts/m6_arm64_virtio_acceptance.py'
+      - 'tests/test_m6_arm64_virtio_acceptance.py'
       - 'tests/test_m6_arm64_virtio_probe.py'
       - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
@@ -44,6 +46,8 @@ on:
       - 'scripts/m6_arm64_boot_acceptance.py'
       - 'tests/test_m6_arm64_boot_acceptance.py'
       - 'scripts/m6_arm64_virtio_probe.py'
+      - 'scripts/m6_arm64_virtio_acceptance.py'
+      - 'tests/test_m6_arm64_virtio_acceptance.py'
       - 'tests/test_m6_arm64_virtio_probe.py'
       - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
@@ -116,6 +120,16 @@ jobs:
             --boot artifacts/phase3/m5-arm64-qemu-probe.json \
             --expected-head "$(git rev-parse HEAD)" \
             --output artifacts/phase3/m6-arm64-boot-acceptance.json
+      # A different gate from M6.1: no pass from a kernel banner or PCI ID.
+      # Keep each negative report even when QEMU userspace is not available.
+      - name: Require actual ARM64 VirtIO guest network and storage functional I/O (M5.5 PR only)
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'm5/arm64-native-bootstrap-and-m6-gates'
+        run: |
+          python3 scripts/m6_arm64_virtio_acceptance.py \
+            --boot artifacts/phase3/m5-arm64-qemu-probe.json \
+            --virtio artifacts/phase3/m6-arm64-virtio-probe.json \
+            --expected-head "$(git rev-parse HEAD)" \
+            --output artifacts/phase3/m6-arm64-virtio-acceptance.json
       - name: Remove huge disk images before logs upload
         if: always()
         run: rm -f 9front.qcow2.gz 9front.qcow2 native-build-overlay.qcow2 artifacts/phase3/guest-identity-cert.pem artifacts/phase3/guest-identity-key.pem
@@ -138,6 +152,7 @@ jobs:
             artifacts/phase3/m5-arm64-boot-serial.log
             artifacts/phase3/m6-arm64-boot-acceptance.json
             artifacts/phase3/m6-arm64-virtio-probe.json
+            artifacts/phase3/m6-arm64-virtio-acceptance.json
             artifacts/phase3/m6-arm64-virtio-serial.log
             artifacts/phase3/source-provenance.txt
             artifacts/phase3/9pc64.sha256
