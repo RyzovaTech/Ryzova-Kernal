@@ -147,3 +147,19 @@ if __name__ == "__main__":
         "native_guest_execution_qualified": False,
         "windows_v1_release_qualified": False,
     }, sort_keys=True))
+    # Bounded, privacy-safe logs: allow downstream engineers to prioritize
+    # actual unsupported imports without downloading proprietary PE binaries.
+    for item in report["reference_applications"]:
+        audit = item["pe_import_audit"]
+        missing = audit["missing_or_ordinal_imports"] if audit else []
+        print("W8_REAL_APP_IMPORTS " + json.dumps({
+            "name": item["name"],
+            "pe_sha256": item["binary_sha256"],
+            "pe_bytes": item["binary_bytes"],
+            "parser_rejection": item["pe_audit_rejection"],
+            "direct_imports": audit["direct_imports"] if audit else None,
+            "missing_direct_count": len(missing),
+            "missing_direct_sample": missing[:24],
+            "import_modules": audit["modules"] if audit else [],
+            "guest_execution_verified": False,
+        }, sort_keys=True))
