@@ -6,6 +6,7 @@ on:
     paths:
       - 'ryzova/compat/macos/**'
       - 'tests/test_compact_macos_m3.py'
+      - 'tests/test_compact_macos_m3_symbols.py'
       - 'docs/COMPACT-MACOS-M3.md'
       - '.github/workflows/compact-macos-m3.yml'
   pull_request:
@@ -13,6 +14,7 @@ on:
     paths:
       - 'ryzova/compat/macos/**'
       - 'tests/test_compact_macos_m3.py'
+      - 'tests/test_compact_macos_m3_symbols.py'
       - 'docs/COMPACT-MACOS-M3.md'
       - '.github/workflows/compact-macos-m3.yml'
   workflow_dispatch:
@@ -32,11 +34,16 @@ jobs:
           PHASE5_SANITIZE: '1'
         run: |
           python3 -m unittest discover -s tests -p 'test_compact_macos_m3.py' -v
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m3_symbols.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v
           clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
             ryzova/compat/macos/macho_link_meta.c \
             ryzova/compat/macos/macho_link_meta_probe.c \
             -o /tmp/ryz-mac3-meta
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            ryzova/compat/macos/macho_symbol_meta.c \
+            ryzova/compat/macos/macho_symbol_meta_probe.c \
+            -o /tmp/ryz-mac3-symbols
   mac3a-linux-host-metadata:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -54,4 +61,5 @@ jobs:
           PHASE5_SANITIZE: '1'
         run: |
           python3 -m unittest discover -s tests -p 'test_compact_macos_m3.py' -v
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m3_symbols.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v

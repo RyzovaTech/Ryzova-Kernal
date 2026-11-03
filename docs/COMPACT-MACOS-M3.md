@@ -46,3 +46,17 @@ and does not complete MAC-3 full dynamic linker / libSystem support.
    all driver/security regression workflows on the **exact final head**.
 
 All of MAC-4–7 remain unimplemented/unqualified in the present PR.
+
+## MAC-3B — inert Mach-O object symbol inventory
+
+The original `ryz_mac3_symbols()` C parser inspects only little-endian
+x86_64 `MH_OBJECT` nlist_64 and `LC_SYMTAB` metadata. It rejects unknown
+load commands, oversized/unbounded symbol tables, invalid string-table
+ranges, duplicate names, unsupported symbol types, stale relocations and
+untrusted names. It classifies defined vs undefined externally visible
+symbols and counts bounded relocation entries. **It never resolves, binds,
+applies relocations, accesses host libraries or executes guest code.**
+The dedicated test corpus includes a *genuine* Clang Darwin x86_64
+`MH_OBJECT` with an unresolved external symbol `_missing_symbol`.
+This illustrates why actual dyld/linker work and kernel trust policies
+remain essential rather than substituting a host implementation.
