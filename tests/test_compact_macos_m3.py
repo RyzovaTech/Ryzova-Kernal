@@ -147,9 +147,11 @@ class Mach3MetadataTests(unittest.TestCase):
         struct.pack_into("<I",x,32+72+4,9)
         self.denied(x)
         x=bytearray(valid)
-        pos=32+72+24
-        size=struct.unpack_from("<I",x,32+72+4)[0]
-        x[pos:32+72+size]=b"A"*(size-24)
+        command_base=32+72+24  # Segment + LC_MAIN precede LC_LOAD_DYLIB.
+        size=struct.unpack_from("<I",x,command_base+4)[0]
+        # Overwrite the *entire* dylib-name payload including padding so
+        # there is no NUL terminator inside this load command.
+        x[command_base+24:command_base+size]=b"A"*(size-24)
         self.denied(x)
         self.denied(valid[:110])
 
