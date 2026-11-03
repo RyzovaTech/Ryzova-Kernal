@@ -104,6 +104,37 @@ def probe(overlay):
         cpu=bool(re.search(rb"(?:^|\r?\n)cpu0:[^\r\n]{1,160}(?:\r?\n)",output))
         report["arm64_qemu_boot_observed"]=banner and cpu
         report["outcome"]="kernel-boot-observed" if banner and cpu else "kernel-boot-unconfirmed"
+        if banner and cpu:
+            # M6.2 is a distinct, non-certifying VM. Preserve M6.1 success
+            # if actual guest userland cannot yet reach a shell or I/O path.
+            try:
+                from m6_arm64_virtio_probe import run_probe as m6_probe
+                virtio = m6_probe(kernel, source, digest, OUT)
+            except Exception as exc:
+                virtio = {
+                    "schema": "ryzova-m6-arm64-virtio-functional/v1",
+                    "source_sha": source,
+                    "outcome": "probe-execution-error",
+                    "error": str(exc)[:300],
+                    "arm64_virtio_network_verified": False,
+                    "arm64_virtio_storage_verified": False,
+                    "guest_shell_reached": False,
+                    "release_status": "blocked",
+                    "newly_certified_physical_models": 0,
+                }
+                (OUT/"m6-arm64-virtio-probe.json").write_text(
+                    json.dumps(virtio, sort_keys=True, indent=2)+"\n")
+            report["m6_virtio_probe_outcome"] = virtio["outcome"]
+            report["arm64_userland_function_verified"] = bool(
+                virtio.get("guest_shell_reached") is True)
+            report["arm64_virtio_network_verified"] = bool(
+                virtio.get("arm64_virtio_network_verified") is True)
+            report["arm64_virtio_storage_verified"] = bool(
+                virtio.get("arm64_virtio_storage_verified") is True)
+            print("M6 ARM64 VirtIO guest datapath:", virtio["outcome"],
+                  "network:", report["arm64_virtio_network_verified"],
+                  "storage:", report["arm64_virtio_storage_verified"],
+                  flush=True)
     return report
 
 

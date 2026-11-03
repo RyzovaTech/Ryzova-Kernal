@@ -90,3 +90,34 @@ M6 *functional or hardware release* remains BLOCKED until:
 
 Neither QEMU PCI candidates nor host-source-only tests can certify physical
 hardware. Newly physically certified model count stays zero pending audits.
+
+## M6.2 experimental VirtIO functional I/O probe (2026-11-03)
+
+The M5.5 native QEMU boot probe now optionally launches a **second isolated,
+source-built AArch64 QEMU guest** with a VirtIO-net PCI device and
+VirtIO-SCSI block controller after M6.1 image SHA + kernel boot are verified.
+
+The test harness in `scripts/m6_arm64_virtio_probe.py` uses a transient
+8 MiB raw disk, a bound `127.0.0.1` HTTP fixture and QEMU user-mode
+networking with `restrict=on` plus one explicitly permitted
+`guestfwd` endpoint (see QEMU user networking documentation).
+The guest must reach a real shell before any commands are sent.
+Network I/O is **not** accepted without both (a) a real HTTP request
+received by the host fixture and (b) the matching guest SHA-256 digest
+of the host payload. Storage I/O is **not** accepted without all of
+(a) a completed guest write command, (b) guest SHA-256 of the exact
+read-back bytes and (c) host-side verification that the disposable
+VirtIO-SCSI disk actually contains the guest-written payload.
+
+The independent artifact `artifacts/phase3/m6-arm64-virtio-probe.json`
+and raw `m6-arm64-virtio-serial.log` are uploaded even when guest
+userland is unavailable. Missing shell, network request, read-back,
+host-side writes or hash evidence always reports **blocked**, never
+a functional VirtIO pass. Synthetic unit tests check the evidence
+adjudicator but do not certify hardware or real QEMU execution.
+
+**Milestone boundary:** ARM64 kernel banner+cpu0 plus SHA-256-verified
+uImage proves a QEMU boot, not shell/userland functionality, data-plane
+networking, block integrity, DMA/IOMMU reliability, physical devices
+or server release readiness. The M6.2 probe is research-only while
+the corresponding actual guest observations remain incomplete.
