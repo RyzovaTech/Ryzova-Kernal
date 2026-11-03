@@ -281,3 +281,26 @@ nondefault rounding, exact signalling-NaN exception semantics,
 floating multiply/subtract or all AMD64 instructions; complete Python
 stdlib, threads, processes, networking and TLS remain separate.
 No application or release gates are marked passed by this step.
+
+## 4H — Pinned Python -c next blocker: COMISD / CVTTSD2SI
+
+At exact head `7de5f0586df3f3f2bb99b7e23fdc88003a96f633`, the source-built
+CPython 3.12.10 `-c` probe still fails with `status=3`, after 245929
+interpreter steps, candidate RIP `58acb6`; bounded ELF bytes start
+`66 0F 2F C1 ... F2 48 0F 2C C0`. These are candidate
+COMISD and CVTTSD2SI opcodes. RIP alone does not prove fault causality.
+
+The native-independent interpreter now models `66 0F 2F` COMISD and
+`66 0F 2E` UCOMISD using raw IEEE-754 binary64 comparisons, correct
+signed-zero/infinity/NaN ordered EFLAGS and no host floating point;
+`F2 [REX.W] 0F 2C` CVTTSD2SI truncates the source binary64 toward
+zero into a 32- or 64-bit GPR. NaNs and signed overflow return the
+documented x86 integer-indefinite sentinel, including 32-bit GPR
+zero extension. A single source-built AMD64 ELF tests normal values,
+signed extremes, overflow, infinities, NaNs, register/memory operands
+and fault denial, identical on host Linux and the guest VM.
+
+Still **not** provided: architectural MXCSR sticky flags/unmasked traps,
+unrestricted IEEE-754 compliance, complete CPython runtime, stdlib,
+TLS, platform ABI and production kernel application execution.
+Completion gates stay open until end-to-end evidence exists.

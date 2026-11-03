@@ -36,3 +36,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_phase9_double_scalar_differential.py' -v
       - name: Differential ADDSD and DIVSD pure-integer IEEE binary64 against Linux
         run: python -m unittest discover -s tests -p 'test_phase9_double_arithmetic_differential.py' -v
+      - name: Differential COMISD and CVTTSD2SI flags/round-to-zero vs native Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_double_compare_trunc_differential.py' -v
