@@ -6,6 +6,8 @@ on:
       - 'ryzova/compact/windows-v1-plan.json'
       - 'scripts/compact_windows_w*.py'
       - 'scripts/compact_windows_w*.ps1'
+      - 'tests/fixtures/windows_w8_sbase_wc/**'
+      - 'scripts/compact_windows_import_audit.py'
       - 'tests/test_compact_windows_w*.py'
       - 'tests/fixtures/windows_w*.c'
       - 'docs/COMPACT-WINDOWS*'
@@ -46,8 +48,24 @@ jobs:
             /tests/fixtures/windows_w4_reference.c
             /tests/fixtures/windows_w5_reference.c
             /tests/fixtures/windows_w6_limits.c
+            /scripts/compact_windows_w8_sbase_wc.py
+            /scripts/compact_windows_import_audit.py
+            /tests/fixtures/windows_w8_sbase_wc/**
+            /ryzova/compact/windows-v1-plan.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - shell: pwsh
         run: ./scripts/compact_windows_w6_reference.ps1
+      - name: Compile genuine MIT sbase wc and pin original exact Windows-host PE for native QEMU
+        shell: pwsh
+        run: |
+          python scripts/compact_windows_w8_sbase_wc.py --output artifacts/compact-windows/w6-fixtures/w8-sbase-wc-reference.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item artifacts/windows/w8-sbase/sbase-wc-mincrt.exe artifacts/compact-windows/w6-fixtures/sbase-wc-mincrt.exe
+          $receipt = Get-Content artifacts/compact-windows/w6-fixtures/w8-sbase-wc-reference.json -Raw | ConvertFrom-Json
+          $binaryHash = (Get-FileHash artifacts/compact-windows/w6-fixtures/sbase-wc-mincrt.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($receipt.no_crt_candidate.source_binary_sha256 -ne $binaryHash -or !$receipt.no_crt_candidate.candidate_structurally_eligible_for_native_investigation) { throw 'W8 exact Windows PE hash/structural admission mismatch' }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-w6-compiler-fixtures
@@ -80,6 +98,9 @@ jobs:
           echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  9front.qcow2.gz' | sha256sum -c -
           gzip -dc 9front.qcow2.gz > 9front.qcow2
           qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-windows.qcow2
+      # W8 native test uses the same Windows-host-compiled, SHA256-pinned
+      # MIT source application uploaded with the frozen W6 compiler fixtures.
+      # Never substitute an independently generated PE or host reference PASS.
       - name: Native 6c build, source kernel reboot, exact PE and resource tests
         run: python3 scripts/compact_windows_w6_native.py native-windows.qcow2 --bootstrap-gzip 9front.qcow2.gz --fixtures artifacts/w6-fixtures
       - name: Verify exact source-bound 22-case native QEMU and crash/fault receipts
