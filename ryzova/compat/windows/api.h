@@ -5,6 +5,7 @@
 #define CW_API_COUNT 30U
 #define CW_ALL_APIS ((1U<<CW_API_COUNT)-1U)
 #define CW_OUTPUT_LIMIT 65536U
+#define CW_STDIN_LIMIT 4096U /* explicitly launcher-owned bounded input */
 #define CW_HEAP_LIMIT (1024U*1024U)
 #define CW_ENV_COUNT 16U
 #define CW_COMMAND_UNITS 1024U
@@ -38,10 +39,14 @@ struct CwServices {
     uint32_t console_closed;
     CwCrtBlock crt_blocks[16];
     unsigned char errno_bytes[4];
+    unsigned char stdin_data[CW_STDIN_LIMIT];
+    uint32_t stdin_bytes,stdin_pos,stdin_configured;
 };
 /* Zero-initialize services before first attach; a service belongs to one machine.
    Trusted launcher attaches explicit policy/backing, never host env/DLLs. */
 int cw_attach_services(CwMachine *,CwServices *,const CwLaunch *,unsigned char *,size_t);
+/* Called by trusted launcher only, before guest execution; no host forwarding. */
+int cw_attach_console_input(CwMachine *,const unsigned char *,size_t);
 int cw_api_id(const char *);
 const char *cw_api_name(unsigned int);
 uint64_t cw_api_token(unsigned int);

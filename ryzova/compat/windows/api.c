@@ -52,7 +52,7 @@ int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigne
     unsigned int i,j;int length;CwLaunch copy;
     if(!m || !m->image || !s || !launch || s->bound_machine || m->services || m->instructions || m->exited)return CW_API;
     if((launch->api_mask&~CW_ALL_APIS) || (m->plan.api_mask&~launch->api_mask) ||
-       (launch->console_mask&~3U) || launch->environment_count>CW_ENV_COUNT ||
+       (launch->console_mask&~7U) || launch->environment_count>CW_ENV_COUNT ||
        heap_bytes>CW_HEAP_LIMIT || heap_bytes%4096 || (heap_bytes && !heap) ||
        (size_t)m->plan.image_bytes+CW_STACK+4096+heap_bytes>CW_MAX_MEMORY)return CW_API;
     length=utf16_length(launch->command_line,CW_COMMAND_UNITS,0);if(length<0)return CW_API;
@@ -75,6 +75,26 @@ int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigne
     for(i=0;i<=(unsigned int)length;i++){s->command_bytes[2*i]=(unsigned char)copy.command_line[i];s->command_bytes[2*i+1]=(unsigned char)(copy.command_line[i]>>8);}
     if(heap_bytes)memset(heap,0,heap_bytes);
     s->bound_machine=m;m->services=s;return CW_OK;
+}
+/* One immutable, launcher-authored stdin capability per machine. A guest
+ * cannot call this function or inject host file descriptors; a token is
+ * meaningful only while the corresponding machine's explicit grant exists.
+ * Input is copied before any guest execution. */
+int cw_attach_console_input(CwMachine *m,const unsigned char *data,size_t bytes) {
+    CwServices *s;
+    if(!m || !(s=m->services) || s->bound_machine!=m ||
+       !(s->launch.console_mask&4U) || s->stdin_configured ||
+       m->instructions || m->exited || bytes>CW_STDIN_LIMIT ||
+       (bytes && !data))return CW_API;
+    if(bytes && (overlap(data,bytes,s,sizeof(*s)) ||
+                 overlap(data,bytes,m,sizeof(*m)) ||
+                 overlap(data,bytes,m->image,(size_t)m->plan.image_bytes+CW_STACK)))
+        return CW_API;
+    if(bytes)memcpy(s->stdin_data,data,bytes);
+    s->stdin_bytes=(uint32_t)bytes;
+    s->stdin_pos=0;
+    s->stdin_configured=1;
+    return CW_OK;
 }
 unsigned char *cw_service_memory(CwMachine *m,uint64_t at,size_t n,unsigned int rights) {
     CwServices *s=m->services;uint64_t off;size_t first,last,i;
@@ -109,6 +129,27 @@ static uint64_t write_file(CwMachine *m,const uint64_t *a) {
     if(n>CW_OUTPUT_LIMIT-s->output_bytes[0]-s->output_bytes[1])return fail(s,ERR_MEMORY);
     if(n)memcpy(s->output[stream]+s->output_bytes[stream],input,n);
     s->output_bytes[stream]+=n;put32(written,n);return 1;
+}
+/* Explicit STD_INPUT_HANDLE buffer, never an inherited Linux/Plan9 stdin.
+ * Atomic range checks, finite request length and deterministic EOF. */
+static uint64_t read_console_input(CwMachine *m,const uint64_t *a) {
+    CwServices *s=m->services;
+    uint32_t requested=(uint32_t)a[2],available,actual;
+    unsigned char *out=NULL,*count;
+    if(a[0]!=UINT64_C(0x10000) || !(s->launch.console_mask&4U) ||
+       !s->stdin_configured)return fail(s,ERR_INVALID_HANDLE);
+    if(a[4])return fail(s,ERR_UNSUPPORTED);
+    if(requested>CW_STDIN_LIMIT)return fail(s,ERR_PARAMETER);
+    count=cw_memory(m,a[3],4,CW_W);
+    if(!count)return fail(s,ERR_NOACCESS);
+    if(requested && !(out=cw_memory(m,a[1],requested,CW_W)))
+        return fail(s,ERR_NOACCESS);
+    available=s->stdin_bytes-s->stdin_pos;
+    actual=requested<available?requested:available;
+    if(actual)memcpy(out,s->stdin_data+s->stdin_pos,actual);
+    s->stdin_pos+=actual;
+    put32(count,actual);
+    return 1;
 }
 static uint64_t environment(CwMachine *m,const uint64_t *a) {
     CwServices *s=m->services;uint16_t name[64];unsigned int i,n;uint32_t capacity=(uint32_t)a[2];
@@ -219,7 +260,7 @@ int cw_api_dispatch(CwMachine *m) {
     case CW_GET_STD_HANDLE:
         if((uint32_t)a[0]==UINT32_MAX-10)result=(s->launch.console_mask&1)?0x10001:0;
         else if((uint32_t)a[0]==UINT32_MAX-11)result=(s->launch.console_mask&2)?0x10002:0;
-        else if((uint32_t)a[0]==UINT32_MAX-9)result=0; /* stdin absent */
+        else if((uint32_t)a[0]==UINT32_MAX-9)result=(s->launch.console_mask&4U) && s->stdin_configured?UINT64_C(0x10000):0; /* stdin default-off */
         else {s->last_error=ERR_PARAMETER;result=UINT64_MAX;}
         break;
     case CW_WRITE_FILE:
@@ -237,7 +278,9 @@ int cw_api_dispatch(CwMachine *m) {
     case CW_GET_ENVIRONMENT_VARIABLE:result=environment(m,a);break;
     case CW_VIRTUAL_ALLOC:result=a[0] && cw_crt_owned(m,a[0])?fail(s,ERR_ADDRESS):virtual_alloc(m,a);break;
     case CW_VIRTUAL_FREE:result=cw_crt_owned(m,a[0])?fail(s,ERR_ADDRESS):virtual_free(m,a);break;
-    case CW_CREATE_FILE:case CW_READ_FILE:case CW_CLOSE_HANDLE:
+    case CW_READ_FILE:
+        result=a[0]==UINT64_C(0x10000)?read_console_input(m,a):cw_file_call(m,id,a);break;
+    case CW_CREATE_FILE:case CW_CLOSE_HANDLE:
     case CW_SET_FILE_POINTER:case CW_GET_FILE_SIZE:case CW_FLUSH_FILE_BUFFERS:
         result=cw_file_call(m,id,a);break;
     default:
