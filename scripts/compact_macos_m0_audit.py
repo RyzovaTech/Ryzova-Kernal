@@ -17,6 +17,14 @@ SOURCES = (
     "docs/COMPACT-MACOS-M0.md",
 )
 SCHEMA = "ryzova-compact-macos-m0/v1"
+COMPLETION_POLICY = ("MAC-0 static security groundwork only; MAC-1 to MAC-7 "
+                     "require separate guest and real application evidence "
+                     "before any one-time final integration merge")
+REQUIRED_KEYS = {
+    "schema", "phase", "profile", "target_architecture", "cpu_subtype",
+    "supported_image", "load_command_allowlist", "bounded_limits",
+    "capabilities", "authority", "completion_policy",
+}
 LIMITS = {
     "input_bytes": 4 * 1024 * 1024,
     "load_commands": 32,
@@ -45,7 +53,8 @@ AUTHORITY = (
 def validate_contract(contract):
     if not isinstance(contract, dict):
         raise ValueError("MAC-0 contract must be an object")
-    if (contract.get("schema") != SCHEMA or contract.get("phase") != "MAC-0"
+    if (set(contract) != REQUIRED_KEYS or
+            contract.get("schema") != SCHEMA or contract.get("phase") != "MAC-0"
             or contract.get("profile") != "intel-macho64-static-metadata-v1"
             or contract.get("target_architecture") != "x86_64"
             or contract.get("cpu_subtype") != "CPU_SUBTYPE_X86_64_ALL"
@@ -62,7 +71,7 @@ def validate_contract(contract):
             or not isinstance(perms, dict) or set(perms) != set(AUTHORITY)
             or any(perms.get(k) is not False for k in AUTHORITY)):
         raise ValueError("unverified runtime capability or authority assertion")
-    if not isinstance(contract.get("completion_policy"), str) or not contract["completion_policy"]:
+    if contract.get("completion_policy") != COMPLETION_POLICY:
         raise ValueError("missing explicit completion boundaries")
     return True
 
@@ -81,7 +90,8 @@ def inspect(root, contract=None):
     for name in (CONTRACT, *SOURCES):
         path = root / name
         # Symlink denial also prevents future audit of redirected source text.
-        if not path.is_file() or path.is_symlink():
+        if (not path.is_file() or path.is_symlink() or
+                not path.resolve().is_relative_to(root)):
             raise ValueError("missing or redirected source: " + name)
         data = path.read_bytes()
         if len(data) > 2 * 1024 * 1024:
