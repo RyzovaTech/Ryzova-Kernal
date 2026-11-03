@@ -1,0 +1,57 @@
+name: Compact macOS MAC-3A Inert Dylib Metadata
+on:
+  push:
+    branches:
+      - 'feature/compact-macos-*'
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'tests/test_compact_macos_m3.py'
+      - 'docs/COMPACT-MACOS-M3.md'
+      - '.github/workflows/compact-macos-m3.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'tests/test_compact_macos_m3.py'
+      - 'docs/COMPACT-MACOS-M3.md'
+      - '.github/workflows/compact-macos-m3.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mac3a-macos-host-metadata:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Clang UBSan original Mach-O metadata inventory and negative tests
+        env:
+          PHASE5_CC: clang
+          PHASE5_SANITIZE: '1'
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m3.py' -v
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            ryzova/compat/macos/macho_link_meta.c \
+            ryzova/compat/macos/macho_link_meta_probe.c \
+            -o /tmp/ryz-mac3-meta
+  mac3a-linux-host-metadata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: GCC and Clang sanitizer metadata parity and fail-closed tests
+        env:
+          PHASE5_CC: ${{ matrix.compiler }}
+          PHASE5_SANITIZE: '1'
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m3.py' -v
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v
