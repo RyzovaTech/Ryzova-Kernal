@@ -95,7 +95,15 @@ int efgetrune(Rune *value,FILE *stream,const char *name) {
     unsigned char c;DWORD got=0;
     (void)name;
     if(!value || stream!=cw_w8_stdin())ExitProcess(35); /* invalid stream token */
-    if(!ReadFile(GetStdHandle(STD_INPUT_HANDLE),&c,1,&got,0))ExitProcess(36); /* inherited stdin failed */
+    if(!ReadFile(GetStdHandle(STD_INPUT_HANDLE),&c,1,&got,0)) {
+        /* On a real anonymous Windows pipe, the writer closing after all
+         * bytes were consumed yields ERROR_BROKEN_PIPE, not a zero-byte
+         * successful ReadFile. Treat ONLY these documented EOF errors as
+         * EOF; all other I/O faults continue to fail closed. */
+        DWORD error=GetLastError();
+        if(error==ERROR_BROKEN_PIPE || error==ERROR_HANDLE_EOF)return 0;
+        ExitProcess(36);
+    }
     if(got==0)return 0;
     if(c>=128)fail_ascii();
     *value=(Rune)c;
