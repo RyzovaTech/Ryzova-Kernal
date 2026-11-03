@@ -1,0 +1,20 @@
+{
+  "schema": "flex-linux-symlinks-ci-native/v1",
+  "historical_head": "2bb3273f1e27f4b9a8a7d760fd6c7721a7733835",
+  "source_checkout": "67579db3876a9f31ef4949f1d3976bd2ba828882",
+  "pull_request": 73,
+  "workflow_run": 40993953179,
+  "workflow_job": 123862622721,
+  "archive_sha256": "356f809cbb7cc9769360c2f346b1519acdb93da22a7d51397ff51a47cd0de1db",
+  "compiled_installed_and_extracted_kernel_sha256": "e3d5d2e05ff45cbd1e0dec830035edffd8e77940a19971a7049b740bcb5f716a",
+  "ci_workflows_passed": 31,
+  "phase9_tests_passed": 91,
+  "phase5_tests_passed": 63,
+  "native_symlink_invocations_passed": 16,
+  "main_merged": false,
+  "limitations": [
+    "not arbitrary Linux compatibility",
+    "not operational ARM64 qualification",
+    "not physical hardware qualification"
+  ]
+}

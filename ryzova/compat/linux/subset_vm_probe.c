@@ -20,7 +20,10 @@ int main(int argc,char **argv)
     unsigned char *elf, *memory;
     RyzVmResult result;
     int status;
-    if (argc!=2) {
+    RyzLinuxFiles files;
+    unsigned char *input=NULL, *fileout=NULL;
+    size_t count;
+    if (argc!=2 && argc!=3) {
         fprintf(stderr,"usage: subset-vm static-linux-elf\n");
         return 64;
     }
@@ -38,11 +41,30 @@ int main(int argc,char **argv)
         fclose(in);free(elf);free(memory);return 65;
     }
     fclose(in);
-    status=ryz_vm_run_static_elf(elf,(size_t)bytes,memory,RYZ_VM_MAX_SPAN,
-                                 output,NULL,&result);
+    if(argc==3){
+        input=malloc(RYZ_LINUX_FILE_MAX+1);
+        fileout=malloc(RYZ_LINUX_FILE_MAX);
+        in=fopen(argv[2],"rb");
+        if(input==NULL || fileout==NULL || in==NULL)
+            return 65;
+        count=fread(input,1,RYZ_LINUX_FILE_MAX+1,in);
+        if(ferror(in) || count>RYZ_LINUX_FILE_MAX){ fclose(in); return 65; }
+        fclose(in);
+        memset(&files,0,sizeof(files));
+        files.input=input; files.input_size=count;
+        files.output=fileout; files.output_capacity=RYZ_LINUX_FILE_MAX;
+        status=ryz_vm_run_file_elf(elf,(size_t)bytes,memory,RYZ_VM_MAX_SPAN,
+                                  &files,output,NULL,&result);
+        if(status==RYZ_VM_OK && result.exited && result.exit_status==0 &&
+           fwrite(fileout,1,files.output_size,stdout)!=files.output_size)
+            return 65;
+        fprintf(stderr,"COMPACT_FILES_RESULT bytes=%u profile=files-v1\n", (unsigned)files.output_size);
+    }else
+        status=ryz_vm_run_static_elf(elf,(size_t)bytes,memory,RYZ_VM_MAX_SPAN,
+                                  output,NULL,&result);
     fprintf(stderr,"RYZOVA_PHASE5_VM status=%d exited=%d exit_code=%u steps=%u syscalls=%u\n",
             status,result.exited,(unsigned)result.exit_status,
             (unsigned)result.executed_steps,(unsigned)result.syscall_count);
-    free(memory);free(elf);
+    free(input);free(fileout);free(memory);free(elf);
     return status==RYZ_VM_OK && result.exited && result.exit_status==0?0:2;
 }

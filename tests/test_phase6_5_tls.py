@@ -114,7 +114,10 @@ class EndToEndTLS(unittest.TestCase):
         with self._server({"compute":lambda b:b},server_ep) as server:
             with self.assertRaises(TLSUnavailable):
                 self._client(server.port,wrong).request("compute",b"bad")
-            self.assertGreaterEqual(server.denied,1)
+        # The TLS context closes before the server's exception handler updates
+        # telemetry. Teardown joins that worker, so assert after it completes.
+        self.assertGreaterEqual(server.denied,1)
+        self.assertEqual(server.handled,0)
     def test_large_wire_request_rejected(self):
         cli_ep,srv_ep=self.setup_pair({"compute":lambda b:b})
         with self._server({"compute":lambda b:b},srv_ep) as server:

@@ -33,18 +33,39 @@ def _pin(certificate):
 
 
 class Ephemeral9PTLSFixture(AbstractContextManager):
-    def __init__(self, public_payload, gateway_port=0, guest_tls_port=0):
+    def __init__(self, public_payload, gateway_port=0, guest_tls_port=0,
+                 max_guest_sessions=8, max_guest_frames=256,
+                 research_policy_factory=None, *, enable_guest_identity=False,
+                 authenticated_guest_port=0):
+        if type(enable_guest_identity) is not bool:
+            raise ValueError("explicit guest identity opt-in required")
+        self.enable_guest_identity = enable_guest_identity
+        self.authenticated_guest_port = authenticated_guest_port
+        self.authenticated_guest_tls = None
+        self.guest_client_cert = self.guest_client_key = self.guest_client_pin = None
         if not isinstance(public_payload, bytes) or not 0 < len(public_payload) <= 4096:
             raise ValueError("only one small public test fixture allowed")
+        if (type(max_guest_sessions) is not int or
+                not 1 <= max_guest_sessions <= 32):
+            raise ValueError("guest TLS session limit must be 1..32")
+        if (type(max_guest_frames) is not int or
+                not 1 <= max_guest_frames <= 4096):
+            raise ValueError("guest 9P frame limit must be 1..4096")
         self.payload = public_payload
         self.gateway_port = gateway_port
         self.guest_tls_port = guest_tls_port
+        self.max_guest_sessions = max_guest_sessions
+        self.max_guest_frames = max_guest_frames
+        if research_policy_factory is not None and not callable(research_policy_factory):
+            raise ValueError("policy factory must be callable")
+        self.research_policy_factory = research_policy_factory
         self.guest_cert_sha256 = None
         self._guest_tls = None
         self._directory = None
         self._peer = None
         self._gateway = None
         self._threads = []
+        self._started_listeners = []
 
     @property
     def peer(self):
@@ -66,21 +87,40 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
         try:
             srv_cert, srv_key = _cert(directory.name, "server")
             cli_cert, cli_key = _cert(directory.name, "client")
+            client_pin = _pin(cli_cert)
+            policy = (self.research_policy_factory(client_pin)
+                      if self.research_policy_factory is not None else None)
             self._peer = SecureReadOnly9PPeer(
                 {"probe": self.payload},
                 server_context(str(srv_cert), str(srv_key), str(cli_cert)),
-                _pin(cli_cert))
+                client_pin, research_policy=policy)
             self._gateway = Local9PTLSGateway(
                 client_context(str(cli_cert), str(cli_key), str(srv_cert)),
                 _pin(srv_cert), self._peer.server_address[1], self.gateway_port)
             self.guest_cert_sha256 = _pin(srv_cert)
             self._guest_tls = NativeGuestTLS12Endpoint(
                 str(srv_cert), str(srv_key),
-                self._gateway.server_address[1], port=self.guest_tls_port)
-            for listener in (self._peer, self._gateway, self._guest_tls):
+                self._gateway.server_address[1], port=self.guest_tls_port,
+                max_sessions=self.max_guest_sessions,
+                max_frames_per_session=self.max_guest_frames)
+            listeners = [self._peer, self._gateway, self._guest_tls]
+            if self.enable_guest_identity:
+                self.guest_client_cert, self.guest_client_key = _cert(directory.name, "guest")
+                self.guest_client_pin = _pin(self.guest_client_cert)
+                self.authenticated_guest_tls = NativeGuestTLS12Endpoint(
+                    str(srv_cert), str(srv_key), self._gateway.server_address[1],
+                    port=self.authenticated_guest_port,
+                    max_sessions=self.max_guest_sessions,
+                    max_frames_per_session=self.max_guest_frames,
+                    guest_ca=str(self.guest_client_cert),
+                    guest_client_pin=self.guest_client_pin,
+                    guest_identity="ryzova-qemu-guest")
+                listeners.append(self.authenticated_guest_tls)
+            for listener in listeners:
                 t = threading.Thread(target=listener.serve_forever,
                                      daemon=True, name="phase7-mtls-loopback")
                 t.start()
+                self._started_listeners.append(listener)
                 self._threads.append(t)
         except Exception:
             self.close()
@@ -88,17 +128,24 @@ class Ephemeral9PTLSFixture(AbstractContextManager):
         return self
 
     def close(self):
-        for listener in (self._guest_tls, self._gateway, self._peer):
+        for listener in (self.authenticated_guest_tls, self._guest_tls,
+                         self._gateway, self._peer):
             if listener is not None:
-                listener.shutdown()
+                # shutdown() deadlocks when serve_forever() never started.
+                # Constructor errors can leave an unstarted peer/gateway.
+                if listener in self._started_listeners:
+                    listener.shutdown()
                 listener.server_close()
         for t in self._threads:
             t.join(timeout=4)
             if t.is_alive():
                 raise RuntimeError("TLS 9P fixture thread did not stop")
         self._gateway = self._peer = self._guest_tls = None
+        self.authenticated_guest_tls = None
+        self.guest_client_cert = self.guest_client_key = self.guest_client_pin = None
         self.guest_cert_sha256 = None
         self._threads.clear()
+        self._started_listeners.clear()
         if self._directory is not None:
             self._directory.cleanup()
             self._directory = None

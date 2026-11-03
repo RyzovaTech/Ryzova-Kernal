@@ -6,8 +6,7 @@
 #ifndef RYZOVA_LINUX_ELF64_H
 #define RYZOVA_LINUX_ELF64_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include "portable.h"
 
 #define RYZ_ELF64_MAX_PHDR 32U
 #define RYZ_ELF64_MAX_LOAD 16U
@@ -41,6 +40,7 @@ typedef struct RyzElf64Plan {
     RyzElf64Segment loads[RYZ_ELF64_MAX_LOAD];
 } RyzElf64Plan;
 
+int ryz_elf64_plan_relocated(const unsigned char *,size_t,uint64_t,int,RyzElf64Plan *);
 int ryz_elf64_plan(const unsigned char *image, size_t length, RyzElf64Plan *out);
 int ryz_elf64_materialize(const unsigned char *image, size_t image_length,
                           const RyzElf64Segment *segment,

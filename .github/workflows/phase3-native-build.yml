@@ -13,6 +13,8 @@ on:
       - 'scripts/m5_arm64_qemu_probe.py'
       - 'scripts/m6_arm64_boot_acceptance.py'
       - 'tests/test_m6_arm64_boot_acceptance.py'
+      - 'scripts/m6_arm64_virtio_probe.py'
+      - 'tests/test_m6_arm64_virtio_probe.py'
       - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
@@ -20,6 +22,11 @@ on:
       - 'scripts/phase7_handoff.py'
       - 'scripts/phase7_secure_closeout.py'
       - 'scripts/phase7_native_guest_tls.py'
+      - 'scripts/phase8_guest_identity.py'
+      - 'scripts/phase9_compact_native.py'
+      - 'scripts/phase9_linux_environment.py'
+      - 'scripts/phase9_process.py'
+      - 'tests/fixtures/compact_process*'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -36,6 +43,8 @@ on:
       - 'scripts/m5_arm64_qemu_probe.py'
       - 'scripts/m6_arm64_boot_acceptance.py'
       - 'tests/test_m6_arm64_boot_acceptance.py'
+      - 'scripts/m6_arm64_virtio_probe.py'
+      - 'tests/test_m6_arm64_virtio_probe.py'
       - 'scripts/m2_qemu_probe.py'
       - 'scripts/phase4_1_stability.py'
       - 'scripts/phase4_5_stress.py'
@@ -43,6 +52,11 @@ on:
       - 'scripts/phase7_handoff.py'
       - 'scripts/phase7_secure_closeout.py'
       - 'scripts/phase7_native_guest_tls.py'
+      - 'scripts/phase8_guest_identity.py'
+      - 'scripts/phase9_compact_native.py'
+      - 'scripts/phase9_linux_environment.py'
+      - 'scripts/phase9_process.py'
+      - 'tests/fixtures/compact_process*'
       - 'scripts/extract-9pc64.py'
       - 'scripts/check-identity.py'
       - 'scripts/verify-foundation.sh'
@@ -52,11 +66,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   native-build:
     runs-on: ubuntu-24.04
-    # Cross-building ARM64 libc + other libraries in the pinned 9front
-    # AMD64 TCG guest can exceed the previous AMD64-only 25-minute budget.
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -80,7 +96,7 @@ jobs:
           qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-build-overlay.qcow2
       - name: Transfer exact Git checkout kernel source and run Plan 9 mk
         run: python3 scripts/phase3-native-build.py native-build-overlay.qcow2
-      - name: Probe actual ARM64 QEMU virt boot if native ARM64 uImage linked
+      - name: Probe actual ARM64 QEMU virt boot and M6.2 VirtIO functional datapaths
         run: python3 scripts/m5_arm64_qemu_probe.py native-build-overlay.qcow2
       - name: Evaluate M5 native ARM64 cross-build vs operational gates
         if: always()
@@ -92,9 +108,7 @@ jobs:
         run: python3 scripts/phase7_handoff.py
       - name: Verify Phase 7 secure-gateway native QEMU bridge and research-only closeout
         run: python3 scripts/phase7_secure_closeout.py
-      # This remains a draft PR until *native* AArch64 boot evidence is present.
-      # Preserve all AMD64, network, storage and Phase 7 checks before this gate.
-      - name: Require M6.1 native ARM64 link and SHA-verified QEMU boot on M5.5 PR
+      - name: Require actual ARM64 kernel boot with verified SHA-256 (M5.5 PR only)
         if: always() && github.event_name == 'pull_request' && github.head_ref == 'm5/arm64-native-bootstrap-and-m6-gates'
         run: |
           python3 scripts/m6_arm64_boot_acceptance.py \
@@ -104,7 +118,7 @@ jobs:
             --output artifacts/phase3/m6-arm64-boot-acceptance.json
       - name: Remove huge disk images before logs upload
         if: always()
-        run: rm -f 9front.qcow2.gz 9front.qcow2 native-build-overlay.qcow2
+        run: rm -f 9front.qcow2.gz 9front.qcow2 native-build-overlay.qcow2 artifacts/phase3/guest-identity-cert.pem artifacts/phase3/guest-identity-key.pem
       - name: Archive native guest source/build evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -119,10 +133,12 @@ jobs:
             artifacts/phase3/m2-qemu-host.log
             artifacts/phase3/result.txt
             artifacts/phase3/m5-arm64-native-build.json
+            artifacts/phase3/m5-full-gates.json
             artifacts/phase3/m5-arm64-qemu-probe.json
             artifacts/phase3/m5-arm64-boot-serial.log
-            artifacts/phase3/m5-full-gates.json
             artifacts/phase3/m6-arm64-boot-acceptance.json
+            artifacts/phase3/m6-arm64-virtio-probe.json
+            artifacts/phase3/m6-arm64-virtio-serial.log
             artifacts/phase3/source-provenance.txt
             artifacts/phase3/9pc64.sha256
             artifacts/phase3/kernel-provenance.json
@@ -132,6 +148,26 @@ jobs:
             artifacts/phase3/phase7-entry.json
             artifacts/phase3/phase7-secure-bridge.json
             artifacts/phase3/phase7-native-guest-tls.json
+            artifacts/phase3/phase8-guest-identity.json
+            artifacts/phase3/phase9-compact-native.json
+            artifacts/phase3/phase9-linux-environment.json
+            artifacts/phase3/phase9-linux-process.json
+            artifacts/phase3/phase9-linux-busybox.json
+            artifacts/phase3/phase9-linux-shell.json
+            artifacts/phase3/phase9-linux-jobs.json
+            artifacts/phase3/phase9-linux-vfs.json
+            artifacts/phase3/phase9-linux-runtime.json
+            artifacts/phase3/phase9-linux-threads.json
+            artifacts/phase3/phase9-linux-sockets.json
+            artifacts/phase3/phase9-linux-persistence.json
+            artifacts/phase3/phase9-linux-external.json
+            artifacts/phase3/phase9-linux-symlinks.json
+            artifacts/phase3/phase9-linux-hardlinks.json
+            artifacts/phase3/phase9-linux-shared-maps.json
+            artifacts/phase3/compact-linux-rootfs.json
+            artifacts/phase3/compact-linux-mounts.json
+            artifacts/phase3/compact-linux-private-maps.json
+            artifacts/phase3/compact-linux-phase3-runtime.json
             artifacts/phase3/phase7-secure-closeout.json
             artifacts/phase3/screen.ppm
           if-no-files-found: warn

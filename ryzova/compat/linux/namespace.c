@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Host-independent virtual namespace: no underlying host or Plan 9 files. */
 #include "namespace.h"
-#include <string.h>
 #define L_ENOENT 2
 #define L_EINVAL 22
 #define L_ENAMETOOLONG 36
@@ -67,6 +66,10 @@ int ryz_linux_ns_resolve(const RyzLinuxNamespace *ns, const char *path,
         *kind = RYZ_NS_PROC_SELF;
     else if (strcmp(normalized, "/tmp") == 0)
         *kind = RYZ_NS_TMP;
+    else if (strcmp(normalized, "/input") == 0)
+        *kind = RYZ_NS_INPUT;
+    else if (strcmp(normalized, "/output") == 0)
+        *kind = RYZ_NS_OUTPUT;
     else
         return -L_ENOENT;
     return 0;

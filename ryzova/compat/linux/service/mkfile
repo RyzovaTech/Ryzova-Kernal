@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+</$objtype/mkfile
+TARG=compact-linux-fs
+OFILES=main.$O
+BIN=/$objtype/bin
+</sys/src/cmd/mkone

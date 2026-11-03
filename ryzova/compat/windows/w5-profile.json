@@ -1,0 +1,103 @@
+{
+  "schema": "compact-windows-w5-profile/v1",
+  "abi": "windows-amd64-pe32plus-v1",
+  "crt_module": "ucrtbase.dll",
+  "crt_exports": [
+    "memcpy",
+    "memmove",
+    "memset",
+    "memcmp",
+    "strlen",
+    "strcmp",
+    "strncmp",
+    "wcslen",
+    "malloc",
+    "calloc",
+    "realloc",
+    "free",
+    "_errno"
+  ],
+  "workloads": {
+    "buffers": {
+      "case": 1,
+      "exit_code": 878082193,
+      "stdout": "FLEX_W5_BUFFERS_OK\n",
+      "apis": [
+        "memcpy",
+        "memmove",
+        "memset",
+        "memcmp",
+        "strlen",
+        "strcmp",
+        "strncmp",
+        "wcslen"
+      ]
+    },
+    "heap": {
+      "case": 2,
+      "exit_code": 878082194,
+      "stdout": "FLEX_W5_HEAP_OK\n",
+      "apis": [
+        "malloc",
+        "calloc",
+        "realloc",
+        "free",
+        "_errno",
+        "memset",
+        "memcmp"
+      ]
+    },
+    "integer": {
+      "case": 3,
+      "exit_code": 878082195,
+      "stdout": "FLEX_W5_INTEGER_OK\n",
+      "apis": []
+    },
+    "divide-zero": {
+      "case": 4,
+      "native_status": 3221225620,
+      "status": 11,
+      "stop": "integer-divide-error"
+    },
+    "access-fault": {
+      "case": 5,
+      "native_status": 3221225477,
+      "status": 6,
+      "stop": "memory-fault"
+    },
+    "illegal-instruction": {
+      "case": 6,
+      "native_status": 3221225501,
+      "status": 7,
+      "stop": "unsupported-opcode"
+    }
+  },
+  "limits": {
+    "crt_bytes_per_call": 65536,
+    "crt_allocations": 16,
+    "shared_heap_bytes": 1048576
+  },
+  "instruction_extensions": [
+    "IMUL 69/6B/0FAF",
+    "MUL/IMUL/DIV/IDIV F6/F7",
+    "TEST/NOT/NEG F6/F7",
+    "SHL/SHR/SAR/ROL/ROR C0/C1/D0-D3",
+    "MOVSXD 63",
+    "MOVSX 0FBE/0FBF",
+    "CBW/CWDE/CDQE 98",
+    "CWD/CDQ/CQO 99"
+  ],
+  "exclusions": [
+    "CRT startup",
+    "stdio/printf",
+    "locale",
+    "C++ runtime",
+    "SEH dispatch/unwind",
+    "threads",
+    "floating-point arithmetic",
+    "native Flex kernel qualification"
+  ],
+  "profile": "console-ucrt-selected-v1",
+  "api_major": 1,
+  "api_minor": 1
+}

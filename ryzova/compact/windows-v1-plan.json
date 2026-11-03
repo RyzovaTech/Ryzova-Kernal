@@ -1,0 +1,234 @@
+{
+  "schema": "compact-windows-plan/v1",
+  "environment": "compact/windows",
+  "abi": "windows-amd64-pe32plus-v1",
+  "profile": "console-win32-v1",
+  "baseline_commit": "a1802327bf8790e03fd6d04c45196b910a53f3d1",
+  "windows_execution_qualified": false,
+  "general_windows_compatibility_claim": false,
+  "limits": {
+    "pe_file_bytes": 4194304,
+    "mapped_image_bytes": 67108864,
+    "aggregate_image_buffers_bytes": 16777216,
+    "guest_memory_bytes": 67108864,
+    "stack_bytes": 65536,
+    "handles": 32,
+    "imports": 32,
+    "modules": 4,
+    "threads": 1,
+    "processes": 1,
+    "instructions": 262144,
+    "io_bytes_per_call": 65536,
+    "file_bytes": 65536
+  },
+  "limits_status": "Runtime-enforced for bounded AMD64 guest: image 4 MiB, mapped image 64 MiB, guest 64 MiB, stack 64 KiB, 32 handles/30 native file slots, 262144 interpreter steps, 64 KiB I/O per call; no physical RSS or whole-kernel consumption measurement",
+  "planned_apis": {
+    "kernel32.dll!GetStdHandle": "W3",
+    "kernel32.dll!WriteFile": "W3",
+    "kernel32.dll!ExitProcess": "W3",
+    "kernel32.dll!GetLastError": "W3",
+    "kernel32.dll!SetLastError": "W3",
+    "kernel32.dll!GetCommandLineW": "W3",
+    "kernel32.dll!GetEnvironmentVariableW": "W3",
+    "kernel32.dll!VirtualAlloc": "W3",
+    "kernel32.dll!VirtualFree": "W3",
+    "kernel32.dll!CreateFileW": "W4",
+    "kernel32.dll!ReadFile": "W4",
+    "kernel32.dll!CloseHandle": "W4",
+    "kernel32.dll!SetFilePointerEx": "W4",
+    "kernel32.dll!GetFileSizeEx": "W4",
+    "kernel32.dll!FlushFileBuffers": "W4",
+    "ucrtbase.dll!memcpy": "W5",
+    "ucrtbase.dll!memmove": "W5",
+    "ucrtbase.dll!memset": "W5",
+    "ucrtbase.dll!memcmp": "W5",
+    "ucrtbase.dll!strlen": "W5",
+    "ucrtbase.dll!strcmp": "W5",
+    "ucrtbase.dll!strncmp": "W5",
+    "ucrtbase.dll!wcslen": "W5",
+    "ucrtbase.dll!malloc": "W5",
+    "ucrtbase.dll!calloc": "W5",
+    "ucrtbase.dll!realloc": "W5",
+    "ucrtbase.dll!free": "W5",
+    "ucrtbase.dll!_errno": "W5"
+  },
+  "phases": [
+    {
+      "id": "W1",
+      "goal": "Contract, metadata audit and Windows reference fixture",
+      "depends_on": [],
+      "state": "implemented",
+      "ci_evidence": "https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41207001547"
+    },
+    {
+      "id": "W2",
+      "goal": "PE64 loader and Windows AMD64 execution ABI",
+      "depends_on": [
+        "W1"
+      ],
+      "state": "implemented"
+    },
+    {
+      "id": "W3",
+      "goal": "Explicit imports, console and memory APIs",
+      "depends_on": [
+        "W2"
+      ],
+      "state": "implemented"
+    },
+    {
+      "id": "W4",
+      "goal": "Handles and namespace-backed file APIs",
+      "depends_on": [
+        "W3"
+      ],
+      "state": "implemented"
+    },
+    {
+      "id": "W5",
+      "goal": "Named compiler/CRT workloads and runtime errors",
+      "depends_on": [
+        "W4"
+      ],
+      "state": "implemented"
+    },
+    {
+      "id": "W6",
+      "goal": "Resource enforcement and native Flex qualification",
+      "depends_on": [
+        "W5"
+      ],
+      "state": "bounded-native-amd64-qemu-qualified-full-hardware-pending",
+      "ci_evidence": "https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41288431721"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "PE-LOAD",
+      "state": "pending",
+      "acceptance": "Validated sections, relocations and entry execute in Flex",
+      "bounded_profile_evidence": "W2 PE relocations, memory W^X, image quota and native W5/W4 PE execution",
+      "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
+    },
+    {
+      "id": "WIN64-ABI",
+      "state": "pending",
+      "acceptance": "Independent ABI fixtures verify registers, stack and nonvolatile state",
+      "bounded_profile_evidence": "W2 independent shadow-space, stack alignment, GPR and XMM callee-save checks; source-built AMD64 native execution",
+      "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
+    },
+    {
+      "id": "IMPORTS-CONSOLE",
+      "state": "pending",
+      "acceptance": "Declared API thunks produce exact output and full DWORD exit",
+      "bounded_profile_evidence": "W3 frozen MSVC Win32 import/thunk and exact stdout/stderr/full DWORD exit native receipts",
+      "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
+    },
+    {
+      "id": "NS-FILES",
+      "state": "pending",
+      "acceptance": "Opaque grants enforce rights and deny traversal and cross-environment access",
+      "bounded_profile_evidence": "W4 explicit file rights, cross-namespace denial, 9P ramfs I/O and dedicated resource disk barrier",
+      "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
+    },
+    {
+      "id": "RUNTIME",
+      "state": "pending",
+      "acceptance": "Named compiler/CRT fixtures have a frozen supported API and instruction inventory",
+      "bounded_profile_evidence": "W5 named compiler/CRT fixtures and explicit finite API/function instruction profile",
+      "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
+    },
+    {
+      "id": "RESOURCES",
+      "state": "pending",
+      "acceptance": "Measured allocation, instruction and handle ceilings fail closed",
+      "bounded_profile_evidence": "W6 1 MiB heap OOM, 64 KiB I/O denial, native file handle 30-slot ceiling, 1024-step loop, negative admission",
+      "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
+    },
+    {
+      "id": "NATIVE-EVIDENCE",
+      "state": "pending",
+      "acceptance": "Source-identified Flex QEMU execution receipts and regression jobs pass",
+      "bounded_profile_evidence": "W6 22 source-built AMD64 QEMU cases, exact hash provenance, SIGKILL recovery, injected backend EIO and sticky retry",
+      "bounded_profile_verification": "verified AMD64/QEMU and Windows-host reference, scope-limited"
+    }
+  ],
+  "exclusions": [
+    "x86",
+    "ARM64",
+    "WoW64",
+    "GUI",
+    "DirectX",
+    "kernel drivers",
+    ".NET",
+    "COM",
+    "services",
+    "registry",
+    "arbitrary networking",
+    "general Windows compatibility"
+  ],
+  "hosted_windows_subset_available": true,
+  "hosted_scope": "Bounded hosted AMD64 Windows console/selected CRT profiles; native subset evidence is recorded separately in w6_qualification",
+  "hosted_api_subset": [
+    "kernel32.dll!GetStdHandle",
+    "kernel32.dll!WriteFile",
+    "kernel32.dll!ExitProcess",
+    "kernel32.dll!GetLastError",
+    "kernel32.dll!SetLastError",
+    "kernel32.dll!GetCommandLineW",
+    "kernel32.dll!GetEnvironmentVariableW",
+    "kernel32.dll!VirtualAlloc",
+    "kernel32.dll!VirtualFree",
+    "kernel32.dll!CreateFileW",
+    "kernel32.dll!ReadFile",
+    "kernel32.dll!CloseHandle",
+    "kernel32.dll!SetFilePointerEx",
+    "kernel32.dll!GetFileSizeEx",
+    "kernel32.dll!FlushFileBuffers",
+    "ucrtbase.dll!memcpy",
+    "ucrtbase.dll!memmove",
+    "ucrtbase.dll!memset",
+    "ucrtbase.dll!memcmp",
+    "ucrtbase.dll!strlen",
+    "ucrtbase.dll!strcmp",
+    "ucrtbase.dll!strncmp",
+    "ucrtbase.dll!wcslen",
+    "ucrtbase.dll!malloc",
+    "ucrtbase.dll!calloc",
+    "ucrtbase.dll!realloc",
+    "ucrtbase.dll!free",
+    "ucrtbase.dll!_errno"
+  ],
+  "native_kernel_qualified": false,
+  "hosted_file_namespace": "Explicit native 9P grant on dedicated virtual virtio-SCSI profile: acknowledged two-flush durability and SIGKILL recovery; boot filesystem unbarriered, physical power-loss unqualified",
+  "selected_crt_profile": {
+    "profile": "console-ucrt-selected-v1",
+    "api_major": 1,
+    "api_minor": 1,
+    "workload_inventory": "ryzova/compat/windows/w5-profile.json"
+  },
+  "w6_qualification": {
+    "native_amd64_qemu": "22-source-built-native-amd64-qemu-cases-verified",
+    "native_file_flush": "2-ACK-verified-plus-SIGKILL-resource-recovery-and-QEMU-EIO-sticky-denial-verified",
+    "physical_hardware": "not-tested",
+    "arm64_windows": "not-tested",
+    "full_phase_complete": false,
+    "native_9p_namespace": "qualified-bounded-mount-and-independent-ramfs-server",
+    "orderly_reboot_persistence": "passed",
+    "evidence": "https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41288431721",
+    "flush_backend_scope": "dedicated QEMU virtio-SCSI resource disk; no physical power-loss qualification",
+    "bounded_native_phase_complete": true,
+    "native_report_artifact": "https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41288431721/artifacts/13076601704",
+    "exact_source_bound_validator": "scripts/compact_windows_w6_acceptance.py (rechecked on each native CI run)",
+    "boot_hjfs_sigkill_persistence": "not-qualified",
+    "hardware_power_loss": "not-tested",
+    "full_phase_unqualified_reasons": [
+      "physical storage hardware and power-loss durability not tested",
+      "ARM64 Windows binaries not supported by bounded AMD64 profile",
+      "general Windows application/GUI/driver compatibility excluded",
+      "separate physical machines and WAN not tested"
+    ]
+  },
+  "native_amd64_qemu_profile_qualified": true,
+  "bounded_native_windows_execution_qualified": true
+}

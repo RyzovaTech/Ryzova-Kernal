@@ -1,0 +1,202 @@
+{
+  "schema": "flex-phase9-7-local-native-validation/v1",
+  "remote_commit": "8bc528dc480d3f7e9a2ec394102271d72c7278ca",
+  "local_validation_commit": "e27c009dc2fea8d2969042f07548c3327b0c127d",
+  "verified_git_subtrees": {
+    "sys": "a9dbd07152885f337f83c5de403ed303779573db",
+    "amd64": "0901cffd3fab687b739f69e245e311a473a558c7",
+    "arm64": "42c17d14bb19dd84568e1294a3a6212cc0c4f0f0",
+    "ryzova": "581ae76f6c953aeaf6ca7bdcca10095567f0b32a",
+    "scripts": "bcb740ac628bc3a9e0c8df9ce41b8d5689947acd",
+    "tests": "4d8aca13226a4643242290ed3141f5715aaaeb31"
+  },
+  "method": "All six source/helper/test subtrees matched remote Git hashes. Local snapshot omits unrelated repository subtrees; this is not a GitHub PR merge checkout.",
+  "upstream_guest_image_sha256": "3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c",
+  "kernel_sha256": "be2c409de42a95edcbdfea40fb82fdb1e5a56df576a779525fb83e7be81ee0aa",
+  "kernel_binary_distributed": false,
+  "execution": "Independent local QEMU 8.2.2 TCG; Plan 9 compiler; freshly source-built Ryzova AMD64 kernel",
+  "native_reports_passed": {
+    "phase6-native-9p": true,
+    "phase7-native-guest-tls": true,
+    "phase8-guest-identity": true,
+    "phase4-1-stability": true,
+    "phase4-5-stress": true,
+    "phase9-compact-native": true,
+    "phase9-linux-environment": true,
+    "phase9-linux-process": true,
+    "phase9-linux-busybox": true,
+    "phase9-linux-shell": true,
+    "phase9-linux-jobs": true
+  },
+  "mixed_script_stats": {
+    "forks": 9,
+    "execs": 5,
+    "peak": 4,
+    "blocked": 101,
+    "pipe_bytes": 91
+  },
+  "jobs_evidence": {
+    "schema": "flex-linux-bounded-jobs/v1",
+    "source_commit": "e27c009dc2fea8d2969042f07548c3327b0c127d",
+    "checks": {
+      "native_interface": true,
+      "script": true,
+      "pipeline": true,
+      "substitution": true,
+      "mixed_elf": true,
+      "done": true,
+      "stages": true,
+      "no_panic": true,
+      "clean_results": true,
+      "private": true,
+      "vfork": true,
+      "pipe": true,
+      "backpressure": true,
+      "exec": true,
+      "exec_replace": true,
+      "vfork-exec": true,
+      "vfork-exec_replace": true,
+      "offset": true,
+      "identity": true,
+      "capacity": true,
+      "capacity_bound": true,
+      "descriptions": true,
+      "descriptions_bound": true,
+      "quota": true,
+      "fork_quota": true,
+      "exec-quota": true,
+      "exec_quota": true,
+      "nonblock": true,
+      "wait-errors": true,
+      "io-quota": true,
+      "pipe_quota": true,
+      "j-elf_digest": true,
+      "j-script_digest": true,
+      "j-data_digest": true
+    },
+    "passed": true,
+    "cases": {
+      "private": {
+        "forks": 1,
+        "execs": 0,
+        "peak": 2,
+        "blocked": 1,
+        "pipe_bytes": 0
+      },
+      "vfork": {
+        "forks": 1,
+        "execs": 0,
+        "peak": 2,
+        "blocked": 0,
+        "pipe_bytes": 0
+      },
+      "pipe": {
+        "forks": 1,
+        "execs": 0,
+        "peak": 2,
+        "blocked": 3,
+        "pipe_bytes": 81920
+      },
+      "exec": {
+        "forks": 1,
+        "execs": 1,
+        "peak": 2,
+        "blocked": 1,
+        "pipe_bytes": 1
+      },
+      "vfork-exec": {
+        "forks": 1,
+        "execs": 1,
+        "peak": 2,
+        "blocked": 0,
+        "pipe_bytes": 1
+      },
+      "offset": {
+        "forks": 1,
+        "execs": 0,
+        "peak": 2,
+        "blocked": 1,
+        "pipe_bytes": 0
+      },
+      "identity": {
+        "forks": 0,
+        "execs": 0,
+        "peak": 1,
+        "blocked": 0,
+        "pipe_bytes": 0
+      },
+      "capacity": {
+        "forks": 7,
+        "execs": 0,
+        "peak": 8,
+        "blocked": 1,
+        "pipe_bytes": 0
+      },
+      "descriptions": {
+        "forks": 7,
+        "execs": 0,
+        "peak": 8,
+        "blocked": 9,
+        "pipe_bytes": 7
+      },
+      "quota": {
+        "forks": 32,
+        "execs": 0,
+        "peak": 2,
+        "blocked": 32,
+        "pipe_bytes": 0
+      },
+      "exec-quota": {
+        "forks": 0,
+        "execs": 64,
+        "peak": 1,
+        "blocked": 0,
+        "pipe_bytes": 0
+      },
+      "nonblock": {
+        "forks": 0,
+        "execs": 0,
+        "peak": 1,
+        "blocked": 0,
+        "pipe_bytes": 0
+      },
+      "wait-errors": {
+        "forks": 1,
+        "execs": 0,
+        "peak": 2,
+        "blocked": 1,
+        "pipe_bytes": 0
+      },
+      "io-quota": {
+        "forks": 1,
+        "execs": 0,
+        "peak": 2,
+        "blocked": 127,
+        "pipe_bytes": 4194304
+      }
+    },
+    "fixture_sha256": "f689d2a2a39ba5f2c0436b99aa76d3b54eb8d84f4f45e6523ff299808e0a0e60",
+    "general_linux_compatibility": false,
+    "dynamic_linker": false,
+    "threads_async_signals": false,
+    "physical_hardware_qualified": false
+  },
+  "local_tests": {
+    "phase9": 40,
+    "phase5": 63,
+    "passed": true,
+    "address_sanitizer": true,
+    "undefined_sanitizer": true,
+    "leak_sanitizer": false,
+    "leak_sanitizer_note": "Restricted local /proc prevents its thread scan; explicitly disabled locally only. CI retains default LeakSanitizer.",
+    "allocation_accounting_and_failed_malloc_paths": true
+  },
+  "github_actions": {
+    "passed": false,
+    "note": "Runners did not execute test steps. Local QEMU success is not a successful GitHub Actions check."
+  },
+  "general_linux_cli_complete": false,
+  "dynamic_linker": false,
+  "threads_async_signals": false,
+  "physical_hardware_qualified": false
+}

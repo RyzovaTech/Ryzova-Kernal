@@ -1,0 +1,76 @@
+{
+  "schema": "flex-phase9-6-local-native-validation/v1",
+  "remote_commit": "4d48833a3db9dc5c9a4da5b7f167558c2a73c6db",
+  "local_validation_commit": "201c93a214222d32b7ae37257df3d15272a71cc1",
+  "verified_git_subtrees": {
+    "sys": "a9dbd07152885f337f83c5de403ed303779573db",
+    "amd64": "0901cffd3fab687b739f69e245e311a473a558c7",
+    "arm64": "42c17d14bb19dd84568e1294a3a6212cc0c4f0f0",
+    "ryzova": "607451b32dd4ce639073c59a95c3592e7f01d388",
+    "scripts": "eb92db0d8894acd27a666e77ac840909d9737851",
+    "tests": "8dfed25704717886065289fbef87f3dcb37987c7"
+  },
+  "method": "All six kernel/header/runtime/helper/test source subtrees matched remote head Git hashes. Local snapshot omits unneeded repo subtrees. Local QEMU validation, not a successful GitHub Actions run.",
+  "upstream_guest_image_sha256": "3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c",
+  "kernel_sha256": "7786532b0ab94caba6f8919f55590a601f06686523d9501b468952566b442434",
+  "kernel_binary_distributed": false,
+  "qemu": "Ubuntu QEMU 8.2.2, TCG, AMD64 guest",
+  "control_channels": "127.0.0.1 TCP; Unix control sockets unavailable in local execution environment",
+  "local_tests": {
+    "phase9": 29,
+    "phase5": 63,
+    "m2_evidence": 4,
+    "m4_legacy_gate": 5,
+    "passed": true
+  },
+  "native_reports_passed": {
+    "phase6-native-9p": true,
+    "phase7-native-guest-tls": true,
+    "phase8-guest-identity": true,
+    "phase4-1-stability": true,
+    "phase4-5-stress": true,
+    "phase9-compact-native": true,
+    "phase9-linux-environment": true,
+    "phase9-linux-process": true,
+    "phase9-linux-busybox": true,
+    "phase9-linux-shell": true
+  },
+  "shell_evidence": {
+    "schema": "flex-linux-bounded-shell/v1",
+    "source_commit": "201c93a214222d32b7ae37257df3d15272a71cc1",
+    "checks": {
+      "SCRIPT": true,
+      "CAT": true,
+      "WC": true,
+      "READ": true,
+      "REDIRECT": true,
+      "shell": true,
+      "challenge": true,
+      "arithmetic_function": true,
+      "cwd": true,
+      "read": true,
+      "redirect": true,
+      "wc_bytes": true,
+      "clean_results": true,
+      "stages": true,
+      "done": true,
+      "no_panic": true,
+      "busybox_digest": true,
+      "shell-script_digest": true,
+      "shell-data_digest": true
+    },
+    "passed": true,
+    "busybox_sha256": "6e123e7f3202a8c1e9b1f94d8941580a25135382b99e8d3e34fb858bba311348",
+    "general_linux_compatibility": false,
+    "processes_pipes": false,
+    "async_signal_delivery": false,
+    "physical_hardware_qualified": false
+  },
+  "github_actions": {
+    "passed": false,
+    "note": "Jobs failed before runner allocation with no test steps; single-job retry behaved identically. Root cause not exposed by connector."
+  },
+  "general_linux_cli_complete": false,
+  "fork_exec_wait_pipes_implemented": false,
+  "physical_hardware_qualified": false
+}

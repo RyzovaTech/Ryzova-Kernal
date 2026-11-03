@@ -1,0 +1,17 @@
+{
+  "schema": "flex-linux-filesystem-persistence-ci-qualification/v1",
+  "pull_request": 71,
+  "head_commit": "981c31e78d224893131c5dfaf028afacbe3610ff",
+  "native_checkout_commit": "168a0949bb4d618e9ff002cde8955bd50f605c76",
+  "workflow_run": 40834763103,
+  "job": 123316844798,
+  "workflow_url": "https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/40834763103",
+  "latest_workflows": 31,
+  "all_workflows_passed": true,
+  "native_persistence_gate_passed": true,
+  "native_successful_invocations": 6,
+  "native_corruption_rejection": true,
+  "kernel_sha256": "1b2403f41503b5fe7bb4785ff8758ccd72077f7556351a135ee5734b6279aca4",
+  "kernel_verification": "Workflow independently compared source-built, installed and FAT-extracted kernel SHA256 values.",
+  "limitations": "Bounded snapshot persistence, not general live mounts, journal or power-loss atomic replacement. No full Linux, operational ARM64 or physical hardware qualification."
+}

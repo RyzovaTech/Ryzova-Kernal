@@ -1,0 +1,36 @@
+name: Compact Windows W1-W6 one-time main integration boundary
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/compat/windows/**'
+      - 'ryzova/compact/windows-v1-plan.json'
+      - 'scripts/compact_windows*'
+      - 'tests/test_compact_windows*'
+      - 'tests/fixtures/windows_w*'
+      - 'docs/COMPACT-WINDOWS*'
+      - 'docs/validation/compact-windows*'
+      - '.github/workflows/compact-windows-*.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  exact-main-integration-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reject foreign driver, Linux or kernel changes and false W6 release status
+        run: python scripts/compact_windows_main_guard.py
+      - name: Validate fail-closed integration boundary mutants
+        run: python -m unittest discover -s tests -p 'test_compact_windows_main_guard.py' -v

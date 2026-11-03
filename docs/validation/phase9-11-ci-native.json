@@ -1,0 +1,17 @@
+{
+  "schema": "flex-linux-local-sockets-ci-qualification/v1",
+  "pull_request": 70,
+  "head_commit": "dbd1025ab1f9b0fd2d7b2c1959a230c7236ee116",
+  "native_checkout_commit": "85e2498c980e569925a2f6fced8c19f146eee41b",
+  "workflow_run": 40833012739,
+  "job": 123311284752,
+  "workflow_url": "https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/40833012739",
+  "latest_workflows": 31,
+  "all_workflows_passed": true,
+  "native_socket_gate_passed": true,
+  "native_raw_workloads": 26,
+  "native_musl_http_application": true,
+  "kernel_sha256": "1b5be3a40df7e76f3c6efe38d1d39c2eaa215782b4ec8b8086ee9fd76fa2d0d3",
+  "kernel_verification": "Workflow independently compared the source-built, installed and FAT-extracted kernel SHA256 values.",
+  "limitations": "Invocation-local stream sockets only. No external transport, DNS, datagrams, complete Linux compatibility, operational ARM64 or physical hardware qualification."
+}

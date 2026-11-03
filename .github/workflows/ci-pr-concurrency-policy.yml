@@ -1,0 +1,26 @@
+name: CI PR concurrency safety policy
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/ci_check_pr_concurrency.py'
+      - 'tests/test_ci_check_pr_concurrency.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  verify-pr-concurrency:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Actions queue supersession and prevent main cancellation
+        run: |
+          python3 -m unittest discover -s tests -p 'test_ci_check_pr_concurrency.py' -v
+          python3 scripts/ci_check_pr_concurrency.py --root .

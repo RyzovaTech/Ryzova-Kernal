@@ -1,0 +1,161 @@
+{
+  "schema": "flex-phase9-8-local-native-validation/v1",
+  "remote_commit": "43be3590d4b7375a6ee7aa6964db0fa7dee63bae",
+  "local_validation_commit": "d11f5fc8be6367254fdbafc9e8ef2473be5d4ae2",
+  "verified_git_subtrees": {
+    "amd64": "0901cffd3fab687b739f69e245e311a473a558c7",
+    "arm64": "42c17d14bb19dd84568e1294a3a6212cc0c4f0f0",
+    "ryzova": "f69788d1414b1e97e351049e39525abcf95aa2fc",
+    "scripts": "62f6cef729e75bf61d785e87af31ad727343e69e",
+    "sys": "a9dbd07152885f337f83c5de403ed303779573db",
+    "tests": "75883b8298154074a1da468cc1dda1005813944b"
+  },
+  "method": "All six source/helper/test subtree Git hashes matched the remote commit. Local snapshot omits unrelated repository subtrees; this is not a GitHub PR merge checkout.",
+  "upstream_guest_image_sha256": "3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c",
+  "execution": "Independent local QEMU 8.2.2 TCG; native Plan 9 compiler; source-built Ryzova AMD64 kernel; fresh overlay",
+  "kernel_provenance": {
+    "source_commit": "d11f5fc8be6367254fdbafc9e8ef2473be5d4ae2",
+    "compiled_kernel_path_in_guest": "/sys/src/9/pc64/9pc64",
+    "bootfile_path_in_guest": "/n/9fat/9pc64",
+    "guest_compiled_sha256": "ffe988b1f07a022f1cbc5d58443784b2b7ef8f1cdce472077c195974ba573e4a",
+    "guest_installed_sha256": "ffe988b1f07a022f1cbc5d58443784b2b7ef8f1cdce472077c195974ba573e4a",
+    "independently_extracted_host_sha256": "ffe988b1f07a022f1cbc5d58443784b2b7ef8f1cdce472077c195974ba573e4a",
+    "binary_size_bytes": 5423753,
+    "verification": "three SHA256 digests equal; QEMU boot separately verified",
+    "distribution_status": "BLOCKED pending reviewed scoped redistribution rights"
+  },
+  "kernel_binary_distributed": false,
+  "native_reports_passed": {
+    "phase4-1-stability": true,
+    "phase4-5-stress": true,
+    "phase6-native-9p": true,
+    "phase7-native-guest-tls": true,
+    "phase8-guest-identity": true,
+    "phase9-compact-native": true,
+    "phase9-linux-environment": true,
+    "phase9-linux-process": true,
+    "phase9-linux-busybox": true,
+    "phase9-linux-shell": true,
+    "phase9-linux-jobs": true,
+    "phase9-linux-vfs": true
+  },
+  "vfs_evidence": {
+    "schema": "flex-linux-local-tmp/v1",
+    "source_commit": "d11f5fc8be6367254fdbafc9e8ef2473be5d4ae2",
+    "elf_sha256": "b83339fd46c480eea4149a2345d64d2cefd0bc5a5743f8054cd8069aa08172ce",
+    "checks": {
+      "done": true,
+      "metadata": true,
+      "script": true,
+      "elf_hash": true,
+      "script_hash": true,
+      "no_panic": true,
+      "stages": true,
+      "basic": true,
+      "directory": true,
+      "unlink": true,
+      "errors": true,
+      "shared": true,
+      "quota": true,
+      "atomic": true,
+      "times": true,
+      "grants": true,
+      "clean_results": true
+    },
+    "passed": true
+  },
+  "vfs_execution_statistics": [
+    {
+      "forks": 7,
+      "execs": 7,
+      "peak_tasks": 2,
+      "blocked": 88,
+      "pipe_bytes": 0
+    },
+    {
+      "forks": 0,
+      "execs": 0,
+      "peak_tasks": 1,
+      "blocked": 0,
+      "pipe_bytes": 0
+    },
+    {
+      "forks": 0,
+      "execs": 0,
+      "peak_tasks": 1,
+      "blocked": 0,
+      "pipe_bytes": 0
+    },
+    {
+      "forks": 0,
+      "execs": 0,
+      "peak_tasks": 1,
+      "blocked": 0,
+      "pipe_bytes": 0
+    },
+    {
+      "forks": 0,
+      "execs": 0,
+      "peak_tasks": 1,
+      "blocked": 0,
+      "pipe_bytes": 0
+    },
+    {
+      "forks": 1,
+      "execs": 1,
+      "peak_tasks": 2,
+      "blocked": 1,
+      "pipe_bytes": 0
+    },
+    {
+      "forks": 0,
+      "execs": 0,
+      "peak_tasks": 1,
+      "blocked": 0,
+      "pipe_bytes": 0
+    },
+    {
+      "forks": 0,
+      "execs": 0,
+      "peak_tasks": 1,
+      "blocked": 0,
+      "pipe_bytes": 0
+    },
+    {
+      "forks": 0,
+      "execs": 0,
+      "peak_tasks": 1,
+      "blocked": 0,
+      "pipe_bytes": 0
+    },
+    {
+      "forks": 0,
+      "execs": 0,
+      "peak_tasks": 1,
+      "blocked": 0,
+      "pipe_bytes": 0
+    }
+  ],
+  "local_tests": {
+    "phase9_methods": 46,
+    "phase5_methods": 63,
+    "passed": 109,
+    "sanitizers": "ASan and UBSan passed. LSan explicitly disabled locally because its /proc thread scan is unavailable; regular CI keeps LSan enabled.",
+    "allocation_failure_regression": "Existing group allocation balance and malloc-failure tests passed."
+  },
+  "github_actions": "Workflow failures before runner allocation/test steps observed. Native results are independent local evidence; green CI is not claimed.",
+  "limits": "Bounded invocation-local /tmp only; no general dynamic Linux environment, persistence, async signals, threads/futexes, sockets, toolchain qualification or physical hardware qualification.",
+  "github_actions_observation": {
+    "tested_commit": "43be3590d4b7375a6ee7aa6964db0fa7dee63bae",
+    "workflow_run_count": 30,
+    "failed_workflow_runs": 30,
+    "sampled_jobs": [
+      {
+        "id": 122811292697,
+        "conclusion": "failure",
+        "runner_name": "",
+        "steps": []
+      }
+    ]
+  }
+}

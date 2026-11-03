@@ -11,6 +11,7 @@ import select
 import socket
 import subprocess
 import time
+from qemu_control import control_socket, control_address
 
 CANDIDATES = ((b"1022:2000", b"m2-amd-pcnet-2000-candidate"),
               (b"10ec:8139", b"m2-realtek-rtl8139-candidate"))
@@ -55,11 +56,11 @@ def run_probe(base_cmd, serial_path, monitor_path, output_dir, memory_mib=None):
     bootargs = login = sent = False
     with (output_dir / "m2-qemu-host.log").open("wb") as host:
         guest = subprocess.Popen(base_cmd + extra, stdout=host, stderr=subprocess.STDOUT)
-        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client = control_socket(serial_path)
         try:
             for _ in range(300):
                 try:
-                    client.connect(str(serial_path))
+                    client.connect(control_address(serial_path))
                     break
                 except (FileNotFoundError, ConnectionRefusedError):
                     if guest.poll() is not None:
