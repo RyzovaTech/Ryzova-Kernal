@@ -91,10 +91,10 @@ class ComissDifferentialTests(unittest.TestCase):
         self.assertEqual(guest.stdout,host.stdout)
         self.assertIn(b'COMPACT_JOBS_RESULT status=0 exited=1 exit=0',guest.stderr)
 
-    def test_prefixed_comisd_and_dereference_invalid_address_fail_closed(self):
+    def test_illegal_repeat_prefix_and_dereference_invalid_address_fail_closed(self):
         from test_phase9_image_admission import executable
         bad=self.directory/'wrong-prefix'
-        bad.write_bytes(executable(code=bytes([0x66,0x0f,0x2f,0xc1])))
+        bad.write_bytes(executable(code=bytes([0xf3,0x66,0x0f,0x2f,0xc1])))
         result=subprocess.run([str(self.runner),str(bad)],
                               capture_output=True,timeout=10)
         self.assertEqual(result.returncode,2,result.stderr)
