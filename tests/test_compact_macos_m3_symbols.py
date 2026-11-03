@@ -118,6 +118,7 @@ class Mach3SymbolTests(unittest.TestCase):
         for offset,value in (
             (symtab+8,0xffffffff),(symtab+12,999),
             (symtab+16,0x300),(symtab+20,99999),
+            (symtab+8,32),(symtab+16,64),
         ):
             with self.subTest(offset=offset):
                 x=bytearray(b)

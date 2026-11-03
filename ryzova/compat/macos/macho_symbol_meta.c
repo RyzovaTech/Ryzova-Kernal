@@ -137,7 +137,8 @@ int ryz_mac3_symbols(const unsigned char *image,size_t length,
         }
         offset+=command_size;
     }
-    if(!seen_sym || segments!=1 || offset!=32U+command_bytes)
+    if(!seen_sym || segments!=1 || offset!=32U+command_bytes ||
+       (uint64_t)symoff<offset || (uint64_t)stroff<offset)
         return 4;
     for(i=0;i<nsyms;i++) {
         const unsigned char *sym=image+(size_t)symoff+16U*i;
