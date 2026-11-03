@@ -105,6 +105,12 @@ jobs:
         run: python3 scripts/compact_windows_w6_native.py native-windows.qcow2 --bootstrap-gzip 9front.qcow2.gz --fixtures artifacts/w6-fixtures
       - name: Verify exact source-bound 22-case native QEMU and crash/fault receipts
         run: python3 scripts/compact_windows_w6_acceptance.py artifacts/compact-windows/w6-native --source-sha "$(git rev-parse HEAD)"
+      - name: Verify same genuine Windows PE executes in source-built Ryzova QEMU with bounded stdin
+        run: |
+          python3 scripts/compact_windows_w8_native_acceptance.py artifacts/compact-windows/w6-native \
+            --windows-reference artifacts/w6-fixtures/w8-sbase-wc-reference.json \
+            --pe artifacts/w6-fixtures/sbase-wc-mincrt.exe \
+            --source-sha "$(git rev-parse HEAD)"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
