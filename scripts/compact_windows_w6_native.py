@@ -65,7 +65,7 @@ def references(fixtures,commit):
     return expected
 
 def w8_reference(fixtures,commit):
-    """Separate, source-bound genuine MIT app reference; never W6's 22-case subset."""
+    """A pinned Windows-host executable is NOT a native Ryzova witness."""
     receipt=json.loads((fixtures/'w8-sbase-wc-reference.json').read_text(encoding='utf-8-sig'))
     app=receipt.get('no_crt_candidate')
     if (receipt.get('schema')!='compact-windows-w8-sbase-wc-host/v1'
@@ -82,31 +82,28 @@ def w8_reference(fixtures,commit):
         or app.get('direct_imports')!=5
         or app.get('missing_or_ordinal_imports')!=[]
         or app.get('parser_rejection') is not None):
-        raise ValueError('W8 source-bound Win32 reference not qualified')
+        raise ValueError('W8 Windows host PE unqualified')
     originals=receipt.get('upstream_provenance')
-    if not isinstance(originals,dict):
-        raise ValueError('W8 missing source provenance')
+    if not isinstance(originals,dict):raise ValueError('W8 original source receipts absent')
     for name in ('wc.c','arg.h','utf.h','LICENSE'):
         local=ROOT/'tests/fixtures/windows_w8_sbase_wc/upstream'/name
-        if (not local.is_file() or
-            originals.get(name,{}).get('sha256')!=digest(local)):
-            raise ValueError('W8 original MIT source SHA mismatch')
+        if not local.is_file() or originals.get(name,{}).get('sha256')!=digest(local):
+            raise ValueError('W8 pinned MIT upstream source digest mismatch')
     for name in ('bridge.c','util.h','win32_mincrt.c'):
         local=ROOT/'tests/fixtures/windows_w8_sbase_wc'/name
-        if (not local.is_file() or
-            originals.get(name,{}).get('sha256')!=digest(local)):
-            raise ValueError('W8 reviewed Win32 source SHA mismatch')
+        if not local.is_file() or originals.get(name,{}).get('sha256')!=digest(local):
+            raise ValueError('W8 platform bridge digest mismatch')
     expected=app.get('source_binary_sha256')
-    if not isinstance(expected,str) or not re.fullmatch('[0-9a-f]{64}',expected):
+    if not isinstance(expected,str) or re.fullmatch(r'[0-9a-f]{64}',expected) is None:
         raise ValueError('W8 exact PE SHA missing')
     if digest(fixtures/'sbase-wc-mincrt.exe')!=expected:
-        raise ValueError('W8 Windows-host PE artifact differs from exact receipt')
+        raise ValueError('W8 transferred PE hash != Windows reference')
     cases=receipt.get('named_workloads')
-    if (not isinstance(cases,list) or len(cases)!=4 or
-        cases[0].get('case')!='default' or cases[0].get('host_passed') is not True or
-        cases[0].get('stdout_text_lf')!='2 3 18\\n'.replace('\\n','\n')):
-        raise ValueError('W8 Windows-host stdout provenance wrong')
-    return expected, cases[0]['stdout_text_lf'].encode('ascii')
+    if (not isinstance(cases,list) or len(cases)!=4
+        or cases[0].get('case')!='default' or cases[0].get('host_passed') is not True
+        or cases[0].get('stdout_text_lf')!='2 3 18\n'):
+        raise ValueError('W8 Windows host named default case invalid')
+    return expected,cases[0]['stdout_text_lf'].encode('ascii')
 
 def case_specs():
     cases={}
@@ -277,13 +274,11 @@ def main():
     commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip();hashes=references(args.fixtures,commit)
     w8_pe_sha,w8_host_out=w8_reference(args.fixtures,commit)
     w8_host_input=b'alpha beta\nsecond\n'
-    w8_case={'image':'w8wc','status':0,'code':0,'out':w8_host_out.hex(),
+    w8_spec={'image':'w8wc','status':0,'code':0,'out':w8_host_out.hex(),
              'err':'','args':'-I /tmp/cw-w8-input'}
     for name,sha in hashes.items():(out/(name+'.exe')).write_bytes((args.fixtures/(name+'.exe')).read_bytes())
-    # Exact PE tested on Windows host; the hash is independently checked
-    # *before* QEMU's HTTP staging, and again inside the guest.
     (out/'w8wc.exe').write_bytes((args.fixtures/'sbase-wc-mincrt.exe').read_bytes())
-    if digest(out/'w8wc.exe')!=w8_pe_sha:raise ValueError('W8 staging PE SHA mismatch')
+    if digest(out/'w8wc.exe')!=w8_pe_sha:raise ValueError('W8 staged PE provenance mismatch')
     synthetic={'loop':pe(b'\xeb\xfe'),'stack':pe(bytes.fromhex('4881ec00000200 48890424'))}
     large=bytearray(pe(b'\xc3'));import struct;struct.pack_into('<I',large,0x98+56,64*1024*1024);synthetic['imagecap']=bytes(large)
     synthetic['filecap']=pe(b'\xc3')+bytes(4*1024*1024)
@@ -328,8 +323,7 @@ def main():
     for name,spec in cases.items():
         if name=='durable':continue
         commands.append(f"echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows {spec.get('args','')} /tmp/cw-{spec['image']}.exe; echo CW_CASE_{name}_END")
-    # A genuine source-built Windows PE on the actual source-built Ryzova
-    # kernel with an isolated, explicitly named 9P guest stdin capability.
+    # One real PE and byte-identical input, never a synthetic guest fixture.
     commands.append("echo 'alpha beta' > /tmp/cw-w8-input; echo second >> /tmp/cw-w8-input; sha1sum -2 256 /tmp/cw-w8-input")
     commands.append('echo CW_CASE_w8wc_BEGIN; /amd64/bin/compact-windows -I /tmp/cw-w8-input /tmp/cw-w8wc.exe; echo CW_CASE_w8wc_END')
     commands+=['sha1sum -2 256 /tmp/cw-local/payload.bin /tmp/cw-ram/ram.bin',
@@ -343,7 +337,12 @@ def main():
     for name,sha in hashes.items():
         if not re.search(rb'(?m)^'+sha.encode()+rb'\s+/tmp/cw-'+name.encode()+rb'.exe\r?$',log):raise ValueError('guest PE hash '+name)
     records=parse_cases(log,cases)
-    if not re.search(rb'(?m)^'+w8_pe_sha.encode()+rb'\s+/tmp/cw-w8wc.exe\r?
+    if not re.search(rb'(?m)^'+w8_pe_sha.encode()+rb'\s+/tmp/cw-w8wc.exe\r?$',log):
+        raise ValueError('W8 guest PE differs from exact Windows reference binary')
+    w8_input_sha=hashlib.sha256(w8_host_input).hexdigest()
+    if not re.search(rb'(?m)^'+w8_input_sha.encode()+rb'\s+/tmp/cw-w8-input\r?$',log):
+        raise ValueError('W8 guest stdin not equal Windows-host reference bytes')
+    w8_guest=parse_cases(log,{'w8wc':w8_spec})['w8wc']
     file_sha=hashlib.sha256(b'FLEX_WINDOWS_W4_FILE_OK\n').hexdigest();ram_sha=hashlib.sha256(bytes.fromhex('78563412')).hexdigest()
     for path,sha in [('/tmp/cw-local/payload.bin',file_sha),('/tmp/cw-ram/ram.bin',ram_sha)]:
         if not re.search(rb'(?m)^'+sha.encode()+rb'\s+'+path.encode()+rb'\r?$',log):raise ValueError('persistent/9P file mismatch')
@@ -385,8 +384,7 @@ def main():
     report={'schema':'compact-windows-w6-native/v1','source_commit':commit,'source_archive_sha256':archive_sha,'kernel_sha256':kernel_sha,'runtime_sha256':runtime_sha[0].decode(),
       'bootstrap_image_gzip_sha256':PIN,'bootstrap_image_sha256':base_sha,'cases':records,'fixture_sha256':hashes,'native_amd64_qemu_qualified':True,'native_9p_namespace_verified':True,
       'file_sha256':file_sha,'reboot_persistence_verified':True,'boot_root_sigkill_persistence_qualified':False,'dedicated_resource_sigkill_persistence_qualified':True,'native_file_flush_qualified':True,'barrier_local_only_verified':True,'durable_file_sha256':durable_sha,'resource_server_sha256':server_sha[0].decode(),'qemu_sigkill_persistence_verified':True,'storage_flush_failure_and_sticky_error_verified':True,'storage_fault_config_sha256':digest(fault_config),'flush_evidence_scope':'dedicated QEMU virtio-SCSI disk; pinned cw-hjfs ACK after dirty cache drain and SYNCHRONIZE CACHE; no physical power-loss claim','full_w6_complete':False,'physical_hardware_qualified':False,'arm64_windows_qualified':False,'general_windows_compatibility':False}
-    # Preserve the W6 bounded 22-case acceptance unchanged: W8 has its
-    # own exact-PE SHA, stdin, stdout/exit/Win32-call, and native gate.
+    # Do not contaminate the established 22-case W6 gate.
     report['w8_source_available_app']={
       'schema':'compact-windows-w8-native/v1','source_commit':commit,
       'windows_reference_pe_sha256':w8_pe_sha,
@@ -400,98 +398,5 @@ def main():
       'windows_v1_release_qualified':False,
       'physical_hardware_qualified':False,
       'general_windows_compatibility':False}
-    (out/'qualification.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True);server.shutdown()
-if __name__=='__main__':main()
-,log):
-        raise ValueError('W8 guest PE SHA not equal Windows-host compiled binary')
-    w8_input_sha=hashlib.sha256(w8_host_input).hexdigest()
-    if not re.search(rb'(?m)^'+w8_input_sha.encode()+rb'\s+/tmp/cw-w8-input\r?
-    file_sha=hashlib.sha256(b'FLEX_WINDOWS_W4_FILE_OK\n').hexdigest();ram_sha=hashlib.sha256(bytes.fromhex('78563412')).hexdigest()
-    for path,sha in [('/tmp/cw-local/payload.bin',file_sha),('/tmp/cw-ram/ram.bin',ram_sha)]:
-        if not re.search(rb'(?m)^'+sha.encode()+rb'\s+'+path.encode()+rb'\r?$',log):raise ValueError('persistent/9P file mismatch')
-    durable_sha=hashlib.sha256(PAYLOAD).hexdigest()
-    # Only /dev/sd01/data has an acknowledged storage barrier.
-    # The separate boot hjfs filesystem is not hard-kill-durable.
-    reboot_commands=[
-      "cat '#Z/version'; sha1sum -2 256 /amd64/bin/compact-windows; echo CW_REBOOT_IDENTITY_OK",
-      "mkdir -p /tmp/cw-durable; cw-hjfs -F -S -n cwfs-reboot -f /dev/sd01/data > /tmp/cwfs-reboot.log >[2]/dev/cons; mount -nc /srv/cwfs-reboot /tmp/cw-durable && echo CW_REBOOT_RESOURCE_MOUNTED",
-      "sha1sum -2 256 /tmp/cw-durable/payload.bin; echo CW_REBOOT_DONE"]
-    reboot=session(args.image,reboot_commands,out,'reboot',100,
-                   required={0:'CW_REBOOT_IDENTITY_OK',1:'CW_REBOOT_RESOURCE_MOUNTED'},
-                   resource=resource)
-    verify_dedicated_resource_reboot(reboot,runtime_sha[0].decode(),durable_sha)
-    # One real virtual-storage EIO, then a healthy backend: the server must
-    # reject both the failed barrier and the subsequent uncertain-state retry.
-    fault_resource=out/'resource-fault.qcow2'
-    subprocess.run(['qemu-img','create','-f','qcow2','-F','qcow2','-b',str(resource.resolve()),str(fault_resource)],check=True)
-    fault_config=out/'flush-fault.conf'
-    fault_config.write_text('[set-state]\nevent = "pwritev"\nstate = "1"\nnew_state = "2"\n[inject-error]\nevent = "flush_to_os"\nstate = "2"\niotype = "flush"\nerrno = "5"\nonce = "on"\nimmediately = "on"\n')
-    # The boot hjfs is NOT protected by the cw-hjfs persistence barrier.
-    # Always re-download the exact frozen MSVC W4 fixture on this separate
-    # QEMU boot and verify it by SHA before recognizing any fault receipts.
-    fault_commands=[
-      "cat '#Z/version'; sha1sum -2 256 /amd64/bin/cw-hjfs",
-      "ip/ipconfig -d ether /net/ether0; webfs",
-      "hget http://10.0.2.2:8000/file.exe > /tmp/cw-file.exe; sha1sum -2 256 /tmp/cw-file.exe",
-      "mkdir -p /tmp/cw-durable; cw-hjfs -F -S -n cwfs-fault -f /dev/sd01/data > /tmp/cwfs-fault.log >[2]/dev/cons; mount -nc /srv/cwfs-fault /tmp/cw-durable && echo CW_FAULT_MOUNTED",
-      "rm /tmp/cw-durable/payload.bin; test ! -e /tmp/cw-durable/payload.bin && echo CW_FAULT_CLEAN_OK"]
-    for name in fault_specs():
-        fault_commands.append(f'echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows -r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1 /tmp/cw-file.exe; echo CW_CASE_{name}_END; rm /tmp/cw-durable/payload.bin')
-    fault_log=session(args.image,fault_commands,out,'fault',150,
-                     required={3:'CW_FAULT_MOUNTED',4:'CW_FAULT_CLEAN_OK'},
-                     resource=fault_resource,hardcut=True,fault_config=fault_config)
-    if b'Ryzova Kernel 0.1.0-dev' not in fault_log or server_sha[0] not in fault_log:
-        raise ValueError('fault-test source identity')
-    verify_fault_fixture(fault_log,hashes['file'])
-    records.update(parse_cases(fault_log,fault_specs()))
-    report={'schema':'compact-windows-w6-native/v1','source_commit':commit,'source_archive_sha256':archive_sha,'kernel_sha256':kernel_sha,'runtime_sha256':runtime_sha[0].decode(),
-      'bootstrap_image_gzip_sha256':PIN,'bootstrap_image_sha256':base_sha,'cases':records,'fixture_sha256':hashes,'native_amd64_qemu_qualified':True,'native_9p_namespace_verified':True,
-      'file_sha256':file_sha,'reboot_persistence_verified':True,'boot_root_sigkill_persistence_qualified':False,'dedicated_resource_sigkill_persistence_qualified':True,'native_file_flush_qualified':True,'barrier_local_only_verified':True,'durable_file_sha256':durable_sha,'resource_server_sha256':server_sha[0].decode(),'qemu_sigkill_persistence_verified':True,'storage_flush_failure_and_sticky_error_verified':True,'storage_fault_config_sha256':digest(fault_config),'flush_evidence_scope':'dedicated QEMU virtio-SCSI disk; pinned cw-hjfs ACK after dirty cache drain and SYNCHRONIZE CACHE; no physical power-loss claim','full_w6_complete':False,'physical_hardware_qualified':False,'arm64_windows_qualified':False,'general_windows_compatibility':False}
-    (out/'qualification.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True);server.shutdown()
-if __name__=='__main__':main()
-,log):
-        raise ValueError('W8 actual source-built guest stdin bytes differ from host reference')
-    w8_guest=parse_cases(log,{'w8wc':w8_case})['w8wc']
-    file_sha=hashlib.sha256(b'FLEX_WINDOWS_W4_FILE_OK\n').hexdigest();ram_sha=hashlib.sha256(bytes.fromhex('78563412')).hexdigest()
-    for path,sha in [('/tmp/cw-local/payload.bin',file_sha),('/tmp/cw-ram/ram.bin',ram_sha)]:
-        if not re.search(rb'(?m)^'+sha.encode()+rb'\s+'+path.encode()+rb'\r?$',log):raise ValueError('persistent/9P file mismatch')
-    durable_sha=hashlib.sha256(PAYLOAD).hexdigest()
-    # Only /dev/sd01/data has an acknowledged storage barrier.
-    # The separate boot hjfs filesystem is not hard-kill-durable.
-    reboot_commands=[
-      "cat '#Z/version'; sha1sum -2 256 /amd64/bin/compact-windows; echo CW_REBOOT_IDENTITY_OK",
-      "mkdir -p /tmp/cw-durable; cw-hjfs -F -S -n cwfs-reboot -f /dev/sd01/data > /tmp/cwfs-reboot.log >[2]/dev/cons; mount -nc /srv/cwfs-reboot /tmp/cw-durable && echo CW_REBOOT_RESOURCE_MOUNTED",
-      "sha1sum -2 256 /tmp/cw-durable/payload.bin; echo CW_REBOOT_DONE"]
-    reboot=session(args.image,reboot_commands,out,'reboot',100,
-                   required={0:'CW_REBOOT_IDENTITY_OK',1:'CW_REBOOT_RESOURCE_MOUNTED'},
-                   resource=resource)
-    verify_dedicated_resource_reboot(reboot,runtime_sha[0].decode(),durable_sha)
-    # One real virtual-storage EIO, then a healthy backend: the server must
-    # reject both the failed barrier and the subsequent uncertain-state retry.
-    fault_resource=out/'resource-fault.qcow2'
-    subprocess.run(['qemu-img','create','-f','qcow2','-F','qcow2','-b',str(resource.resolve()),str(fault_resource)],check=True)
-    fault_config=out/'flush-fault.conf'
-    fault_config.write_text('[set-state]\nevent = "pwritev"\nstate = "1"\nnew_state = "2"\n[inject-error]\nevent = "flush_to_os"\nstate = "2"\niotype = "flush"\nerrno = "5"\nonce = "on"\nimmediately = "on"\n')
-    # The boot hjfs is NOT protected by the cw-hjfs persistence barrier.
-    # Always re-download the exact frozen MSVC W4 fixture on this separate
-    # QEMU boot and verify it by SHA before recognizing any fault receipts.
-    fault_commands=[
-      "cat '#Z/version'; sha1sum -2 256 /amd64/bin/cw-hjfs",
-      "ip/ipconfig -d ether /net/ether0; webfs",
-      "hget http://10.0.2.2:8000/file.exe > /tmp/cw-file.exe; sha1sum -2 256 /tmp/cw-file.exe",
-      "mkdir -p /tmp/cw-durable; cw-hjfs -F -S -n cwfs-fault -f /dev/sd01/data > /tmp/cwfs-fault.log >[2]/dev/cons; mount -nc /srv/cwfs-fault /tmp/cw-durable && echo CW_FAULT_MOUNTED",
-      "rm /tmp/cw-durable/payload.bin; test ! -e /tmp/cw-durable/payload.bin && echo CW_FAULT_CLEAN_OK"]
-    for name in fault_specs():
-        fault_commands.append(f'echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows -r /tmp/cw-durable -s /tmp/cw-durable/.ryzova-sync-v1 /tmp/cw-file.exe; echo CW_CASE_{name}_END; rm /tmp/cw-durable/payload.bin')
-    fault_log=session(args.image,fault_commands,out,'fault',150,
-                     required={3:'CW_FAULT_MOUNTED',4:'CW_FAULT_CLEAN_OK'},
-                     resource=fault_resource,hardcut=True,fault_config=fault_config)
-    if b'Ryzova Kernel 0.1.0-dev' not in fault_log or server_sha[0] not in fault_log:
-        raise ValueError('fault-test source identity')
-    verify_fault_fixture(fault_log,hashes['file'])
-    records.update(parse_cases(fault_log,fault_specs()))
-    report={'schema':'compact-windows-w6-native/v1','source_commit':commit,'source_archive_sha256':archive_sha,'kernel_sha256':kernel_sha,'runtime_sha256':runtime_sha[0].decode(),
-      'bootstrap_image_gzip_sha256':PIN,'bootstrap_image_sha256':base_sha,'cases':records,'fixture_sha256':hashes,'native_amd64_qemu_qualified':True,'native_9p_namespace_verified':True,
-      'file_sha256':file_sha,'reboot_persistence_verified':True,'boot_root_sigkill_persistence_qualified':False,'dedicated_resource_sigkill_persistence_qualified':True,'native_file_flush_qualified':True,'barrier_local_only_verified':True,'durable_file_sha256':durable_sha,'resource_server_sha256':server_sha[0].decode(),'qemu_sigkill_persistence_verified':True,'storage_flush_failure_and_sticky_error_verified':True,'storage_fault_config_sha256':digest(fault_config),'flush_evidence_scope':'dedicated QEMU virtio-SCSI disk; pinned cw-hjfs ACK after dirty cache drain and SYNCHRONIZE CACHE; no physical power-loss claim','full_w6_complete':False,'physical_hardware_qualified':False,'arm64_windows_qualified':False,'general_windows_compatibility':False}
     (out/'qualification.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True);server.shutdown()
 if __name__=='__main__':main()
