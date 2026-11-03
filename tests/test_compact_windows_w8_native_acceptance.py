@@ -35,9 +35,20 @@ def sample(binary):
         +"CW_CALL WriteFile 7\n"
         +"CW_CALL ExitProcess 1\n"
         +"CW_CASE_w8wc_END\n"
+        +"CW_CASE_w8wc_denied_BEGIN\n"
+        +"CW_NATIVE status=0 exited=1 executed=1 guest=1048576 open=0 code=36 steps=35\n"
+        +"CW_OUT \n"
+        +"CW_ERR \n"
+        +"CW_CALL GetStdHandle 1\n"
+        +"CW_CALL ReadFile 1\n"
+        +"CW_CALL GetLastError 1\n"
+        +"CW_CALL ExitProcess 1\n"
+        +"CW_CASE_w8wc_denied_END\n"
     ).encode()
     cases=parse_cases(log,{"w8wc":{"status":0,"code":0,
                                   "out":b"2 3 18\n".hex(),"err":""}})
+    denied=parse_cases(log,{"w8wc_denied":{"status":0,"code":36,
+                                          "out":"","err":""}})
     nested={
         "schema":"compact-windows-w8-native/v1",
         "source_commit":head,
@@ -46,6 +57,8 @@ def sample(binary):
         "stdin_sha256":input_hash,
         "expected_stdout_sha256":out_hash,
         "native_qemu_case":cases["w8wc"],
+        "native_qemu_missing_stdin_denied_case":denied["w8wc_denied"],
+        "native_qemu_implicit_stdin_denied_verified":True,
         "native_qemu_same_windows_pe_verified":True,
         "native_qemu_stdin_stdout_exit_verified":True,
         "transitive_windows_runtime_qualified":False,
@@ -82,7 +95,8 @@ class WindowsW8NativeAcceptanceTests(unittest.TestCase):
             binary.write_bytes(b"MZ"+bytes(1024))
             native,win,serial,head=sample(binary.read_bytes())
             receipt=accept(native,win,binary,serial,head)
-            self.assertEqual(receipt["native_cases"],1)
+            self.assertEqual(receipt["native_cases"],2)
+            self.assertTrue(receipt["original_windows_PE_denied_implicit_stdin"])
             self.assertTrue(receipt["genuine_mit_sbase_wc_ascii_profile_qualified"])
             self.assertFalse(receipt["full_windows_v1_release_qualified"])
             self.assertFalse(receipt["merge_authorized"])
@@ -97,6 +111,8 @@ class WindowsW8NativeAcceptanceTests(unittest.TestCase):
                 (native,win,serial,head[:-1]+"0"),
                 (native,win,serial.replace(b"CW_CASE_w8wc_END",b"BAD_END"),head),
                 (native,win,serial.replace(b"CW_CALL ReadFile 19",b"CW_CALL ReadFile 0"),head),
+                (native,win,serial.replace(b"CW_CALL ReadFile 1",b"CW_CALL ReadFile 0"),head),
+                (native,win,serial.replace(b"CW_CASE_w8wc_denied_END",b"MISSING_END"),head),
                 (native,win,serial.replace(b" /tmp/cw-w8-input",b" /tmp/evil-input"),head),
             ]
             for n,w,log,h in examples:
