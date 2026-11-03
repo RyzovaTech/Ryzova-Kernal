@@ -166,6 +166,31 @@ static uint32_t convert_signed_binary32(uint64_t raw,unsigned int width)
 }
 /* Default RN-even scalar binary32 division via integer mantissas.
  * Does not use host FP; non-default MXCSR/exception flags unqualified. */
+/* Signed integer -> IEEE-754 binary64 in the default round-to-nearest,
+ * ties-to-even mode. Pure integer operations; no host FPU / MXCSR state. */
+static uint64_t convert_signed_binary64(uint64_t raw,unsigned int width)
+{
+    uint64_t magnitude,kept,lost,half,parts;
+    unsigned int sign,bit=0,drop,exponent;
+    raw&=mask(width);
+    sign=(unsigned int)(raw>>(width*8U-1U));
+    magnitude=sign?((~raw)&mask(width))+1U:raw;
+    if(!magnitude)return 0;
+    {uint64_t v=magnitude;while(v>>=1U)bit++;}
+    exponent=bit+1023U;
+    if(bit<=52U)kept=magnitude<<(52U-bit);
+    else{
+        drop=bit-52U;
+        kept=magnitude>>drop;
+        parts=(UINT64_C(1)<<drop)-1U;
+        lost=magnitude&parts;
+        half=UINT64_C(1)<<(drop-1U);
+        if(lost>half || (lost==half && (kept&1U)))kept++;
+        if(kept==(UINT64_C(1)<<53U)){kept>>=1;exponent++;}
+    }
+    return ((uint64_t)sign<<63U)|((uint64_t)exponent<<52U)|
+           (kept&UINT64_C(0x000fffffffffffff));
+}
 static uint32_t divide_binary32(uint32_t left,uint32_t right)
 {
     uint32_t sign=(left^right)&UINT32_C(0x80000000);
@@ -663,6 +688,19 @@ static int step(Cpu *c)
             c->flags=(c->flags&~(uint64_t)(CF|PF|AF|ZF|SF|OF))|
                      compare_binary32_eflags(left,right);
         }
+        else if(op2==0x2a && c->repeat==0xf2 && !c->operand16){
+            /* F2 [REX.W] 0F 2A /r CVTSI2SD xmm, r/m32|r/m64.
+             * Default ties-to-even, preserve XMM[127:64] and EFLAGS.
+             * Nondefault MXCSR rounding and exception status unqualified. */
+            unsigned int i,width=(c->rex&8U)?8U:4U;
+            uint64_t scalar;
+            rm=decode(c,&reg,&group,width);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            v=get(c,rm,width);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            scalar=convert_signed_binary64(v,width);
+            for(i=0;i<8;i++)c->xmm[reg][i]=(unsigned char)(scalar>>(8U*i));
+        }
         else if(op2==0x2a && c->repeat==0xf3 && !c->operand16){
             /* F3 [REX.W] 0F 2A /r CVTSI2SS xmm, r/m32|r/m64.
              * Signed conversion, default nearest ties-to-even. Preserve
@@ -775,6 +813,33 @@ static int step(Cpu *c)
         else if(op2==0xef || op2==0x57){
             if((op2==0xef && size!=2) || c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
             rm=decode(c,&reg,&group,16);vector_xor(c,rm,reg);
+        }
+        else if((op2==0x10 || op2==0x11) && c->repeat==0xf2 && !c->operand16){
+            /* F2 0F 10/11 MOVSD scalar: memory loads clear upper 64 bits
+             * of destination XMM, register moves preserve the high half;
+             * only 8 bytes are ever read or written from guest memory. */
+            unsigned char tmp[8];unsigned int i;
+            rm=decode(c,&reg,&group,8);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(op2==0x10){
+                if(rm.reg>=0)memcpy(tmp,c->xmm[rm.reg],8);
+                else{
+                    v=get(c,rm,8);
+                    if(c->fault)return RYZ_VM_MAP_ERROR;
+                    for(i=0;i<8;i++)tmp[i]=(unsigned char)(v>>(8U*i));
+                    memset(c->xmm[reg]+8,0,8);
+                }
+                memcpy(c->xmm[reg],tmp,8);
+            }else{
+                memcpy(tmp,c->xmm[reg],8);
+                if(rm.reg>=0)memcpy(c->xmm[rm.reg],tmp,8);
+                else{
+                    v=0;
+                    for(i=0;i<8;i++)v|=(uint64_t)tmp[i]<<(8U*i);
+                    store(c,address(c,rm)+c->segment,8,v);
+                    if(c->fault)return RYZ_VM_MAP_ERROR;
+                }
+            }
         }
         else if(op2==0x10 || op2==0x11 || op2==0x28 || op2==0x29){
             if(c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
