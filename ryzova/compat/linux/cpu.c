@@ -1010,6 +1010,32 @@ static int step(Cpu *c)
             }
             memcpy(c->xmm[rm.reg],shifted,16);
         }
+        else if(op2==0xd4 && c->operand16 && !c->repeat){
+            /* SSE2 66 0F D4 /r PADDQ xmm, xmm/m128. Independently
+             * wrap both unsigned 64-bit lanes without EFLAGS changes.
+             * Legacy SSE2 m128 requires 16-byte alignment; do not
+             * support the unprefixed MMX variant or unsafe host memory. */
+            unsigned char data[16];uint64_t addr,old_lane,new_lane;unsigned int i,j;
+            rm=decode(c,&reg,&group,16);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(rm.reg>=0)memcpy(data,c->xmm[rm.reg],16);
+            else{
+                addr=address(c,rm)+c->segment;
+                if((addr&15U) || !ryz_memory_access(c->m,addr,16,RYZ_READ))
+                    return RYZ_VM_MAP_ERROR;
+                memcpy(data,c->m->bytes+(size_t)(addr-c->m->base),16);
+            }
+            for(i=0;i<2;i++){
+                old_lane=new_lane=0;
+                for(j=0;j<8;j++){
+                    old_lane|=(uint64_t)c->xmm[reg][i*8U+j]<<(8U*j);
+                    new_lane|=(uint64_t)data[i*8U+j]<<(8U*j);
+                }
+                old_lane+=new_lane;
+                for(j=0;j<8;j++)
+                    c->xmm[reg][i*8U+j]=(unsigned char)(old_lane>>(8U*j));
+            }
+        }
         else if(op2==0xeb && c->operand16 && !c->repeat){
             /* 66 0F EB /r POR xmm, xmm/m128, no EFLAGS changes. */
             rm=decode(c,&reg,&group,16);
