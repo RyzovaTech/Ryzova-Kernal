@@ -4,6 +4,7 @@
 Host-only reference: never links Apple frameworks, runs guest code natively,
 forwards guest syscalls, or demonstrates Ryzova guest boot/macOS app support.
 """
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -71,6 +72,9 @@ def main():
             "schema":"ryzova-compact-macos-m2a-demo/v1",
             "source":"Clang x86_64-apple-macosx13.0 relocation-free MH_OBJECT",
             "code_length":len(code),
+            "darwin_mh_object_sha256":hashlib.sha256(object_path.read_bytes()).hexdigest(),
+            "original_assembly_sha256":hashlib.sha256(assembly.read_bytes()).hexdigest(),
+            "bounded_research_fixture_sha256":hashlib.sha256(executable_path.read_bytes()).hexdigest(),
             "captured_text":EXPECTED.decode("ascii").rstrip(),
             "host_interpreter_verified":True,
             "native_ryzova_guest_verified":False,

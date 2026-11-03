@@ -35,12 +35,20 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m1.py' -v
-          python3 scripts/compact_macos_m2_demo.py
+          mkdir -p artifacts/mac2
+          python3 scripts/compact_macos_m2_demo.py | tee artifacts/mac2/host-demo.json
           clang -std=c11 -Wall -Wextra -Werror -pedantic -O2 \
             ryzova/compat/macos/macho64.c \
             ryzova/compat/macos/macho_vm.c \
             ryzova/compat/macos/macho_darwin_probe.c \
             -o /tmp/ryzova-mac2-host-research
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac2a-captured-darwin-macos-host
+          path: artifacts/mac2/host-demo.json
+          if-no-files-found: ignore
+          retention-days: 14
   mac2a-linux-host-denial-regression:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -59,4 +67,12 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m1.py' -v
-          python3 scripts/compact_macos_m2_demo.py
+          mkdir -p artifacts/mac2
+          python3 scripts/compact_macos_m2_demo.py | tee artifacts/mac2/host-demo.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac2a-captured-darwin-linux-${{ matrix.compiler }}
+          path: artifacts/mac2/host-demo.json
+          if-no-files-found: ignore
+          retention-days: 14
