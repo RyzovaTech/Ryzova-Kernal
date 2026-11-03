@@ -1,0 +1,45 @@
+{
+  "schema": "ryzova-compact-macos-m0/v1",
+  "phase": "MAC-0",
+  "profile": "intel-macho64-static-metadata-v1",
+  "target_architecture": "x86_64",
+  "cpu_subtype": "CPU_SUBTYPE_X86_64_ALL",
+  "supported_image": "MH_EXECUTE (non-PIE, no dynamic libraries)",
+  "load_command_allowlist": [
+    "LC_SEGMENT_64",
+    "LC_MAIN",
+    "LC_UUID",
+    "LC_BUILD_VERSION",
+    "LC_VERSION_MIN_MACOSX"
+  ],
+  "bounded_limits": {
+    "input_bytes": 4194304,
+    "load_commands": 32,
+    "segments": 16,
+    "segment_virtual_bytes": 67108864,
+    "lowest_user_address": 65536,
+    "exclusive_user_address_ceiling": "0x0000800000000000"
+  },
+  "capabilities": {
+    "static_macho_metadata_validation": true,
+    "native_rz_guest_execution": false,
+    "macho_loader_and_mapping": false,
+    "darwin_bsd_syscalls": false,
+    "mach_ipc": false,
+    "dyld_and_dylib_resolution": false,
+    "objective_c_runtime": false,
+    "foundation_or_appkit": false,
+    "gui_or_metal": false,
+    "apple_silicon_arm64": false,
+    "production_macos_app_compatibility": false
+  },
+  "authority": {
+    "host_syscall_forwarding": false,
+    "host_filesystem_access": false,
+    "privilege_escalation": false,
+    "implicit_mounts": false,
+    "code_signing_bypass": false,
+    "apple_binary_or_sdk_redistribution": false
+  },
+  "completion_policy": "MAC-0 static security groundwork only; MAC-1 to MAC-7 require separate guest and real application evidence before any one-time final integration merge"
+}
