@@ -85,7 +85,7 @@ def relocated_interpreter_bias(main_image):
     No ELF bytes or memory are modified by this diagnostic.
     """
     if (type(main_image) is not bytes or not 64 <= len(main_image) <= MAX_IMAGE
-            or main_image[:7] != b"\\x7fELF\\x02\\x01\\x01"
+            or main_image[:7] != b"\x7fELF\x02\x01\x01"
             or int.from_bytes(main_image[18:20], "little") != 62):
         return None
     e_type = int.from_bytes(main_image[16:18], "little")
