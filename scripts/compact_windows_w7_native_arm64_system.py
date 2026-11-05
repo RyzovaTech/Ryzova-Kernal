@@ -31,8 +31,13 @@ SCHEMA = "compact-windows-w7-native-arm64-system-boot/v1"
 BOOT_FILES = ("sys/src/9/arm64/main.c", "sys/src/9/arm64/qemu",
               "sys/src/9/arm64/mkfile", "sys/src/9/arm64/l.s",
               "sys/src/9/arm64/bootargs.c")
-SRC_PREFIXES = ("sys/src/9/arm64/", "sys/src/9/port/",
-                "sys/src/9/boot/", "sys/include/", "arm64/include/")
+SRC_PREFIXES = (
+    "sys/src/9/arm64/", "sys/src/9/port/", "sys/src/9/boot/",
+    "sys/include/", "arm64/include/",
+    "sys/src/libc/", "sys/src/libmp/", "sys/src/libsec/",
+    "sys/src/libip/", "sys/src/libdraw/", "sys/src/libmemdraw/",
+    "sys/src/libmemlayer/",
+)
 MAX_ARCHIVE = 40 * 1024 * 1024
 MAX_KERNEL = 32 * 1024 * 1024
 BOOT_TIME = 100
@@ -158,17 +163,45 @@ def run(image, archive, result_dir):
         commands = [
             "ip/ipconfig -d ether /net/ether0; webfs",
             "hget http://10.0.2.2:8000/w7-native-arm64-source.tgz > /tmp/w7-a64.tgz; sha1sum -2 256 /tmp/w7-a64.tgz",
-            "ls /amd64/bin/7c /amd64/bin/7l /arm64/mkfile /arm64/lib/libc.a && echo CW_W7_A64_CROSS_TOOLS_OK",
+            "ls /amd64/bin/7c /amd64/bin/7l /arm64/mkfile && echo CW_W7_A64_CROSS_TOOLS_OK",
             "cd /; tar xzf /tmp/w7-a64.tgz && echo CW_W7_A64_SOURCES_OK",
-            "cd /sys/src/9/arm64; objtype=arm64 mk > /tmp/w7-a64-kernel-build.log >[2=1] && echo CW_W7_A64_KERNEL_COMPILED; tail -n 28 /tmp/w7-a64-kernel-build.log",
-            "9fs 9fat; cd /sys/src/9/arm64; cp 9qemu.u /n/9fat/9qemu.u && cmp 9qemu.u /n/9fat/9qemu.u && echo CW_W7_A64_KERNEL_COPY_OK; sha1sum -2 256 9qemu.u; sha1sum -2 256 /n/9fat/9qemu.u",
         ]
-        required = {
-            2: "CW_W7_A64_CROSS_TOOLS_OK",
-            3: "CW_W7_A64_SOURCES_OK",
-            4: "CW_W7_A64_KERNEL_COMPILED",
-            5: "CW_W7_A64_KERNEL_COPY_OK",
-        }
+        required = {2: "CW_W7_A64_CROSS_TOOLS_OK", 3: "CW_W7_A64_SOURCES_OK"}
+        # The pinned AMD64 build image includes the ARM64 compiler/linker,
+        # but does NOT ship /arm64/lib/libc.a. The *complete* required
+        # ARM64 link libraries must therefore be source-built, not fetched.
+        libs = ("libc", "libmp", "libsec", "libip",
+                "libdraw", "libmemdraw", "libmemlayer")
+        for name in libs:
+            index = len(commands)
+            marker = "CW_W7_A64_" + name.upper() + "_BUILT"
+            commands.append(
+                "mkdir -p /arm64/lib; cd /sys/src/" + name +
+                "; objtype=arm64 mk install > /tmp/w7-" + name +
+                ".log >[2=1] && echo " + marker +
+                "; tail -n 20 /tmp/w7-" + name + ".log"
+            )
+            required[index] = marker
+        libpaths = " ".join("/arm64/lib/" + n + ".a" for n in libs)
+        index = len(commands)
+        commands.append("ls " + libpaths + " && echo CW_W7_A64_ALL_LINK_LIBS_OK")
+        required[index] = "CW_W7_A64_ALL_LINK_LIBS_OK"
+        index = len(commands)
+        commands.append(
+            "cd /sys/src/9/arm64; objtype=arm64 mk -a > "
+            "/tmp/w7-a64-kernel-build.log >[2=1] && echo "
+            "CW_W7_A64_KERNEL_COMPILED; tail -n 36 /tmp/w7-a64-kernel-build.log"
+        )
+        required[index] = "CW_W7_A64_KERNEL_COMPILED"
+        index = len(commands)
+        commands.append(
+            "9fs 9fat; cd /sys/src/9/arm64; cp 9qemu.u /n/9fat/9qemu.u "
+            "&& cmp 9qemu.u /n/9fat/9qemu.u "
+            "&& echo CW_W7_A64_KERNEL_COPY_OK; "
+            "sha1sum -2 256 9qemu.u; "
+            "sha1sum -2 256 /n/9fat/9qemu.u"
+        )
+        required[index] = "CW_W7_A64_KERNEL_COPY_OK"
         serial = session(image, commands, result_dir, "w7-arm64-builder",
                          950, required)
     finally:
