@@ -82,7 +82,7 @@ class M5Bootstrap(unittest.TestCase):
                      "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"):
             self.assertIn('"' + path + '"', source)
         self.assertIn('arm64_libraries_ok = all(arm64_libraries.values())', source)
-        self.assertIn('arm64_libraries_ok and arm64_rc_ok and paqfs_ok', source)
+        self.assertIn('arm64_libraries_ok and arm64_rc_ok and arm64_core_ok and paqfs_ok', source)
         self.assertIn('"arm64_bootstrap_libraries_complete": arm64_libraries_ok', source)
         self.assertIn('marks.get("m5-arm64-verify-" + lib)', source)
 
