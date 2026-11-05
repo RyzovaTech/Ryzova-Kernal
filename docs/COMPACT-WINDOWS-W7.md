@@ -58,7 +58,7 @@ descriptor. The loader bounds the complete directory to 65536 file-backed
 bytes and the descriptor scan to 16 modules plus a terminator. It checks
 every lookup/IAT span, disallows descriptor/thunk overlap, rejects duplicate
 modules and API bindings, and protects the aggregate IAT after binding.
-The import ceiling is now 256. There are 35 implemented APIs; the remaining
+The import ceiling is now 256. There are 52 implemented APIs; the remaining
 IDs are reserved and cannot be granted or dispatched.
 
 Only exact DLL contracts and their selected exports are recognized:
@@ -123,6 +123,52 @@ Semantics are based on Microsoft's [TLS allocation](https://learn.microsoft.com/
 [TLS release](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-tlsfree),
 and [file API mode](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-arefileapisansi)
 documentation. Capacity and single-thread restrictions are Ryzova profile limits.
+
+## Synchronization objects and virtual identities
+
+Seventeen further kernel32 exports implement events, semaphores, waits,
+critical sections, current-process/thread identities and handle duplication.
+Objects are private to the environment: up to 32 objects, 64 generation-tagged
+handles and 32 critical sections. File and synchronization handle families
+are disjoint; no handle is a host pointer or host OS handle.
+
+Manual-reset events remain signaled until reset. Auto-reset waits consume one
+signal; repeated SetEvent calls do not accumulate signals. Semaphores enforce
+initial/maximum/release bounds and write previous counts only on successful
+release. Wait-all validates the entire input and consumes all signals together;
+wait-any selects the first ready object. Invalid inputs do not consume state.
+This profile rejects duplicate object references in one multiple wait.
+
+Ready waits complete immediately for any timeout. Unready zero-timeout waits
+return WAIT_TIMEOUT. Unready positive/infinite waits halt with CW_API because
+the profile has no scheduler; they never report fabricated completion or
+elapsed time. Named objects and security descriptors return error 50.
+
+DuplicateHandle supports the current virtual process, preserves object lifetime
+through independent references, and attenuates access. DUPLICATE_CLOSE_SOURCE
+closes a valid source even if duplication fails, preserving the operation's
+error. File-handle duplication is unsupported, but its close-source failure
+side effect is honored. Dropped references and reused slots cannot revive a
+stale handle. Critical sections support recursion by the initial thread and
+mirror the basic Win64 fields; invalid lifecycle, pointer and capacity cases
+stop rather than pretending to acquire a lock. No multithreaded locking is claimed.
+
+GetCurrentProcess/GetCurrentThread return virtual pseudo handles. Both virtual
+IDs are 1 inside the private initial-process/thread namespace. These are not
+host IDs and are separate from the independently checked native kernel identity.
+Pseudo handles can be duplicated to private process/thread handles, which stay
+unsignaled while that initial process/thread is alive.
+
+The synchronization executable expects exit 43 and checks events, semaphore
+counts, wait-all/any, duplicate lifetime and close-source-on-error, pseudo
+handles, and critical-section recursion. Windows, hosted and native jobs use
+identical bytes; hosted/native receipts require exact API call counts. Separate native gates reject
+missing synchronization grants and stop an unsupported infinite blocking wait.
+
+See Microsoft's [event objects](https://learn.microsoft.com/en-us/windows/win32/sync/event-objects),
+[semaphores](https://learn.microsoft.com/en-us/windows/win32/sync/using-semaphore-objects),
+[DuplicateHandle](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle)
+and [critical sections](https://learn.microsoft.com/en-us/windows/win32/sync/critical-section-objects).
 
 The pinned jq binary now passes resource/TLS validation and its import
 directory's descriptor layout; it is rejected for unimplemented imports.

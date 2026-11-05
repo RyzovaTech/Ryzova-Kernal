@@ -85,7 +85,7 @@ def audit(ref, out):
                         "-fsanitize=undefined", "-fno-sanitize-recover=all", "-I", str(runtime),
                         str(ROOT / "tests/fixtures/windows_w7_admission.c"),
                         *(str(runtime / name) for name in
-                          ("loader.c", "cpu.c", "api.c", "crt.c", "files.c")),
+                          ("loader.c", "cpu.c", "api.c", "crt.c", "sync_objects.c", "files.c")),
                         "-o", str(probe)], check=True)
         result = json.loads(subprocess.check_output([str(probe), str(binary)], text=True, timeout=5))
     listing = subprocess.check_output(["objdump", "-p", str(binary)], text=True, timeout=5)

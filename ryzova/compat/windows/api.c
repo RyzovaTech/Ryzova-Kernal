@@ -11,7 +11,7 @@
 #define ERR_ENVIRONMENT 203U
 #define ERR_ADDRESS 487U
 #define ERR_NOACCESS 998U
-static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno","AreFileApisANSI","SetFileApisToANSI","SetFileApisToOEM","TlsAlloc","TlsFree","TlsGetValue","TlsSetValue"};
+static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno","AreFileApisANSI","SetFileApisToANSI","SetFileApisToOEM","TlsAlloc","TlsFree","TlsGetValue","TlsSetValue","CreateEventA","SetEvent","ResetEvent","CreateSemaphoreA","ReleaseSemaphore","WaitForSingleObject","WaitForMultipleObjects","InitializeCriticalSection","DeleteCriticalSection","EnterCriticalSection","LeaveCriticalSection","TryEnterCriticalSection","GetCurrentProcess","GetCurrentProcessId","GetCurrentThread","GetCurrentThreadId","DuplicateHandle"};
 int cw_api_id(const char *name) {
     unsigned int i;for(i=0;i<CW_API_COUNT;i++)if(!strcmp(name,names[i]))return (int)i;
     return -1;
@@ -245,8 +245,8 @@ int cw_api_dispatch(CwMachine *m) {
     if((m->r[4]&15)!=8 || m->r[4]<m->stack_base || m->r[4]-m->stack_base>CW_STACK-40 || !(stack=cw_memory(m,m->r[4],40,CW_R)))return CW_ABI;
     if(!cw_memory(m,m->r[4]+8,32,CW_W))return CW_ABI;
     a[0]=m->r[1];a[1]=m->r[2];a[2]=m->r[8];a[3]=m->r[9];a[4]=a[5]=a[6]=0;
-    if(id==CW_WRITE_FILE || id==CW_READ_FILE || id==CW_CREATE_FILE) {
-        unsigned int count=id==CW_CREATE_FILE?3U:1U,i;
+    if(id==CW_WRITE_FILE || id==CW_READ_FILE || id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE) {
+        unsigned int count=(id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE)?3U:1U,i;
         unsigned char *extra=cw_memory(m,m->r[4]+40,count*8,CW_R);if(!extra)return CW_ABI;
         for(i=0;i<count;i++)a[4+i]=get64(extra+i*8);
     }
@@ -285,11 +285,16 @@ int cw_api_dispatch(CwMachine *m) {
     case CW_GET_ENVIRONMENT_VARIABLE:result=environment(m,a);break;
     case CW_VIRTUAL_ALLOC:result=a[0] && cw_crt_owned(m,a[0])?fail(s,ERR_ADDRESS):virtual_alloc(m,a);break;
     case CW_VIRTUAL_FREE:result=cw_crt_owned(m,a[0])?fail(s,ERR_ADDRESS):virtual_free(m,a);break;
-    case CW_CREATE_FILE:case CW_READ_FILE:case CW_CLOSE_HANDLE:
+    case CW_CLOSE_HANDLE:
+        if(cw_sync_handle_family(a[0])){int status=cw_sync_call(m,id,a,&result);if(status)return status;}
+        else result=cw_file_call(m,id,a);
+        break;
+    case CW_CREATE_FILE:case CW_READ_FILE:
     case CW_SET_FILE_POINTER:case CW_GET_FILE_SIZE:case CW_FLUSH_FILE_BUFFERS:
         result=cw_file_call(m,id,a);break;
     default:
         if(id>=CW_MEMCPY && id<=CW_ERRNO){int status=cw_crt_call(m,id,a,&result);if(status)return status;}
+        else if(id>=CW_CREATE_EVENT && id<=CW_DUPLICATE_HANDLE){int status=cw_sync_call(m,id,a,&result);if(status)return status;}
         else return CW_API;
     }
     m->r[0]=result;m->r[4]+=8;

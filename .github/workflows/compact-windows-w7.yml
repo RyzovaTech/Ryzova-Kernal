@@ -7,9 +7,11 @@ on:
       - 'scripts/compact_windows_w7_native.py'
       - 'scripts/compact_windows_w7_imports.py'
       - 'scripts/compact_windows_w7_startup.py'
+      - 'scripts/compact_windows_w7_sync.py'
       - 'tests/test_compact_windows_w7.py'
       - 'tests/test_compact_windows_w7_imports.py'
       - 'tests/test_compact_windows_w7_startup.py'
+      - 'tests/test_compact_windows_w7_sync.py'
       - 'tests/test_compact_windows_w2.py'
       - 'tests/fixtures/windows_w7_admission.c'
       - 'ryzova/compat/windows/**'
@@ -33,6 +35,7 @@ jobs:
             /scripts/compact_windows_w7_tls.py
             /scripts/compact_windows_w7_imports.py
             /scripts/compact_windows_w7_startup.py
+            /scripts/compact_windows_w7_sync.py
             /scripts/compact_windows_w2.py
             /scripts/compact_windows_w3.py
             /scripts/compact_windows_w4.py
@@ -44,6 +47,7 @@ jobs:
       - run: python scripts/compact_windows_w7_tls.py reference --out artifacts/w7-reference
       - run: python scripts/compact_windows_w7_imports.py reference --out artifacts/w7-reference
       - run: python scripts/compact_windows_w7_startup.py reference --out artifacts/w7-reference
+      - run: python scripts/compact_windows_w7_sync.py reference --out artifacts/w7-reference
       - uses: actions/upload-artifact@v4
         with:
           name: windows-w7-jq-reference
@@ -66,6 +70,7 @@ jobs:
       - run: python3 scripts/compact_windows_w7_tls.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
       - run: python3 scripts/compact_windows_w7_imports.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
       - run: python3 scripts/compact_windows_w7_startup.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
+      - run: python3 scripts/compact_windows_w7_sync.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
       - uses: actions/upload-artifact@v4
         with:
           name: windows-w7-jq-admission-audit
