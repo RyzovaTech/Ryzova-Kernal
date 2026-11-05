@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Bounded PE32+ AMD64 format checks: image is NEVER executed."""
 import os
 from pathlib import Path

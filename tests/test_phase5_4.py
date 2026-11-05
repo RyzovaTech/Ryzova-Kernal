@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Real statically linked Linux ELF instructions interpreted by virtual ABI."""
 from pathlib import Path
 import os
