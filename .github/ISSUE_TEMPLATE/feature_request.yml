@@ -1,0 +1,37 @@
+name: "Feature or research proposal"
+description: "Propose a scoped kernel, driver, compatibility or community improvement"
+title: "[Proposal] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ryzova Kernel is experimental and based on 9front. Please separate
+        proposed capabilities from currently verified behavior.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: "Explain the need, user impact and current gap"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed design
+      description: "Scope, interfaces, source references and compatibility impacts"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Minimum testable acceptance evidence
+      description: "What exact host/QEMU/physical test would demonstrate success?"
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and prerequisites
+      description: "Security, licensing, hardware, upstream and release-gate considerations"
+    validations:
+      required: false
