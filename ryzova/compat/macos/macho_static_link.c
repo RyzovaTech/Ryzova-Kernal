@@ -237,7 +237,7 @@ int ryz_mac3_link2(const unsigned char *first,size_t first_len,
     }
     /* True MH_EXECUTE structure but only an original *synthetic test*
      * process with LC_MAIN and no dyld/libSystem/actual Darwin launch. */
-    write32(staged,0,MH_MAGIC_64);
+    write32(staged,MH_MAGIC_64);
     write32(staged+4,CPU_X86_64);
     write32(staged+8,CPU_SUBTYPE_ALL);
     write32(staged+12,2U);
