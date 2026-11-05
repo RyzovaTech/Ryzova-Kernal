@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Prevent regression baseline results from being promoted to V1 completion."""
 import copy
 import json
