@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Build portable Windows runtime and reproducible executable PE test images."""
 import argparse
 import hashlib
