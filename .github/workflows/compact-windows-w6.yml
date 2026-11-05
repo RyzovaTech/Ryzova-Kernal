@@ -15,6 +15,11 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# Cancel superseded runs only for this workflow and PR, without affecting
+# independent hardware/driver agents or other workflows.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   hosted-regression:
     runs-on: ubuntu-latest
