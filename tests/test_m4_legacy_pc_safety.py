@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """M4 legacy PCnet / RTL8139 error-path guards; not physical NIC testing."""
 from pathlib import Path
 import unittest
