@@ -1,4 +1,4 @@
-name: Compact macOS MAC-3A Inert Dylib Metadata
+name: Compact macOS MAC-3A/B/C Restricted Linking
 on:
   push:
     branches:
@@ -7,6 +7,7 @@ on:
       - 'ryzova/compat/macos/**'
       - 'tests/test_compact_macos_m3.py'
       - 'tests/test_compact_macos_m3_symbols.py'
+      - 'tests/test_compact_macos_m3_link.py'
       - 'scripts/compact_macos_m3_demo.py'
       - 'docs/COMPACT-MACOS-M3.md'
       - '.github/workflows/compact-macos-m3.yml'
@@ -16,6 +17,7 @@ on:
       - 'ryzova/compat/macos/**'
       - 'tests/test_compact_macos_m3.py'
       - 'tests/test_compact_macos_m3_symbols.py'
+      - 'tests/test_compact_macos_m3_link.py'
       - 'scripts/compact_macos_m3_demo.py'
       - 'docs/COMPACT-MACOS-M3.md'
       - '.github/workflows/compact-macos-m3.yml'
@@ -40,6 +42,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_compact_macos_m3.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m3_symbols.py' -v
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m3_link.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v
           clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
             ryzova/compat/macos/macho_link_meta.c \
@@ -49,6 +52,12 @@ jobs:
             ryzova/compat/macos/macho_symbol_meta.c \
             ryzova/compat/macos/macho_symbol_meta_probe.c \
             -o /tmp/ryz-mac3-symbols
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            ryzova/compat/macos/macho64.c \
+            ryzova/compat/macos/macho_vm.c \
+            ryzova/compat/macos/macho_static_link.c \
+            ryzova/compat/macos/macho_static_link_probe.c \
+            -o /tmp/ryz-mac3-link
       - name: Reproducible source-built Darwin symbol/import metadata proof
         run: |
           mkdir -p artifacts/mac3
@@ -78,4 +87,5 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_compact_macos_m3.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m3_symbols.py' -v
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m3_link.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v
