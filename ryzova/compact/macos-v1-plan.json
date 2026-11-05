@@ -1,0 +1,19 @@
+{
+  "schema": "compact-macos-plan/v1",
+  "environment": "compact/macos",
+  "phase": "M1",
+  "state": "metadata-only",
+  "profile": "macho-x86_64-metadata-v1",
+  "architecture": "x86_64",
+  "page_bytes": 4096,
+  "user_va_min_inclusive": "0x10000",
+  "user_va_end_exclusive": "0x800000000000",
+  "max_probe_input_bytes": 4194304,
+  "max_segment_virtual_bytes": 67108864,
+  "max_segments": 16,
+  "max_load_commands": 32,
+  "max_load_command_bytes": 16384,
+  "execution_supported": false,
+  "namespace_grants_supported": false,
+  "reference_fixture": "tests/fixtures/macos_m1_reference.c"
+}

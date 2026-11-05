@@ -1,0 +1,51 @@
+name: Compact macOS M1 reference
+on:
+  pull_request:
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'ryzova/compact/macos-v1-plan.json'
+      - 'tests/test_phase5_7_macho.py'
+      - 'tests/fixtures/macos_m1_reference.c'
+      - '.github/workflows/compact-macos-m1.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  macos-reference:
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            tests/fixtures
+      - name: Build, run and inventory the x86-64 CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          test "$(uname -m)" = x86_64
+          clang -arch x86_64 -std=c11 -Wall -Wextra -Werror -O2 \
+            tests/fixtures/macos_m1_reference.c -o evidence/reference
+          test "$(lipo -archs evidence/reference)" = x86_64
+          status=0
+          ./evidence/reference > evidence/stdout.txt 2> evidence/stderr.txt || status=$?
+          printf '%s\n' "$status" > evidence/exit-code.txt
+          test "$status" -eq 37
+          test ! -s evidence/stderr.txt
+          printf 'FLEX_MACOS_M1_REFERENCE\n' | cmp - evidence/stdout.txt
+          otool -hv evidence/reference > evidence/header.txt
+          otool -l evidence/reference > evidence/load-commands.txt
+          otool -L evidence/reference > evidence/dylibs.txt
+          nm -u evidence/reference > evidence/imports.txt
+          shasum -a 256 evidence/reference tests/fixtures/macos_m1_reference.c > evidence/sha256.txt
+          git rev-parse HEAD > evidence/source-commit.txt
+          sw_vers > evidence/platform.txt
+          clang --version > evidence/compiler.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compact-macos-m1-reference
+          path: evidence/
+          if-no-files-found: error
