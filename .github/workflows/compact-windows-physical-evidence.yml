@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - 'scripts/compact_windows_physical_powercut.py'
+      - 'scripts/compact_windows_w9_lab_bundle.py'
+      - 'tests/test_compact_windows_w9_lab_bundle.py'
       - 'tests/test_compact_windows_physical_powercut.py'
       - 'docs/COMPACT-WINDOWS-HARDWARE-QUALIFICATION.md'
       - '.github/workflows/compact-windows-physical-evidence.yml'
@@ -28,3 +30,5 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_compact_windows_physical_powercut.py' -v
           python3 -m py_compile scripts/compact_windows_physical_powercut.py
+          python3 -m unittest discover -s tests -p 'test_compact_windows_w9_lab_bundle.py' -v
+          python3 -m py_compile scripts/compact_windows_w9_lab_bundle.py
