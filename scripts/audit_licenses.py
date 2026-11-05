@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Preliminary, reproducible tracked-file license inventory, NOT legal clearance."""
 from __future__ import annotations
 

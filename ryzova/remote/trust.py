@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 6.0: fail-closed, authenticated *in-process* prototype transport.
 
 HMAC proves test message authenticity, NOT confidentiality. There are deliberately

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 8.0: default-deny, host-only 9P research identity and scope policy.
 
 This is a secondary authorization policy, NOT a TLS certificate verifier.
