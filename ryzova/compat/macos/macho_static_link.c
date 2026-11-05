@@ -48,6 +48,11 @@ static void write64(unsigned char *p,uint64_t v) {
 static int span(size_t length,uint64_t off,uint64_t n) {
     return off<=(uint64_t)length && n<=(uint64_t)length-off;
 }
+static int ranges_overlap(uint64_t a,uint64_t asize,
+                          uint64_t b,uint64_t bsize) {
+    if(asize==0 || bsize==0)return 0;
+    return a<b+bsize && b<a+asize;
+}
 static int name_copy(const unsigned char *table,uint32_t bytes,
                      uint32_t offset,char to[64]) {
     unsigned int i;
@@ -147,6 +152,21 @@ static int parse(const unsigned char *image,size_t size,Object *o) {
        symoff<pos || stroff<pos ||
        ((uint64_t)symoff+(uint64_t)o->nsyms*16U>stroff &&
         (uint64_t)stroff+(uint64_t)strbytes>symoff))
+        return 1;
+    /* Every consumed blob is disjoint from the Mach-O header/commands
+     * and from the other consumed payloads. Never interpret a forged
+     * relocation table as code, symbol bytes, or string data. */
+    if(o->text_offset<pos ||
+       (o->reloc_count && o->reloc_offset<pos) ||
+       ranges_overlap(o->text_offset,o->text_size,
+                      symoff,(uint64_t)o->nsyms*16U) ||
+       ranges_overlap(o->text_offset,o->text_size,stroff,strbytes) ||
+       ranges_overlap(o->reloc_offset,(uint64_t)o->reloc_count*8U,
+                      o->text_offset,o->text_size) ||
+       ranges_overlap(o->reloc_offset,(uint64_t)o->reloc_count*8U,
+                      symoff,(uint64_t)o->nsyms*16U) ||
+       ranges_overlap(o->reloc_offset,(uint64_t)o->reloc_count*8U,
+                      stroff,strbytes))
         return 1;
     for(uint32_t i=0;i<o->nsyms;i++) {
         const unsigned char *sym=image+(size_t)symoff+(size_t)i*16U;

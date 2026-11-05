@@ -163,6 +163,26 @@ _ryz_other:
                 struct.pack_into("<I",bad,reloc+4,info)
                 self.denied(bad,second)
 
+    def test_reject_overlapped_text_relocation_and_symbol_table_regions(self):
+        first=self.obj1.read_bytes()
+        second=self.obj2.read_bytes()
+        section=32+72
+        code_off=struct.unpack_from("<I",first,section+48)[0]
+        # Executable section cannot alias the Mach-O command header.
+        wrong=bytearray(first)
+        struct.pack_into("<I",wrong,section+48,32)
+        self.denied(wrong,second)
+        # Relocation table cannot masquerade as code bytes.
+        wrong=bytearray(first)
+        struct.pack_into("<I",wrong,section+56,code_off)
+        self.denied(wrong,second)
+        # Relocation table cannot masquerade as symbol entries.
+        wrong=bytearray(first)
+        symtab=32+152+24
+        symoff=struct.unpack_from("<I",wrong,symtab+8)[0]
+        struct.pack_into("<I",wrong,section+56,symoff)
+        self.denied(wrong,second)
+
     def test_reject_nonzero_branch_addend_and_invalid_reloc_offset(self):
         first=self.obj1.read_bytes()
         second=self.obj2.read_bytes()
