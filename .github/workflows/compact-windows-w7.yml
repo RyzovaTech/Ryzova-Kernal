@@ -6,6 +6,8 @@ on:
       - 'ryzova/compat/windows/arm64_probe*'
       - 'tests/test_compact_windows_w7_arm64.py'
       - 'scripts/compact_windows_w7_arm64_qemu_user.py'
+      - 'scripts/compact_windows_w7_windows_arm64_reference.ps1'
+      - 'scripts/compact_windows_w7_native_host_triplet.py'
       - 'tests/test_compact_windows_w7_qemu_user_receipt.py'
       - 'tests/fixtures/windows_w7_arm64_reference.c'
       - 'tests/fixtures/windows_w7_arm64_call_reference.c'
@@ -71,5 +73,84 @@ jobs:
         with:
           name: windows-w7-linux-arm64-qemu-user-evidence
           path: artifacts/compact-windows/w7-arm64-qemu-user.json
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-arm64-native-host-reference:
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 20
+    steps:
+      - name: Configure narrow Windows-compatible checkout
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_w7_windows_arm64_reference.ps1
+            /tests/fixtures/windows_w7_arm64_reference.c
+            /tests/fixtures/windows_w7_arm64_call_reference.c
+      - name: Require actual Windows ARM64 OS and Clang/LLD
+        shell: pwsh
+        run: |
+          if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne [System.Runtime.InteropServices.Architecture]::Arm64) { throw 'Not Windows ARM64 OS' }
+          Get-Command clang -ErrorAction Stop
+          Get-Command lld-link -ErrorAction Stop
+      - name: Compile and execute four original Windows ARM64 native PE files
+        shell: pwsh
+        env:
+          CW_W7_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          ./scripts/compact_windows_w7_windows_arm64_reference.ps1 -OutDir artifacts/windows/w7-arm64 -SourceCommit $env:CW_W7_SOURCE_SHA
+      - name: Retain original PE files and genuine Windows ARM64 reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-w7-original-arm64-native-host-fixtures
+          path: |
+            artifacts/windows/w7-arm64/*.exe
+            artifacts/windows/w7-arm64/*.json
+          if-no-files-found: error
+          retention-days: 14
+
+  same-pe-windows-arm64-host-qemu-triplet:
+    needs: [windows-arm64-native-host-reference, qemu-linux-aarch64-source-pe-differential]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-w7-original-arm64-native-host-fixtures
+          path: artifacts/windows/w7-arm64-host-fixtures
+      - name: Install Linux AArch64 cross interpreter tools
+        run: |
+          sudo apt-get -o Acquire::Retries=2 update -qq
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross linux-libc-dev-arm64-cross qemu-user
+          test -f /usr/aarch64-linux-gnu/include/bits/libc-header-start.h
+      - name: Compare exact Windows-host PE on AMD64 and emulated AArch64 Linux
+        env:
+          CW_W7_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python3 -m py_compile scripts/compact_windows_w7_native_host_triplet.py
+          python3 scripts/compact_windows_w7_native_host_triplet.py \
+            --windows-host-dir artifacts/windows/w7-arm64-host-fixtures \
+            --source-sha "$CW_W7_SOURCE_SHA" \
+            --output artifacts/compact-windows/w7-native-arm64-triplet.json
+      - name: Preserve bound native Windows ARM64 host/ISA triplet evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-w7-native-arm64-host-triplet-evidence
+          path: artifacts/compact-windows/w7-native-arm64-triplet.json
           if-no-files-found: error
           retention-days: 14
