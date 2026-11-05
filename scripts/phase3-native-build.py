@@ -402,8 +402,8 @@ if m5_arm64_native:
     arm64_libraries_ok = all(arm64_libraries.values())
     arm64_rc_ok = bool(
         marks.get("m5-arm64-rc") and marks.get("m5-arm64-rc-check")
-        and re.search(r"(?:^|\\r?\\n)M5_ARM64_RC_STATUS_\\s*(?:\\r?\\n)", text)
-        and re.search(r"(?:^|\\r?\\n)M5_ARM64_RC_ARTIFACT_\\s*(?:\\r?\\n)", text)
+        and re.search(r"(?:^|\r?\n)M5_ARM64_RC_STATUS_\s*(?:\r?\n)", text)
+        and re.search(r"(?:^|\r?\n)M5_ARM64_RC_ARTIFACT_\s*(?:\r?\n)", text)
     )
     paqfs_ok = bool(marks.get("m5-arm64-paqfs") and marks.get("m5-arm64-paqfs-install")
         and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_STATUS_\s*(?:\r?\n)", text)
