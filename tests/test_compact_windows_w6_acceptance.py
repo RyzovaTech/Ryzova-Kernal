@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """W6 source/serial evidence gate: synthetic fixtures are only unit inputs."""
 import copy
 import hashlib
