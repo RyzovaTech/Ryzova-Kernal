@@ -176,6 +176,7 @@ def create_report(root, profiles):
                   "limitations":"candidate bytes do not prove a decoded/failing ISA opcode"}
         # Never label an ordinary successful exit RIP as a failed opcode.
         if (target.get("guest_smoke_passed") is not True
+                and (target.get("guest_actual_result") or {}).get("status") == 3
                 and type(rip_string) is str
                 and re.fullmatch(r"[0-9a-f]{1,16}",rip_string)):
             rip = int(rip_string,16)
@@ -212,6 +213,7 @@ def create_report(root, profiles):
                     "limitations":"actual -c execution is required; RIP is only a byte candidate"}
             cursor=(observed or {}).get("last_rip_hex") if type(observed) is dict else None
             if (probe.get("passed") is not True and
+                    type(observed) is dict and observed.get("status") == 3 and
                     type(cursor) is str and re.fullmatch(r"[0-9a-f]{1,16}",cursor)):
                 image=(root/"usr/bin/python3.12").resolve()
                 if (not image.is_relative_to(root) or not image.is_file()
@@ -251,8 +253,14 @@ def bounded_failure_console_lines(report):
         if record.get("guest_smoke_passed") is True:
             continue
         actual=record.get("guest_actual_result") or {}
-        candidate=record.get("candidate")
-        row={"target":record.get("target"),
+        status=actual.get("status")
+        # A valid RIP at a resource/step/syscall failure is not an ISA
+        # opcode fault: never present its bytes as an unsupported opcode.
+        candidate=record.get("candidate") if status == 3 else None
+        kind={2:"memory_fault",3:"opcode_unsupported",
+              4:"instruction_budget_exhausted",
+              5:"syscall_unsupported"}.get(status,"other")
+        row={"target":record.get("target"),"failure_kind":kind,
              "vm_status":actual.get("status"),
              "last_rip_hex":actual.get("last_rip_hex"),
              "unsupported_syscall_nr":actual.get("unsupported_syscall_nr"),

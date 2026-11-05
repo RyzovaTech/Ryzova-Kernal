@@ -160,6 +160,48 @@ class IsaDiscoveryTests(unittest.TestCase):
         struct.pack_into("<I",invalid,64+4,7)  # executable + writable
         self.assertIsNone(relocated_interpreter_bias(bytes(invalid)))
 
+    def test_step_limit_and_syscall_failure_never_get_opcode_candidates(self):
+        raw=minimal_elf()
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"bin").mkdir()
+            (root/"bin/busybox").write_bytes(raw)
+            for status in (2,4,5):
+                target={"target":"busybox",
+                    "elf":{"sha256":hashlib.sha256(raw).hexdigest()},
+                    "guest_smoke_passed":False,
+                    "guest_actual_result":{"status":status,
+                        "last_rip_hex":"401000","unsupported_syscall_nr":98}}
+                report=create_report(root,{"targets":[target]})
+                self.assertIsNone(report["reports"][0]["candidate"])
+                from compact_linux_isa_discovery import bounded_failure_console_lines
+                import json
+                row=json.loads(bounded_failure_console_lines(report)[0].split(" ",1)[1])
+                self.assertIsNone(row["candidate_elf_bytes_hex"])
+                self.assertEqual(row["vm_status"],status)
+                self.assertFalse(row["opcode_failure_verified"])
+            target["guest_actual_result"]["status"]=3
+            report=create_report(root,{"targets":[target]})
+            self.assertEqual(report["reports"][0]["candidate"]["image"],"main")
+
+    def test_python_code_probe_step_limit_not_misreported_as_isa_error(self):
+        raw=minimal_elf()
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"usr/bin").mkdir(parents=True)
+            (root/"usr/bin/python3.12").write_bytes(raw)
+            target={"target":"python",
+                "elf":{"sha256":hashlib.sha256(raw).hexdigest()},
+                "guest_smoke_passed":True,
+                "guest_actual_result":{"status":0,"last_rip_hex":"401000"},
+                "python_code_probe":{"passed":False,
+                    "actual":{"status":4,"last_rip_hex":"401000"}}}
+            report=create_report(root,{"targets":[target]})
+            self.assertIsNone(report["reports"][1]["candidate"])
+            target["python_code_probe"]["actual"]["status"]=3
+            report=create_report(root,{"targets":[target]})
+            self.assertEqual(report["reports"][1]["candidate"]["image"],"main")
+
     def test_symlink_must_remain_beneath_locked_root(self):
         raw=minimal_elf()
         with tempfile.TemporaryDirectory() as d:
@@ -195,7 +237,8 @@ class IsaDiscoveryTests(unittest.TestCase):
         row=json.loads(lines[0].split(" ",1)[1])
         self.assertEqual(row["target"],"binutils")
         self.assertEqual(row["unsupported_syscall_nr"],999)
-        self.assertEqual(row["candidate_elf_bytes_hex"],"0f05")
+        self.assertIsNone(row["candidate_elf_bytes_hex"])
+        self.assertEqual(row["failure_kind"],"syscall_unsupported")
         self.assertFalse(row["opcode_failure_verified"])
 
     def test_untrusted_names_and_target_collection_denied(self):

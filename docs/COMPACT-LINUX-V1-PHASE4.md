@@ -438,3 +438,20 @@ targets using this enlarged diagnostic profile.
 A successful short `-c` print still cannot qualify full Python stdlib
 or resource budgets. If 16,777,216 steps expire, it is a **STEP_LIMIT**
 result and must NOT be misrepresented as an opcode failure or PASS.
+
+## 4O — Status-specific, fail-closed RIP candidate attribution
+
+A sampled RIP at `vm_status=4` (instruction budget exhausted),
+`vm_status=5` (unsupported syscall) or `vm_status=2`
+(memory/map fault) is **not evidence of an unsupported opcode**.
+Read-only CLX-04 diagnostics now attribute pinned ELF/musl instruction
+candidate bytes **only for vm_status=3**, the interpreter's explicit
+`RYZ_VM_OPCODE_UNSUPPORTED` result. Console evidence carries a
+`failure_kind` label and suppresses any manually supplied candidate
+if the actual status is not an unsupported opcode. Unit tests cover
+real SHA-bound Python and BusyBox failure rows, including 16-MiB
+instruction-step exhaustion vs supported instruction bytes.
+
+No CPU instruction or resource cap is changed by this improvement;
+it prevents false forensic conclusions and does not close any
+of the 17 mandatory Linux V1 acceptance gates.
