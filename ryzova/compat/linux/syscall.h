@@ -124,6 +124,8 @@ typedef struct RyzLinuxWorld {
     unsigned int mapped_nodes[RYZ_VFS_NODES];
     unsigned int memory_barriers[8];
     RyzLinuxDescription descriptions[RYZ_WORLD_DESCRIPTIONS];
+    /* Guest-managed open-file-description high-water, never a host FD count. */
+    unsigned int description_peak;
     RyzLinuxPipe pipes[RYZ_WORLD_PIPES];
     RyzLinuxPty ptys[RYZ_WORLD_PTYS];
     uint64_t pty_bytes;

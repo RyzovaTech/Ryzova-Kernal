@@ -18,6 +18,7 @@ typedef struct RyzVmResult {
     uint64_t last_rip,pipe_bytes;
     uint64_t arena_peak_bytes;
     uint32_t shared_peak_pages;
+    uint32_t description_peak; /* bounded guest descriptions, not host FDs */
     int exited;
     uint8_t exit_status;
     /* Diagnostic only, never forward an unsupported guest syscall to host. */

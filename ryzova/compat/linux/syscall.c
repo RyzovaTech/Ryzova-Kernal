@@ -84,6 +84,15 @@ int ryz_linux_process_init(RyzLinuxProcess *p, uint32_t namespace_id,
     p->fds[2].open = 1;
     return 0;
 }
+/* Forked references and duplicate guest FDs refer to the same description.
+ * Record only distinct live world descriptions after transactional updates. */
+static void record_description_peak(RyzLinuxWorld *w)
+{
+    unsigned int i,live=0;
+    for(i=0;i<RYZ_WORLD_DESCRIPTIONS;i++)
+        if(w->descriptions[i].used && w->descriptions[i].refs)live++;
+    if(live>w->description_peak)w->description_peak=live;
+}
 static void world_pull(RyzLinuxProcess *p)
 {
     unsigned int i;int cloexec;
@@ -117,6 +126,7 @@ static void world_finish(RyzLinuxProcess *p,const unsigned int *old)
         if(id)w->descriptions[id-1].fd=p->fds[i];
     }
     for(i=0;i<RYZ_WORLD_DESCRIPTIONS;i++)if(w->descriptions[i].refs==0)w->descriptions[i].used=0;
+    record_description_peak(w);
     for(i=0;i<RYZ_WORLD_PIPES;i++)if(w->pipes[i].used){
         active=0;
         for(j=0;j<RYZ_WORLD_DESCRIPTIONS;j++)
@@ -138,6 +148,7 @@ void ryz_world_attach(RyzLinuxProcess *p,RyzLinuxWorld *w)
         w->descriptions[p->fds[i].description-1].used=1;
         w->descriptions[p->fds[i].description-1].refs++;
     }
+    record_description_peak(w);
 }
 void ryz_world_fork(RyzLinuxProcess *parent,RyzLinuxProcess *child)
 {

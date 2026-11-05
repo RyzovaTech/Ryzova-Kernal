@@ -445,6 +445,7 @@ int ryz_vm_run_jobs_elf(const unsigned char *image,size_t length,unsigned char *
     if(jobs->world.network_failed)status=RYZ_JOB_NETWORK_LIMIT;
     result->pipe_bytes=jobs->world.pipe_bytes;
     result->arena_peak_bytes=jobs->arena_peak;result->shared_peak_pages=jobs->world.shared_peak;
+    result->description_peak=jobs->world.description_peak;
     /* Snapshot before closing descriptors/tearing down the guest world. */
     result->network_bytes=jobs->world.network_bytes;
     result->resource_bytes=jobs->world.resource_bytes;

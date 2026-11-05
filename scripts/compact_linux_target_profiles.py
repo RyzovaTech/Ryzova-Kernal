@@ -126,6 +126,8 @@ def main(directory,output):
             actual['unsupported_syscall_nr']=int(rejected.group(1)) if rejected and rejected.group(2)==b'1' else None
             guest_io=re.search(rb'COMPACT_GUEST_IO network_bytes=([0-9]+) resource_bytes=([0-9]+) output_bytes=([0-9]+)',guest.stderr)
             actual['guest_io']={key:int(value) for key,value in zip(('network_bytes','resource_bytes','output_bytes'),guest_io.groups())} if guest_io else None
+            descriptions=re.search(rb'COMPACT_RESOURCE_FDS description_peak=([0-9]+)',guest.stderr)
+            actual['guest_description_peak']=int(descriptions.group(1)) if descriptions else None
         success=bool(actual and actual['status']==0 and actual['exited'] and actual['exit']==expected and version.encode() in guest.stdout+guest.stderr)
         blockers=[]
         if info['bytes']>IMAGE_MAX_BYTES:blockers.append('ELF exceeds current bounded 32-MiB image ceiling')
@@ -165,6 +167,8 @@ def main(directory,output):
                 measured['unsupported_syscall_nr']=int(denied.group(1)) if denied and denied.group(2)==b'1' else None
                 guest_io=re.search(rb'COMPACT_GUEST_IO network_bytes=([0-9]+) resource_bytes=([0-9]+) output_bytes=([0-9]+)',err)
                 measured['guest_io']={key:int(value) for key,value in zip(('network_bytes','resource_bytes','output_bytes'),guest_io.groups())} if guest_io else None
+                descriptions=re.search(rb'COMPACT_RESOURCE_FDS description_peak=([0-9]+)',err)
+                measured['guest_description_peak']=int(descriptions.group(1)) if descriptions else None
             passed=bool(measured and measured['status']==0 and measured['exited']==1
                         and measured['exit']==0 and
                         not timed_out and b'CLX_PYTHON_CODE_OK\n' in out)
