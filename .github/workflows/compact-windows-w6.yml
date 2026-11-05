@@ -37,9 +37,9 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 15
     env:
-      # GITHUB_SHA is the synthetic PR merge commit by default. Evidence
+      # On pull requests, default GITHUB_SHA is the synthetic merge SHA. Evidence
       # must refer to the exact checked-out contributor HEAD instead.
-      GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      RYZOVA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - shell: pwsh
         run: |
