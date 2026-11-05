@@ -262,6 +262,15 @@ static unsigned int compare_binary64_eflags(uint64_t a,uint64_t b)
         return a>b?CF:0;
     return a<b?CF:0;
 }
+/* SSE2 MINSD selects the *second* operand on unordered/equal values.
+ * In particular, retain the source's exact NaN payload and signed zero.
+ * Only the low binary64 changes; high XMM and EFLAGS stay untouched.
+ * MXCSR exception sticky bits/traps and nondefault modes remain unmodeled. */
+static uint64_t min_binary64(uint64_t destination,uint64_t source)
+{
+    unsigned int cf=compare_binary64_eflags(destination,source);
+    return (cf&CF) && !(cf&(PF|ZF))?destination:source;
+}
 /* F2 0F 2C /r CVTTSD2SI: truncation toward zero for both 32- and
  * 64-bit GPR destinations. Negative-indefinite for NaN/out of range;
  * the integer min value is also the correctly truncated boundary.
@@ -827,11 +836,12 @@ static int step(Cpu *c)
             if(c->operand16 && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
             vector_move(c,rm,reg,op2==0x7f);
         }
-        else if((op2==0x58 || op2==0x5e) &&
+        else if((op2==0x58 || op2==0x5e || op2==0x5d) &&
                 c->repeat==0xf2 && !c->operand16){
-            /* F2 0F 58 ADDSD, F2 0F 5E DIVSD xmm, xmm/m64.
-             * Only scalar low double changes, all EFLAGS/XMM high bits
-             * remain untouched. Pure unsigned-integer IEEE value model. */
+            /* F2 0F 58 ADDSD, F2 0F 5E DIVSD, F2 0F 5D MINSD.
+             * Scalar low IEEE binary64 only, high XMM & EFLAGS preserved.
+             * For MINSD, NaN, signed-zero and tie selection matches Intel;
+             * only 8 bytes read from an unaligned memory source. */
             uint64_t left=0,right,out;unsigned int i;
             rm=decode(c,&reg,&group,8);
             if(c->fault)return RYZ_VM_MAP_ERROR;
@@ -843,7 +853,7 @@ static int step(Cpu *c)
                 right=get(c,rm,8);
                 if(c->fault)return RYZ_VM_MAP_ERROR;
             }
-            out=op2==0x58?add_binary64(left,right):divide_binary64(left,right);
+            out=op2==0x58?add_binary64(left,right):(op2==0x5d?min_binary64(left,right):divide_binary64(left,right));
             for(i=0;i<8;i++)c->xmm[reg][i]=(unsigned char)(out>>(i*8U));
         }
         else if(op2==0x5e && c->repeat==0xf3 && !c->operand16){

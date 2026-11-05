@@ -480,3 +480,26 @@ claiming opcode candidates on step limit, syscall or mapping errors.
 These incremental tests do **not** close `AMD64-ABI`, `APP-PYTHON`,
 or any other V1 gate; the next source-pinned Python code/stdlib,
 native kernel and resource workflows must be independently verified.
+
+## 4Q — Source-locked CPython MINSD scalar comparison candidate
+
+At the exact prior PR #81 head `6dd0406d`, the pinned CPython 3.12.10
+`-c` diagnostic progressed to **9,140,806** guest interpreter instructions
+and returned `VM status=3` at `RIP=62a24d`. Digest-bound initial main ELF
+bytes began `F2 0F 5D CA` (SSE2 scalar MINSD). Sampled RIP is only a
+candidate and does not independently prove the faulting opcode.
+
+The original bounded interpreter adds **only F2 0F 5D /r** MINSD
+with register or unaligned m64 second operand. It compares raw IEEE-754
+binary64 fields without a host floating-point unit, selects the second
+operand for equal values (including +0/-0) and unordered comparisons
+(including NaN), retains exact NaN bits, preserves the high 64 bits of
+XMM and EFLAGS, and reads only the 8 guest memory bytes. A single
+source-built static AMD64 ELF compares 152 exact output bytes against
+native Linux across ordered values, signed zero, qNaN, register alias,
+REX XMM8 and unaligned memory; separate unmapped memory and unsupported
+MINSS/MINPD variants fail closed.
+
+MXCSR exception sticky flags, non-default rounding/DAZ/FTZ, unmasked
+traps, complete SSE/AMD64 ABI and Python stdlib remain **unqualified**.
+No acceptance gate or budget is changed based on this isolated test.
