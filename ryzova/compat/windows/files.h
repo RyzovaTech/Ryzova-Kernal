@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 #ifndef RYZ_WINDOWS_FILES_H
 #define RYZ_WINDOWS_FILES_H
 #include "runtime.h"

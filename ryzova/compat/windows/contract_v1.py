@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """Windows-specific request shape validation. W1 never grants authority or executes PE."""
 from __future__ import annotations
 from copy import deepcopy

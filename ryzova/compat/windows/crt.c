@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 /* Selected CRT contracts, implemented inside the guest boundary, never forwarded. */
 #include "api.h"
 #ifndef CW_PLAN9

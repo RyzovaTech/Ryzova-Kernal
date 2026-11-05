@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """Native 6c/mk and source-built-kernel QEMU evidence for bounded Windows profiles."""
 import argparse
 import functools

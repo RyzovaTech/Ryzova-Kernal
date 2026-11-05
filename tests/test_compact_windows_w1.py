@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """W1 contract/boundary checks are not Windows execution qualification."""
 from copy import deepcopy
 import json

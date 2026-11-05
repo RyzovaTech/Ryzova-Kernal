@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 #include "api.h"
 #ifndef CW_PLAN9
 #include <string.h>

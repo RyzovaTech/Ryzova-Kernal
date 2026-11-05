@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 #ifndef CW_SYNC_PROTOCOL_H
 #define CW_SYNC_PROTOCOL_H
 typedef unsigned long long CwSyncNonce;

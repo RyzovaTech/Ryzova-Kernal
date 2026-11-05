@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 /* Windows-owned bounded AMD64 subset. No Linux process, host CPU jump or syscall. */
 #include "api.h"
 #include "files.h"

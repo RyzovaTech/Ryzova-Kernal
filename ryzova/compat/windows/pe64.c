@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 /* Static PE32+ x64 image-plan research. This NEVER loads DLLs or runs Windows. */
 #include "pe64.h"
 #include <string.h>
