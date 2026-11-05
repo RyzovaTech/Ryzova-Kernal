@@ -9,6 +9,7 @@ on:
       - 'tests/test_compact_macos_m3_symbols.py'
       - 'tests/test_compact_macos_m3_link.py'
       - 'scripts/compact_macos_m3_demo.py'
+      - 'scripts/compact_macos_m3_link_demo.py'
       - 'docs/COMPACT-MACOS-M3.md'
       - '.github/workflows/compact-macos-m3.yml'
   pull_request:
@@ -19,6 +20,7 @@ on:
       - 'tests/test_compact_macos_m3_symbols.py'
       - 'tests/test_compact_macos_m3_link.py'
       - 'scripts/compact_macos_m3_demo.py'
+      - 'scripts/compact_macos_m3_link_demo.py'
       - 'docs/COMPACT-MACOS-M3.md'
       - '.github/workflows/compact-macos-m3.yml'
   workflow_dispatch:
@@ -44,6 +46,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_compact_macos_m3_symbols.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m3_link.py' -v
           python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v
+          python3 scripts/compact_macos_m3_link_demo.py
           clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
             ryzova/compat/macos/macho_link_meta.c \
             ryzova/compat/macos/macho_link_meta_probe.c \
@@ -62,11 +65,14 @@ jobs:
         run: |
           mkdir -p artifacts/mac3
           python3 scripts/compact_macos_m3_demo.py | tee artifacts/mac3/m3-evidence.json
+          python3 scripts/compact_macos_m3_link_demo.py | tee artifacts/mac3/m3-link-evidence.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: mac3a-macos-source-provenance
-          path: artifacts/mac3/m3-evidence.json
+          path: |
+            artifacts/mac3/m3-evidence.json
+            artifacts/mac3/m3-link-evidence.json
           if-no-files-found: ignore
           retention-days: 14
   mac3a-linux-host-metadata:

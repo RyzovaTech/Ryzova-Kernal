@@ -73,3 +73,33 @@ and literal `/usr/lib/dyld` **without loading either library**.
 The JSON evidence contains independent SHA-256 digests and explicitly
 false flags for dynamic linking, guest execution, and application
 compatibility. The macOS-host MAC-3 CI job archives that result.
+
+## MAC-3C — first *actual* bounded interobject linker proof
+
+The original `ryz_mac3_link2()` now consumes **two independent,
+source-built x86_64 Darwin `MH_OBJECT`** files. It accepts one bounded
+`__TEXT,__text` section per file, verifies the external `nlist_64`
+symbol definitions against unresolved references and applies only
+explicit `X86_64_RELOC_BRANCH` signed 32-bit PC-relative relocations
+(the sole admitted relocation kind). Unknown relocations and symbol
+types, ambiguous/duplicate definitions, references outside bounded
+file/virtual ranges, nonzero addends and unsupported commands are
+explicitly denied.
+
+The linker synthesizes a deliberately restricted static
+`MH_EXECUTE` **test fixture** with one RX mapping and `LC_MAIN`.
+The original **host-only Ryzova VM** interprets the entry code, which
+calls a function defined in the other Mach-O object and returns EAX=42.
+This goes beyond metadata inventory by **actually resolving a cross-object
+symbol and relocating the branch instruction**.
+
+Run `python3 scripts/compact_macos_m3_link_demo.py` to build genuine
+Clang-generated AMD64 Darwin objects, invoke the independent C linker
+and restricted interpreter, and produce JSON with SHA-256 hashes and
+explicitly false native/dyld/libSystem/application claims. CI runs
+MAC-3C positive/negative tests on macOS Clang and Linux GCC/Clang.
+
+This is **not** a Mach-O dylib linker, dyld, shared cache,
+`libSystem`, Objective-C, full relocations, process ABI, native Ryzova
+guest or production macOS app compatibility. MAC-3 full completion remains
+blocked on genuine dynamic library binding and native guest qualification.
