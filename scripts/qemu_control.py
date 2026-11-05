@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Local QEMU control channels; guest network/resource tests are unchanged."""
 from functools import lru_cache
 import os

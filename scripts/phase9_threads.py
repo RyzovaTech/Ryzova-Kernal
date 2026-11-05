@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Qualify cooperative Linux threads inside the source-built native kernel."""
 import hashlib
 from pathlib import Path

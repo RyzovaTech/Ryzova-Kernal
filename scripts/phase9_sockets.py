@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Native gate for invocation-local socket and HTTP application execution."""
 import hashlib
 from pathlib import Path
