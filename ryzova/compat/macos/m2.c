@@ -251,13 +251,13 @@ execute(void)
                  p[1]==0x8b && p[2]==0x7e && p[3]==8){
             if(!within(regs[Si],m6 ? Stack : Data,Page,16))
                 return 0;
-            regs[Di] = read64(m6 ? stack+regs[Si]-Stack+8 : data+regs[Si]-Data+8);
+            regs[Di] = read64(m6 ? stack+(regs[Si]-Stack)+8 : data+(regs[Si]-Data)+8);
             ip += 4;
         }else if((m3 || m6) && op==0x48 && within(ip,Base,Page,3) &&
                  p[1]==0x8b && p[2]==0x2a){
             if(!within(regs[Dx],m6 ? Stack : Data,Page,8))
                 return 0;
-            regs[Bp] = read64(m6 ? stack+regs[Dx]-Stack : data+regs[Dx]-Data);
+            regs[Bp] = read64(m6 ? stack+(regs[Dx]-Stack) : data+(regs[Dx]-Data));
             ip += 3;
         }else if((m3 || m6) && op==0x48 && within(ip,Base,Page,3) &&
                  p[1]==0x89 && p[2]==0xee){
