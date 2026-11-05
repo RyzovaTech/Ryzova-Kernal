@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 7.0–7.2 native QEMU 9P secure-gateway threat boundary
 
 A disposable source-built Ryzova AMD64 QEMU guest mounts a **public-only** 9P2000 share at `tcp!10.0.2.2!15640`. Guest QEMU user-mode TCP reaches a loopback gateway. The gateway opens an authenticated **mutual TLS 1.3** session to a separate loopback 9P server and verifies the trusted peer leaf certificate SHA256. The peer requires and pins the gateway's mTLS client certificate, then serves read-only 9P messages. It allocates a fresh per-connection FID namespace. TLS keys and certs are freshly generated at test run time; they are not stored in Git or uploaded as artifacts.

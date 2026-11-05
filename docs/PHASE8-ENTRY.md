@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 8 — Advanced Kernel & Remote Resource Engineering (research entry)
 
 ## Entry condition and Phase 7 closeout record

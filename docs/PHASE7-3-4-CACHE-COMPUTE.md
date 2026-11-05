@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 7.3–7.4: bounded public-data cache and arithmetic offload
 
 7.3 tests pipe a real 4096-byte public test page through **two** TCP connections: QEMU-facing plaintext socket -> loopback gateway -> TLS 1.3 mutual-authentication upstream peer, then verify a caller-pinned SHA256 with a 2-page capped LRU cache. Cache misses on unavailable remote data **fail**, rather than claiming physical RAM or fabricating a zero page. Contents cannot be kernel-secret, swapped memory or remote physical RAM.

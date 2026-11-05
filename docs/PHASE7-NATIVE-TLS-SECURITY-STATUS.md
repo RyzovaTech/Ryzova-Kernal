@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 7 guest-native TLS 9P: research security status
 
 This document supersedes the **guest-to-gateway plaintext** description in

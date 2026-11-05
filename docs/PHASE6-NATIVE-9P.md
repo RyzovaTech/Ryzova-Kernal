@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 6 native 9P bridge — Ryzova QEMU guest/host integration
 
 **Goal:** Unlike earlier Phase 6 host-only research and the Phase 3 RAMFS probe, this is intended to run a *fresh source-built Ryzova AMD64 kernel* and mount a TCP 9P2000 test service offered by the disposable Linux CI host.

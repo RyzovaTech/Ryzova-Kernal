@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 8.1 — Authenticated 9P Services (experimental host integration)
 
 ## Scope of this branch

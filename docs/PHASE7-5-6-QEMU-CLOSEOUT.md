@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 7.5–7.6 — Experimental QEMU gateway and research closeout
 
 The executable Phase 7.5 proof is **not just a host-side simulation**. The existing GitHub native source build boots Ryzova AMD64 in QEMU, mounts `tcp!10.0.2.2!15640`, reads commit-bound public 9P data, and calculates SHA256 **inside the guest**. The CI host's gateway authenticates to an upstream read-only 9P peer using TLS 1.3 **mutual certificates**, independently checking the server leaf SHA256 while the peer checks the client leaf SHA256. A per-session FID server and read-only rejection are enforced. The gateway records actual forwarded frames and successful pinned mTLS sessions; both evidence and guest SHA are required to pass.

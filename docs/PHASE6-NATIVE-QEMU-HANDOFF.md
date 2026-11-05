@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 6 native QEMU experimental 9P handoff
 
 The user requested an actual Ryzova native-kernel remote resource proof after Phase 6.0–6.5 host prototype integration.

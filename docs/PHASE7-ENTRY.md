@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 7 — Verified entry baseline (research handoff)
 
 **Entry status:** Ryzova's native AMD64 QEMU 9P bridge is a source-built and tested kernel feature in the following **limited experimental sense**:
