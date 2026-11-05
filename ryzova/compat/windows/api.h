@@ -45,6 +45,9 @@ int cw_api_id(const char *);
 const char *cw_api_name(unsigned int);
 uint64_t cw_api_token(unsigned int);
 const char *cw_api_module(unsigned int);
+/* Exact supported import contracts; never load or forward to a host DLL. */
+int cw_api_module_id(const char *);
+int cw_api_module_matches(unsigned int,const char *);
 uint64_t cw_heap_allocate(CwMachine *,uint64_t);
 int cw_heap_release(CwMachine *,uint64_t);
 int cw_crt_call(CwMachine *,unsigned int,const uint64_t *,uint64_t *);

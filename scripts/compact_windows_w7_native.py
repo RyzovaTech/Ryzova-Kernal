@@ -14,23 +14,26 @@ import threading
 from compact_windows_w2 import ROOT, PREFERRED
 from compact_windows_w6_native import bootstrap_provenance, digest, extract_kernel, parse_cases, session, standalone
 from compact_windows_w7_tls import tls_fixture, verify_reference
+from compact_windows_w7_imports import verify_reference as verify_import_reference, EXPECTED_CALLS
 
 
 def images_and_cases(ref):
     receipt = verify_reference(ref)
+    api_receipt = verify_import_reference(ref)
     bad = bytearray(tls_fixture())
     # The callback vector lives in the third, read-only section.
     raw = struct.unpack_from('<I', bad, 0x188+2*40+20)[0]
     struct.pack_into('<Q', bad, raw+112, PREFERRED+0x2000)
-    images = {'tls': (ref/'tls.exe').read_bytes(),
+    images = {'tls': (ref/'tls.exe').read_bytes(), 'api-set': (ref/'api-set.exe').read_bytes(),
               'tls-loop': tls_fixture(callback_code=b'\xeb\xfe'),
               'tls-fault': tls_fixture(callback_code=b'\x0f\x0b'),
               'tls-denied': bytes(bad)}
     cases = {'tls': dict(image='tls', status=0, code=9, out='', err=''),
+             'api-set': dict(image='api-set', status=0, code=37, out='', err=''),
              'tls-loop': dict(image='tls-loop', status=8, steps=16, out='', err='', args='-b 16'),
              'tls-fault': dict(image='tls-fault', status=7, out='', err=''),
              'tls-denied': dict(image='tls-denied', status=4, admission=True)}
-    return receipt, images, cases
+    return receipt, api_receipt, images, cases
 
 
 def main():
@@ -42,7 +45,7 @@ def main():
     out = ROOT/'artifacts/compact-windows/w7-native';out.mkdir(parents=True, exist_ok=True)
     base_sha = bootstrap_provenance(args.image, args.bootstrap_gzip)
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    receipt, images, cases = images_and_cases(args.reference)
+    receipt, api_receipt, images, cases = images_and_cases(args.reference)
     for name, data in images.items():
         (out/(name+'.exe')).write_bytes(data)
     archive = out/'source.tgz'
@@ -88,10 +91,14 @@ def main():
         for name, sha in hashes.items():
             if not re.search(rb'(?m)^'+sha.encode()+rb'\s+/tmp/cw-'+name.encode()+rb'\.exe\r?$', fresh):
                 raise ValueError('native TLS fixture hash mismatch')
+        records = parse_cases(fresh, cases)
+        if records['api-set']['calls'] != EXPECTED_CALLS:
+            raise ValueError('native API-set dispatch counts differ')
         report = dict(schema='compact-windows-w7-native-tls/v1', source_commit=commit,
                       source_archive_sha256=archive_sha, bootstrap_image_sha256=base_sha,
                       kernel_sha256=kernels[0].decode(), runtime_sha256=runtimes[0].decode(),
-                      reference=receipt, fixture_sha256=hashes, cases=parse_cases(fresh, cases),
+                      reference=receipt, api_set_reference=api_receipt, fixture_sha256=hashes, cases=records,
+                      native_api_set_imports_verified=True,
                       native_amd64_qemu_tls_startup_verified=True, jq_execution_verified=False,
                       physical_hardware_qualified=False, full_w7_complete=False)
         (out/'qualification.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')

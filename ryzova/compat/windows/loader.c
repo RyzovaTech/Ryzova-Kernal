@@ -139,21 +139,26 @@ static int ascii_name(const unsigned char *f,const CwPlan *p,uint32_t rva,char *
 }
 static int import_table(const unsigned char *f,CwPlan *p,uint32_t rva,uint32_t bytes) {
     const unsigned char *table;uint32_t modules,mi,seen=0,total=0,minimum=UINT32_MAX,maximum=0;
-    uint32_t lookup_rva[2],iat_rva[2],iat_bytes[2],advertised_rva=p->iat_rva,advertised_bytes=p->iat_bytes;
+    uint32_t lookup_rva[16],iat_rva[16],iat_bytes[16],advertised_rva=p->iat_rva,advertised_bytes=p->iat_bytes;
     if(!bytes)return advertised_bytes?CW_HEADER:CW_OK;
-    if(bytes<40 || !(table=backed(f,p,rva,bytes)))return CW_HEADER;
-    if(bytes!=40 && bytes!=60)return CW_UNSUPPORTED;
-    modules=bytes/20-1;
-    for(mi=0;mi<20;mi++)if(table[modules*20+mi])return CW_UNSUPPORTED;
+    if((rva&3) || bytes<40 || !(table=backed(f,p,rva,bytes)))return CW_HEADER;
+    if(bytes>65536)return CW_UNSUPPORTED;
+    /* The directory can include ILTs, IATs and names after its terminator.
+       Bound the descriptor scan independently of that trailing payload. */
+    for(modules=0;modules<=16;modules++){
+        if(!span(bytes,modules*20,20))return CW_HEADER;
+        for(mi=0;mi<20;mi++)if(table[modules*20+mi])break;
+        if(mi==20)break;
+        if(modules==16)return CW_UNSUPPORTED;
+    }
+    if(!modules)return CW_HEADER;
     for(mi=0;mi<modules;mi++) {
         const unsigned char *d=table+mi*20;uint32_t oft=u32(d),ft=u32(d+16),n,k,module_id;char module[64],name[128];
         if(u32(d+4) || u32(d+8) || !ft || (ft&7) || (oft&7) || !ascii_name(f,p,u32(d+12),module,sizeof(module)))return CW_UNSUPPORTED;
         for(n=0;module[n];n++)if(module[n]>='A' && module[n]<='Z')module[n]=(char)(module[n]+32);
-        if(!strcmp(module,"kernel32.dll"))module_id=1;
-        else if(!strcmp(module,"ucrtbase.dll"))module_id=2;
-        else return CW_UNSUPPORTED;
-        if(seen&module_id)return CW_UNSUPPORTED;
-        seen|=module_id;if(!oft)oft=ft;
+        module_id=(uint32_t)cw_api_module_id(module);
+        if(!module_id || (seen&(1U<<module_id)))return CW_UNSUPPORTED;
+        seen|=1U<<module_id;if(!oft)oft=ft;
         for(n=0;n<=CW_MAX_IMPORTS;n++) {
             const unsigned char *lookup,*iat;uint64_t value;int api;
             if(oft>UINT32_MAX-n*8 || ft>UINT32_MAX-n*8)return CW_HEADER;
@@ -162,11 +167,13 @@ static int import_table(const unsigned char *f,CwPlan *p,uint32_t rva,uint32_t b
             value=u64(lookup);if(!value)break;
             if(total==CW_MAX_IMPORTS || value>UINT32_MAX-2 || !backed(f,p,(uint32_t)value,2) || !ascii_name(f,p,(uint32_t)value+2,name,sizeof(name)))return CW_UNSUPPORTED;
             api=cw_api_id(name);
-            if(api<0 || strcmp(cw_api_module((unsigned int)api),module) || (p->api_mask&(1U<<api)))return CW_UNSUPPORTED;
+            if(api<0 || !cw_api_module_matches((unsigned int)api,module) || (p->api_mask&(1U<<api)))return CW_UNSUPPORTED;
             p->imports[total].iat=ft+n*8;p->imports[total].api=(uint32_t)api;p->api_mask|=1U<<api;total++;
         }
         if(!n)return CW_HEADER;
         lookup_rva[mi]=oft;iat_rva[mi]=ft;iat_bytes[mi]=(n+1)*8;
+        if(((uint64_t)ft<(uint64_t)rva+(modules+1)*20 && (uint64_t)rva<(uint64_t)ft+iat_bytes[mi]) ||
+           ((uint64_t)oft<(uint64_t)rva+(modules+1)*20 && (uint64_t)rva<(uint64_t)oft+iat_bytes[mi]))return CW_HEADER;
         {
             int section=section_at(p,ft,iat_bytes[mi],1);
             if(section<0 || !(p->sections[section].permissions&CW_R) || (p->sections[section].permissions&CW_X))return CW_MAPPING;

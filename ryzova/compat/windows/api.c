@@ -17,6 +17,22 @@ int cw_api_id(const char *name) {
     return -1;
 }
 const char *cw_api_module(unsigned int id) { return id<CW_MEMCPY?"kernel32.dll":(id<CW_API_COUNT?"ucrtbase.dll":NULL); }
+int cw_api_module_id(const char *name) {
+    static const char *const modules[]={"kernel32.dll","ucrtbase.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll","api-ms-win-crt-private-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll","api-ms-win-crt-runtime-l1-1-0.dll"};
+    unsigned int i;for(i=0;i<sizeof(modules)/sizeof(modules[0]);i++)if(!strcmp(name,modules[i]))return (int)i+1;
+    return 0;
+}
+int cw_api_module_matches(unsigned int id,const char *module) {
+    int contract=cw_api_module_id(module);
+    if(id>=CW_API_COUNT || !contract)return 0;
+    if(contract<=2)return !strcmp(cw_api_module(id),module);
+    if(contract==3)return id>=CW_MALLOC && id<=CW_FREE;
+    if(contract==4)return id==CW_MEMCPY || id==CW_MEMMOVE || id==CW_MEMCMP;
+    if(contract==5)return id==CW_MEMSET || (id>=CW_STRLEN && id<=CW_WCSLEN);
+    return id==CW_ERRNO;
+}
 const char *cw_api_name(unsigned int id) { return id<CW_API_COUNT?names[id]:NULL; }
 uint64_t cw_api_token(unsigned int id) { return id<CW_API_COUNT?CW_THUNK_BASE+16U*id:0; }
 static int span(uint64_t size,uint64_t at,uint64_t bytes) { return at<=size && bytes<=size-at; }

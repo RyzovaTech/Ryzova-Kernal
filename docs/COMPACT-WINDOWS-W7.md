@@ -51,9 +51,42 @@ hashes. It executes the identical Windows TLS fixture plus callback-fault,
 instruction-budget and invalid-callback admission cases. Its receipt
 records TLS startup qualification separately from jq/W7 completion.
 
-The pinned jq binary now passes TLS metadata validation and is rejected
-at the existing bounded import-table profile. It needs imports across 14
-DLL names, including UCRT API sets and SHLWAPI. Those implementations,
+## Import directory and selected API-set contracts
+
+The import directory can include names and thunk tables after its null
+descriptor. The loader bounds the complete directory to 65536 file-backed
+bytes and the descriptor scan to 16 modules plus a terminator. It checks
+every lookup/IAT span, disallows descriptor/thunk overlap, rejects duplicate
+modules and API bindings, and protects the aggregate IAT after binding.
+The existing 32-import and 28-API limits remain in effect.
+
+Only exact DLL contracts and their selected exports are recognized:
+
+| Contract | Selected exports |
+| --- | --- |
+| `kernel32.dll` | Existing Windows API exports |
+| `ucrtbase.dll` | Existing 13 CRT exports |
+| `api-ms-win-crt-heap-l1-1-0.dll` | `malloc`, `calloc`, `realloc`, `free` |
+| `api-ms-win-crt-private-l1-1-0.dll` | `memcpy`, `memmove`, `memcmp` |
+| `api-ms-win-crt-string-l1-1-0.dll` | `memset`, `strlen`, `strcmp`, `strncmp`, `wcslen` |
+| `api-ms-win-crt-runtime-l1-1-0.dll` | `_errno` |
+
+These aliases resolve to the same existing canonical API IDs and require
+the same explicit grants. No API is newly authorized, no arbitrary API-set
+prefix is accepted, and no host DLL is loaded. Unimplemented exports and
+wrong-module bindings fail admission before any guest instruction.
+
+An additional reproducible executable calls 15 APIs through all six DLL
+names and checks allocation, zero-fill, resizing, copying, string lengths,
+private errno state and last-error state. Its expected exit is 37 with no
+output. CI compares identical bytes on Windows and the hosted interpreter;
+unit tests execute it at three load bases. The native job also runs these
+bytes and verifies exact API call counts alongside the TLS gates.
+
+The pinned jq binary now passes resource/TLS validation and its import
+directory's descriptor layout; it is rejected for unimplemented imports.
+It needs imports across 14 DLL names, including additional UCRT API sets
+and SHLWAPI. The remaining export implementations,
 compiler startup/unwind/instruction coverage and unchanged jq execution
 on a source-built Ryzova Kernel through an input-file grant remain W7
 completion requirements. A passing admission-audit job records rejection;

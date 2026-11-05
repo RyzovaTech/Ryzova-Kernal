@@ -5,7 +5,9 @@ on:
       - 'scripts/compact_windows_w7_jq.py'
       - 'scripts/compact_windows_w7_tls.py'
       - 'scripts/compact_windows_w7_native.py'
+      - 'scripts/compact_windows_w7_imports.py'
       - 'tests/test_compact_windows_w7.py'
+      - 'tests/test_compact_windows_w7_imports.py'
       - 'tests/test_compact_windows_w2.py'
       - 'tests/fixtures/windows_w7_admission.c'
       - 'ryzova/compat/windows/**'
@@ -27,12 +29,14 @@ jobs:
           sparse-checkout: |
             /scripts/compact_windows_w7_jq.py
             /scripts/compact_windows_w7_tls.py
+            /scripts/compact_windows_w7_imports.py
             /scripts/compact_windows_w2.py
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: python scripts/compact_windows_w7_jq.py reference --out artifacts/w7-reference
       - run: python scripts/compact_windows_w7_tls.py reference --out artifacts/w7-reference
+      - run: python scripts/compact_windows_w7_imports.py reference --out artifacts/w7-reference
       - uses: actions/upload-artifact@v4
         with:
           name: windows-w7-jq-reference
@@ -51,8 +55,9 @@ jobs:
           name: windows-w7-jq-reference
           path: artifacts/w7-reference
       - run: python3 scripts/compact_windows_w7_jq.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
-      - run: python3 -m unittest discover -s tests -p test_compact_windows_w7.py -v
+      - run: python3 -m unittest discover -s tests -p 'test_compact_windows_w7*.py' -v
       - run: python3 scripts/compact_windows_w7_tls.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
+      - run: python3 scripts/compact_windows_w7_imports.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
       - uses: actions/upload-artifact@v4
         with:
           name: windows-w7-jq-admission-audit
