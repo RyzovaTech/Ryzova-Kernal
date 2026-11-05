@@ -369,3 +369,25 @@ negative misalignment/MMX tests. That micro-test, even after CI success,
 does not complete `AMD64-ABI` or `APP-PYTHON`; those gates require the
 pinned CPython code/stdlib and full application workflows under bounded
 resource budgets and native guest qualification.
+
+## 4L — Exact main-ELF mapped high-water vs relocated musl ISA diagnosis
+
+The pinned CPython 3.12.10 code-execution probe reached 6,458,959 VM
+steps and failed closed at `RIP=a4292e` (VM status 3). The prior
+diagnostic reported no candidate because it assumed musl's loader bias
+was always `0x800000`, despite `process.c` relocating the loader
+above large PIE main PT_LOAD mapped spans on a 2-MiB boundary.
+
+The read-only ISA discovery now reproduces the source-built kernel's
+page-rounded *mapped memory* high-water rule, not file length, and
+pins the loader bytes to the measured musl SHA-256. It attributes
+candidate bytes in the initial musl interpreter both for version
+smokes and the independent CPython `-c` probe. Invalid ELF mappings,
+unproven loader provenance, page padding, and unknown instruction
+addresses return **no candidate**. Tests cover relocated vs stale
+fixed-loader RIP, mismatched musl digest and malformed ELF.
+
+No unqualified opcode was enabled, no guest instruction or runtime
+budget was increased, and no process/memory or application acceptance
+gate was marked passed. A candidate RIP remains only a *candidate*,
+not verification of the failing opcode.

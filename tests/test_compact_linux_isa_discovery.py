@@ -105,6 +105,59 @@ class IsaDiscoveryTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 create_report(root,{"targets":[target]})
 
+    def test_large_pie_python_relocates_sha_pinned_musl_in_code_probe(self):
+        from compact_linux_isa_discovery import (
+            relocated_interpreter_bias, bounded_failure_console_lines,
+        )
+        main=minimal_elf(vaddr=0x5f0000)
+        musl=minimal_elf()
+        # Main ends at 0x9f1000. process.c rounds loader to 0xa00000.
+        self.assertEqual(relocated_interpreter_bias(main),0xa00000)
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"usr/bin").mkdir(parents=True)
+            (root/"lib").mkdir()
+            (root/"usr/bin/python3.12").write_bytes(main)
+            (root/"lib/libc.so").write_bytes(musl)
+            py={"target":"python","elf":{"sha256":hashlib.sha256(main).hexdigest()},
+                "guest_smoke_passed":True,
+                "guest_actual_result":{"last_rip_hex":"4f1000","status":0},
+                "python_code_probe":{"passed":False,
+                    "actual":{"last_rip_hex":"a01000","status":3}}}
+            libc={"target":"musl","elf":{"sha256":hashlib.sha256(musl).hexdigest()},
+                  "guest_smoke_passed":True,"guest_actual_result":{"status":0}}
+            profiles={"targets":[py,libc]}
+            report=create_report(root,profiles)
+            self.assertEqual(report["reports"][1]["candidate"]["image"],
+                             "musl-interpreter")
+            self.assertEqual(report["reports"][1]["candidate"]["load_bias_hex"],
+                             "0xa00000")
+            self.assertEqual(report["reports"][1]["candidate"]["candidate_bytes_hex"],
+                             "0f57c0c3")
+            self.assertFalse(report["guest_linux_v1_complete"])
+            lines=bounded_failure_console_lines(report)
+            self.assertEqual(len(lines),1)
+            self.assertIn('"opcode_failure_verified":false',lines[0])
+            py["python_code_probe"]["actual"]["last_rip_hex"]="801000"
+            self.assertIsNone(create_report(root,profiles)["reports"][1]["candidate"])
+            py["python_code_probe"]["actual"]["last_rip_hex"]="a01000"
+            libc["elf"]["sha256"]="0"*64
+            self.assertIsNone(create_report(root,profiles)["reports"][1]["candidate"])
+
+    def test_loader_relocation_rejects_corrupt_program_headers(self):
+        from compact_linux_isa_discovery import relocated_interpreter_bias
+        image=minimal_elf()
+        self.assertEqual(relocated_interpreter_bias(image),INTERP_BIAS)
+        self.assertIsNone(relocated_interpreter_bias(image[:-0x104]))
+        self.assertIsNone(relocated_interpreter_bias(b"not elf"))
+        invalid=bytearray(image)
+        # Inflate PT_LOAD memory beyond a valid user address map.
+        struct.pack_into("<Q",invalid,64+40,0xffffffffffffffff)
+        self.assertIsNone(relocated_interpreter_bias(bytes(invalid)))
+        invalid=bytearray(image)
+        struct.pack_into("<I",invalid,64+4,7)  # executable + writable
+        self.assertIsNone(relocated_interpreter_bias(bytes(invalid)))
+
     def test_symlink_must_remain_beneath_locked_root(self):
         raw=minimal_elf()
         with tempfile.TemporaryDirectory() as d:

@@ -75,6 +75,79 @@ def locate_candidate(image, rip, *, bias=0):
     return None
 
 
+
+def relocated_interpreter_bias(main_image):
+    """Mirror the bounded main PT_LOAD high-water relocation in process.c.
+
+    The dynamic linker is at 0x800000 only when a main executable fits below
+    that address. Large PIEs relocate it to the next 2-MiB boundary after
+    the mapped main ELF, including BSS/page rounding (not file length).
+    No ELF bytes or memory are modified by this diagnostic.
+    """
+    if (type(main_image) is not bytes or not 64 <= len(main_image) <= MAX_IMAGE
+            or main_image[:7] != b"\\x7fELF\\x02\\x01\\x01"
+            or int.from_bytes(main_image[18:20], "little") != 62):
+        return None
+    e_type = int.from_bytes(main_image[16:18], "little")
+    if e_type not in (2, 3):
+        return None
+    bias = MAIN_PIE_BIAS if e_type == 3 else 0
+    phoff = int.from_bytes(main_image[32:40], "little")
+    entsize = int.from_bytes(main_image[54:56], "little")
+    count = int.from_bytes(main_image[56:58], "little")
+    if (int.from_bytes(main_image[52:54], "little") != 64 or entsize != 56
+            or not 1 <= count <= 128 or phoff > len(main_image)
+            or count * entsize > len(main_image) - phoff):
+        return None
+    main_high = 0
+    for i in range(count):
+        at = phoff + i * entsize
+        segment = main_image[at:at + entsize]
+        if int.from_bytes(segment[:4], "little") != 1:
+            continue
+        flags = int.from_bytes(segment[4:8], "little")
+        offset = int.from_bytes(segment[8:16], "little")
+        vaddr = int.from_bytes(segment[16:24], "little")
+        filesz = int.from_bytes(segment[32:40], "little")
+        memsz = int.from_bytes(segment[40:48], "little")
+        # Insist on bounded file-backed, mapped, W^X program headers.
+        # A malformed ELF is NOT evidence of an executable loader mapping.
+        if (memsz == 0 or filesz > memsz or offset > len(main_image)
+                or filesz > len(main_image) - offset or flags & ~7
+                or flags & 3 == 3 or vaddr % 4096 != offset % 4096
+                or vaddr + bias < 0x10000
+                or vaddr + bias + memsz > 0x0000800000000000):
+            return None
+        end = (vaddr + bias + memsz + 4095) & ~4095
+        main_high = max(main_high, end)
+    if not main_high:
+        return None
+    if main_high > INTERP_BIAS:
+        if main_high > 0x0000800000000000 - 0x200000:
+            return None
+        return (main_high + 0x1fffff) & ~0x1fffff
+    return INTERP_BIAS
+
+
+def pinned_musl_candidate(root, targets, main_image, rip):
+    """Return a separately SHA-pinned loader candidate (or None), never a guess."""
+    bias = relocated_interpreter_bias(main_image)
+    if bias is None:
+        return None
+    interp = (root / "lib/libc.so").resolve()
+    if (not interp.is_relative_to(root) or not interp.is_file()
+            or interp.stat().st_size > MAX_IMAGE):
+        return None
+    musl = next((v for v in targets if v.get("target") == "musl"), None)
+    if not musl or type(musl.get("elf")) is not dict:
+        return None
+    raw = interp.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != musl["elf"].get("sha256"):
+        return None
+    found = locate_candidate(raw, rip, bias=bias)
+    return {"image": "musl-interpreter", **found} if found is not None else None
+
+
 def create_report(root, profiles):
     """Use only named, checksum-recorded target files from the measured root."""
     if type(profiles) is not dict or type(profiles.get("targets")) is not list:
@@ -124,20 +197,10 @@ def create_report(root, profiles):
                 raise ValueError("measured target digest mismatch")
             etype = int.from_bytes(data[16:18], "little") if len(data) >= 64 else 0
             candidate = locate_candidate(data,rip,bias=MAIN_PIE_BIAS if etype==3 else 0)
-            source = "main"
-            if candidate is None:
-                # The only supported initial dynamic loader is the existing
-                # separately verified musl 1.2.6 interpreter at 0x800000.
-                interpreter = (root / "lib/libc.so").resolve()
-                if (interpreter.is_relative_to(root) and interpreter.is_file()
-                        and interpreter.stat().st_size <= MAX_IMAGE):
-                    libc = interpreter.read_bytes()
-                    musl = next((v for v in targets if v.get("target")=="musl"),None)
-                    if musl and type(musl.get("elf")) is dict and hashlib.sha256(libc).hexdigest() == musl["elf"].get("sha256"):
-                        candidate = locate_candidate(libc,rip,bias=INTERP_BIAS)
-                        source = "musl-interpreter"
             if candidate is not None:
-                result["candidate"] = {"image":source, **candidate}
+                result["candidate"] = {"image": "main", **candidate}
+            else:
+                result["candidate"] = pinned_musl_candidate(root, targets, data, rip)
         records.append(result)
         # Successful --version does not qualify actual CPython execution.
         # Preserve a separate, digest-bound candidate for the -c proof.
@@ -162,13 +225,18 @@ def create_report(root, profiles):
                                            bias=MAIN_PIE_BIAS if etype==3 else 0)
                 if candidate is not None:
                     detail["candidate"]={"image":"main",**candidate}
+                else:
+                    # -c can fail inside a *relocated* pinned musl loader.
+                    # Version-smoke success does not validate this code probe.
+                    detail["candidate"]=pinned_musl_candidate(
+                        root, targets, binary, int(cursor,16))
             records.append(detail)
     return {
         "schema":_VERSION,
         "measured_profile_sha256":hashlib.sha256(json.dumps(profiles,sort_keys=True).encode()).hexdigest(),
         "guest_linux_v1_complete":False,
         "reports":records,
-        "limitations":["Only initial main ELF and pinned musl interpreter biases",
+        "limitations":["Only initial main ELF and SHA-pinned musl interpreter relocation",
                        "Cannot diagnose dlopen, remapped pages or JIT code",
                        "RIP is a bounded candidate, not proof of a faulting instruction",
                        "No change to interpreter, CPU support, resource budgets or release status"],
