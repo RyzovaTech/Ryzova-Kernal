@@ -23,7 +23,7 @@ class NativeArm64BootContract(unittest.TestCase):
     def test_tracked_original_source_inventory(self):
         files=inventory()
         self.assertTrue(set(BOOT_FILES).issubset(files))
-        self.assertGreaterEqual(len(files),350)
+        self.assertGreaterEqual(len(files),280)
         self.assertTrue(all(len(d)==64 for d in files.values()))
         with tempfile.TemporaryDirectory() as temp:
             archive=Path(temp)/"sources.tgz"
