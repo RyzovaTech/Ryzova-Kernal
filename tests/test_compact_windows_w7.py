@@ -1,16 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """TLS executes guest instructions, preserves isolation and fails closed."""
 import ctypes as C
+import hashlib
+import json
 from pathlib import Path
 import struct
 import sys
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'scripts'), str(ROOT/'tests')]
 import test_compact_windows_w2 as w2
 from compact_windows_w2 import pe, PREFERRED
-from compact_windows_w7_tls import tls_fixture, TLS_READ, TLS_DIRECTORY, TLS_CALLBACK_ARRAY
+from compact_windows_w7_tls import tls_fixture, verify_reference, TLS_READ, TLS_DIRECTORY, TLS_CALLBACK_ARRAY
 
 
 class WindowsW7TlsTests(unittest.TestCase):
@@ -139,6 +142,26 @@ class WindowsW7TlsTests(unittest.TestCase):
             result = self.run_pe(tls_fixture(callbacks=0, entry=entry))
             self.assertEqual(result['status'], 6)
         self.assertEqual(self.run_pe(pe(TLS_READ+b'\xc3'))['status'], 6)
+
+    def test_windows_reference_is_bound_to_exact_bytes_commit_and_result(self):
+        folder = self.directory/'reference';folder.mkdir(exist_ok=True)
+        image = tls_fixture();(folder/'tls.exe').write_bytes(image)
+        receipt = dict(schema='compact-windows-w7-tls-reference/v1', source_commit='a'*40,
+                       sha256=hashlib.sha256(image).hexdigest(), exit_code=9,
+                       stdout_hex='', stderr_hex='', platform='Windows-test', arch='AMD64')
+        with patch('compact_windows_w7_tls.subprocess.check_output', return_value='a'*40+'\n'):
+            (folder/'tls-reference.json').write_text(json.dumps(receipt))
+            self.assertEqual(verify_reference(folder), receipt)
+            for key, value in (('source_commit', 'b'*40), ('sha256', '0'*64), ('exit_code', 0),
+                               ('stdout_hex', '00'), ('stderr_hex', '00'), ('arch', 'ARM64'),
+                               ('platform', 'Linux-test'), ('schema', 'other')):
+                with self.subTest(key=key):
+                    (folder/'tls-reference.json').write_text(json.dumps({**receipt, key: value}))
+                    with self.assertRaises(ValueError):verify_reference(folder)
+            altered = image[:-1]+bytes([image[-1]^1])
+            (folder/'tls.exe').write_bytes(altered)
+            (folder/'tls-reference.json').write_text(json.dumps({**receipt, 'sha256': hashlib.sha256(altered).hexdigest()}))
+            with self.assertRaises(ValueError):verify_reference(folder)
 
 
 if __name__ == '__main__':

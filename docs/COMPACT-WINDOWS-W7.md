@@ -44,7 +44,12 @@ implemented. This is an initial-thread startup profile, not full TLS.
 The reproducible TLS fixture checks callback arguments/order and accesses
 static TLS through GS. CI runs identical executable bytes on Windows and
 the hosted Ryzova interpreter at three load bases, separately from jq.
-This comparison does not claim native-kernel execution of that fixture.
+This comparison is separate from the native TLS job. That job builds the
+runtime and kernel with native 6c/mk, independently checks the installed
+kernel hash, reboots and checks source-built guest identity and runtime
+hashes. It executes the identical Windows TLS fixture plus callback-fault,
+instruction-budget and invalid-callback admission cases. Its receipt
+records TLS startup qualification separately from jq/W7 completion.
 
 The pinned jq binary now passes TLS metadata validation and is rejected
 at the existing bounded import-table profile. It needs imports across 14

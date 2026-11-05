@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/compact_windows_w7_jq.py'
       - 'scripts/compact_windows_w7_tls.py'
+      - 'scripts/compact_windows_w7_native.py'
       - 'tests/test_compact_windows_w7.py'
       - 'tests/test_compact_windows_w2.py'
       - 'tests/fixtures/windows_w7_admission.c'
@@ -57,3 +58,36 @@ jobs:
           name: windows-w7-jq-admission-audit
           path: artifacts/w7-audit
           if-no-files-found: error
+  native-tls:
+    runs-on: ubuntu-24.04
+    needs: [windows-reference, admission-audit]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-w7-jq-reference
+          path: artifacts/w7-reference
+      - name: Install isolated QEMU dependencies
+        run: |
+          sudo apt-get -o Acquire::Retries=2 update -qq
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends qemu-system-x86 qemu-utils mtools
+      - name: Verify foundation and pinned native build guest
+        run: |
+          bash scripts/verify-foundation.sh
+          curl --fail --location --retry 3 --max-time 900 https://build.9front.org/release/9front-11952.amd64.qcow2.gz -o 9front.qcow2.gz
+          echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  9front.qcow2.gz' | sha256sum -c -
+          gzip -dc 9front.qcow2.gz > 9front.qcow2
+          qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-windows.qcow2
+      - name: Native TLS startup, fault and budget gates
+        run: python3 scripts/compact_windows_w7_native.py native-windows.qcow2 --bootstrap-gzip 9front.qcow2.gz --reference artifacts/w7-reference
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-w7-native-tls-evidence
+          path: |
+            artifacts/compact-windows/w7-native/*.json
+            artifacts/compact-windows/w7-native/*.log
+          if-no-files-found: warn

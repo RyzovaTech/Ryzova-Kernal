@@ -85,7 +85,7 @@ def reference(out):
     (out/'tls-reference.json').write_text(json.dumps(receipt, indent=2)+'\n', encoding='utf-8')
 
 
-def audit(ref, out):
+def verify_reference(ref):
     root = Path(__file__).resolve().parents[1]
     commit = subprocess.check_output(['git','rev-parse','HEAD'], cwd=root, text=True).strip()
     image = (ref/'tls.exe').read_bytes()
@@ -96,6 +96,11 @@ def audit(ref, out):
             receipt.get('arch') not in ('AMD64', 'X86_64') or
             not str(receipt.get('platform', '')).startswith('Windows-')):
         raise ValueError('TLS reference bytes/provenance mismatch')
+    return receipt
+
+
+def audit(ref, out):
+    receipt = verify_reference(ref)
     results = []
     with tempfile.TemporaryDirectory() as directory:
         probe = build(Path(directory)/'probe', sanitize=True)
