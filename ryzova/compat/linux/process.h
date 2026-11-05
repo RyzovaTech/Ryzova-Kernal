@@ -45,6 +45,8 @@ typedef struct RyzCpu {
     uint64_t r[16],ip,cur,flags,fsbase,gsbase,segment,tid_address;
     unsigned char xmm[16][16];
     uint32_t extra_steps;
+    /* Default x86-64 SSE control only; nondefault MXCSR settings fail closed. */
+    uint32_t mxcsr;
     int repeat,operand16;
     unsigned int rex,rex_present,size;
     int fault;

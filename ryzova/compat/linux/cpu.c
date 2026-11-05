@@ -756,6 +756,28 @@ static int step(Cpu *c)
         if(op2==5){ if(c->fault)return RYZ_VM_MAP_ERROR; rv=guest_syscall(c); if(rv!=RYZ_VM_OK)return rv; }
         else if(op2==0x1e && c->repeat){if(fetch(c,1)!=0xfa)return RYZ_VM_OPCODE_UNSUPPORTED;}
         else if(op2>=0x80 && op2<=0x8f){ v=(uint64_t)(int64_t)(int32_t)fetch(c,4); target=c->cur+v; jump=condition(c,op2); }
+        else if(op2==0xae && !c->operand16 && !c->repeat && !(c->rex&4)){
+            /* 0F AE /3 STMXCSR m32 and /2 LDMXCSR m32, default-mode
+             * subset only. The current integer-model FP/SSE implementation
+             * models RN-even under masked exceptions without MXCSR sticky
+             * status flags, DAZ/FTZ, or nondefault rounding. Reject changing
+             * MXCSR rather than silently executing with the wrong semantics.
+             * Both encodings require a real, bounded m32 guest operand;
+             * no register operands, FXSAVE, CLFLUSH or host MXCSR access. */
+            rm=decode(c,&reg,&group,4);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(rm.reg>=0 || (group!=2 && group!=3))
+                return RYZ_VM_OPCODE_UNSUPPORTED;
+            if(group==3){
+                store(c,address(c,rm)+c->segment,4,c->mxcsr);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+            }else{
+                v=load(c,address(c,rm)+c->segment,4,RYZ_READ);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+                if(v!=UINT64_C(0x1f80))return RYZ_VM_OPCODE_UNSUPPORTED;
+                c->mxcsr=(uint32_t)v;
+            }
+        }
         else if(op2>=0xc8 && op2<=0xcf){
             if(size==2)return RYZ_VM_OPCODE_UNSUPPORTED;
             rr=regop(c,(op2-0xc8)+((c->rex&1)?8:0),size);a=get(c,rr,size);v=0;
@@ -1158,7 +1180,7 @@ static int step(Cpu *c)
 }
 void ryz_cpu_init(RyzCpu *c,RyzLinuxProcess *p,RyzLinuxMemory *m,uint64_t entry,uint64_t stack,RyzVmResult *result)
 {
-    memset(c,0,sizeof(*c));c->p=p;c->m=m;c->ip=entry;c->r[4]=stack;c->flags=0x202;c->result=result;
+    memset(c,0,sizeof(*c));c->p=p;c->m=m;c->ip=entry;c->r[4]=stack;c->flags=0x202;c->mxcsr=0x1f80U;c->result=result;
 }
 int ryz_cpu_tick(RyzCpu *c)
 {

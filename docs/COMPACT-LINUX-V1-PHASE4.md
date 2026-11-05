@@ -391,3 +391,28 @@ No unqualified opcode was enabled, no guest instruction or runtime
 budget was increased, and no process/memory or application acceptance
 gate was marked passed. A candidate RIP remains only a *candidate*,
 not verification of the failing opcode.
+
+## 4M — Native musl loader STMXCSR candidate and default-only MXCSR
+
+On the last independently measured frozen CPython `-c` probe,
+`RIP=a4292e` mapped to pinned musl 1.2.6 bytes
+`0F AE 1C 24 58 C1 E8 03 25 00 0C 00 00 C3 31`, beginning with
+`STMXCSR m32`. RIP is a candidate, not proof of an instruction defect.
+A source-built host Linux reference ELF independently validated
+`STMXCSR`, default `LDMXCSR 0x1f80`, stack memory and EFLAGS-preserving
+behavior.
+
+The finite Ryzova interpreter now models `0F AE /3` m32 stores and
+`0F AE /2` m32 loads **only if MXCSR remains exactly 0x1f80**.
+Other values fail closed (VM opcode unsupported) rather than silently
+running incorrect floating-point controls. Register-only forms and
+unmapped m32 are independently rejected; reserved/unmodeled 0F AE groups
+remain unsupported. `test_phase9_mxcsr_differential.py` executes the
+same static x86_64 ELF on Linux and the Ryzova interpreter and compares
+all 20 result bytes and invalid-operand behavior.
+
+This is **not full MXCSR support**. MXCSR sticky exception status,
+unmasked traps, DAZ/FTZ, altered rounding and multi-thread FP state
+qualification remain open. Native CPython full code/stdlib and
+AMD64-ABI acceptance require the subsequent frozen guest result and
+native QEMU evidence before any completion claim.

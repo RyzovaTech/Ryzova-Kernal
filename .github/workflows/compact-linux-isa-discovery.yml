@@ -53,3 +53,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_phase9_paddq_differential.py' -v
       - name: Differential PCMPEQD packed equality, register alias and aligned m128
         run: python -m unittest discover -s tests -p 'test_phase9_pcmpeqd_differential.py' -v
+      - name: Differential STMXCSR and default-only LDMXCSR versus native Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_mxcsr_differential.py' -v
