@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 typedef unsigned long U;
 static volatile long hits,inner,problem;static long ack=-1;
 static unsigned char alternate[8192];
