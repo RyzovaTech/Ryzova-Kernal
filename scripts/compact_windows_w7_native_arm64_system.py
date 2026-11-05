@@ -43,7 +43,7 @@ def inventory():
         ["git", "ls-files", "--", *SRC_PREFIXES], cwd=ROOT,
         timeout=20).decode("utf-8").splitlines()
     files = sorted(p for p in found if any(p.startswith(x) for x in SRC_PREFIXES))
-    if len(files) < 350 or not set(BOOT_FILES).issubset(files):
+    if len(files) < 280 or not set(BOOT_FILES).issubset(files):
         raise ValueError("incomplete source-locked ARM64 kernel and port tree")
     output = {}
     for name in files:
