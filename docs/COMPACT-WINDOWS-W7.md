@@ -71,6 +71,34 @@ release and hardware acceptance fields remain false. The stronger
 next requirement is a source-built ARM64 **Ryzova QEMU-system guest**
 running a source-identical Windows ARM64 PE with independent guest serial
 and resource-permission evidence.
+## W7.4: Genuine Windows ARM64 host and exact PE comparison
+
+GitHub Actions provides a real Windows 11 ARM64 runner (Visual Studio 2026
+image). The W7 native-host job runs on this actual Windows ARM64 OS,
+compiles the four import-free original Windows ARM64 C source fixtures
+with Clang/LLD (integer and function-call cases at O0/O2), and **executes
+all four PE32+ executables as Windows ARM64 processes**. Expected results
+are exit code 37, zero stdout/stderr, exact 0xAA64 machine type, console
+subsystem, and no DLL import table. The original source SHA-256, PE
+SHA-256, OS image version and 4/4 execution receipts are archived together
+with only the original source-built PE files, not Microsoft system binaries.
+
+A second Linux job downloads these **exact same PE bytes** from Windows
+ARM64 (no independent PE recompile for the comparison), verifies each
+host-source, guest-PE and exit receipt against the checked-out exact PR
+head, and runs the PE in two independent builds of the finite interpreter:
+Linux AMD64 and Linux AArch64 under QEMU userspace. Both must match the
+actual Windows ARM64 native-host exit result 37, and must agree on the
+interpreter step/RVA/opcode receipts. Five negative mutations of a
+Windows-host-supplied binary must fail closed in both interpreter ISAs.
+
+**Important acceptance boundary:** Windows ARM64 *host* reference and
+QEMU *userspace* cross-ISA agreement establish original Windows ARM64
+PE compatibility for a narrowly limited import-free finite C program.
+These jobs do not boot the Ryzova ARM64 kernel, validate imported Win32
+APIs, demonstrate arbitrary Windows applications, or perform physical
+ARM64 device/firmware qualification. All native Ryzova ARM64, Windows V1
+and W9 physical hardware release flags remain false.
 ## W7B: Real hardware power cut
 
 `scripts/compact_windows_physical_powercut.py` and
