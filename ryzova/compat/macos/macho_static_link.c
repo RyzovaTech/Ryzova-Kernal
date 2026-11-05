@@ -217,6 +217,17 @@ int ryz_mac3_link2(const unsigned char *first,size_t first_len,
     if(status)return status;
     status=parse(second,second_len,&objects[1]);
     if(status)return status;
+    /* Reject ambiguous external ownership before considering any reloc:
+     * even a duplicate not referenced by the selected entry is unsafe. */
+    for(uint32_t i=0;i<objects[0].nsyms;i++) {
+        if(!objects[0].symbols[i].defined)continue;
+        for(uint32_t j=0;j<objects[1].nsyms;j++) {
+            if(objects[1].symbols[j].defined &&
+               strcmp(objects[0].symbols[i].name,
+                      objects[1].symbols[j].name)==0)
+                return 3;
+        }
+    }
     second_at=OUTPUT_CODE_OFF+((objects[0].text_size+15U)&~15U);
     if(second_at>RYZ_MAC3C_OUTPUT_BYTES ||
        objects[1].text_size>RYZ_MAC3C_OUTPUT_BYTES-second_at)
