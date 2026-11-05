@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 typedef unsigned long U;
 static volatile long value=7;
 static int ready[2],done[2],first[2],second[2];
