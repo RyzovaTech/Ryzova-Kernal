@@ -525,3 +525,24 @@ Independent negative tests cover host SIGSEGV vs guest denied
 unaligned m128, and an explicitly unsupported unprefixed opcode.
 This is not full AMD64/SSE2 ABI, pinned CPython stdlib execution,
 application resource qualification or a V1 acceptance gate completion.
+
+## 4S — Locked CPython ANDNPD complement-destination candidate
+
+On original-source head `6a22212`, the pinned CPython 3.12.10
+`-c` interpreter reached **9,145,526 guest instructions** and failed
+closed with `status=3` at `RIP=62a2a1`, candidate bytes
+`66 0F 55 D0` in the SHA-locked executable (SSE2 ANDNPD).
+This is only source-attributed sampled RIP, not a claim of successful
+CPython or a complete ISA root cause.
+
+The original bounded CPU interpreter now models **66 0F 55 /r**
+ANDNPD as `(~DEST) & SRC` over 128 bits, including register aliases
+and XMM8+, a 16-byte-aligned guest m128 source, unchanged flags and
+no host FP state. Self-alias returns zero, unlike ordinary ANDPD.
+Misaligned/missing m128 fails closed; unprefixed ANDNPS is not claimed.
+The same static AMD64 ELF is executed on Linux and Ryzova, comparing
+all **88 output bytes** plus separate native/guest failure cases.
+
+No ELF/resource/step budgets were increased. Nondefault MXCSR,
+full AMD64 ABI, Python stdlib workloads and native application V1
+acceptance remain open and require independent fresh-head evidence.
