@@ -173,10 +173,13 @@ static int unwind_metadata(const unsigned char *f,const CwPlan *p,uint32_t rva,u
     }
     return CW_OK;
 }
-int cw_plan(const unsigned char *f,size_t size,uint64_t base,CwPlan *out) {
+int cw_plan_diagnostic(const unsigned char *f,size_t size,uint64_t base,CwPlan *out,
+                       uint32_t *unsupported_directory) {
     CwPlan p;uint32_t pe,opt,table,alignment,file_alignment,dirs,i,j,entry_ok=0;
     uint16_t optional,count,characteristics;
     uint32_t debug_rva=0,debug_bytes=0,imports_rva=0,imports_bytes=0,unwind_rva=0,unwind_bytes=0;
+    uint32_t resource_rva=0,resource_bytes=0,unsupported=UINT32_MAX;
+    if(unsupported_directory)*unsupported_directory=UINT32_MAX;
     if(out)memset(out,0,sizeof(*out));
     if(!f || !out || size>CW_MAX_FILE || !span(size,0,64) || f[0]!='M' || f[1]!='Z')return CW_HEADER;
     pe=u32(f+60);
@@ -206,11 +209,12 @@ int cw_plan(const unsigned char *f,size_t size,uint64_t base,CwPlan *out) {
         if(!rva && !bytes)continue;
         if(!rva || !bytes)return CW_HEADER;
         if(i==1){imports_rva=rva;imports_bytes=bytes;}
+        else if(i==2){resource_rva=rva;resource_bytes=bytes;}
         else if(i==3){unwind_rva=rva;unwind_bytes=bytes;}
         else if(i==12){p.iat_rva=rva;p.iat_bytes=bytes;}
         else if(i==5){p.reloc_rva=rva;p.reloc_bytes=bytes;}
         else if(i==6){debug_rva=rva;debug_bytes=bytes;}
-        else return CW_UNSUPPORTED; /* TLS, delay imports, bound imports, CLR, etc. */
+        else if(unsupported==UINT32_MAX)unsupported=i;
     }
     if(p.reloc_bytes && (characteristics&1))return CW_RELOCATION;
     for(i=0;i<count;i++) {
@@ -234,11 +238,35 @@ int cw_plan(const unsigned char *f,size_t size,uint64_t base,CwPlan *out) {
            span(virtual_size,p.entry-d->rva,1) && span(d->bytes,p.entry-d->rva,1))entry_ok=1;
     }
     if(!entry_ok)return CW_MAPPING;
+    /* Resources are opaque guest bytes. Never follow resource entries or
+       expose Win32 resource APIs under this execution profile. */
+    if(resource_bytes){
+        int index=section_at(&p,resource_rva,resource_bytes,1);
+        const unsigned char *header,*root;
+        const CwSection *section;
+        uint32_t delta,entries;
+        if(index<0 || resource_bytes<16 || (resource_rva&3))return CW_MAPPING;
+        section=&p.sections[index];
+        header=f+table+(uint32_t)index*40;
+        delta=resource_rva-section->rva;
+        if(section->permissions!=CW_R || memcmp(header,".rsrc\0\0",8) ||
+           !span(u32(header+8),delta,resource_bytes))return CW_MAPPING;
+        root=f+section->raw+delta;
+        entries=(uint32_t)u16(root+12)+u16(root+14);
+        if(!span(resource_bytes,16,(uint64_t)entries*8))return CW_HEADER;
+    }
+    if(unsupported!=UINT32_MAX){
+        if(unsupported_directory)*unsupported_directory=unsupported;
+        return CW_UNSUPPORTED;
+    }
     i=(uint32_t)import_table(f,&p,imports_rva,imports_bytes);if(i)return (int)i;
     i=(uint32_t)unwind_metadata(f,&p,unwind_rva,unwind_bytes);if(i)return (int)i;
     i=(uint32_t)debug_metadata(f,&p,debug_rva,debug_bytes);if(i)return (int)i;
     i=(uint32_t)relocations(f,&p,NULL);if(i)return (int)i;
     *out=p;return CW_OK;
+}
+int cw_plan(const unsigned char *f,size_t size,uint64_t base,CwPlan *out) {
+    return cw_plan_diagnostic(f,size,base,out,NULL);
 }
 unsigned char *cw_memory(CwMachine *m,uint64_t at,size_t n,unsigned int rights) {
     uint32_t i;

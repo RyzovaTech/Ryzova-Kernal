@@ -44,6 +44,8 @@ typedef struct CwMachine {
     uint64_t last_guest_ip;
 } CwMachine;
 /* No allocation, mapping or execution on admission failure. */
+/* The diagnostic reports UINT32_MAX when no unsupported directory is identified. */
+int cw_plan_diagnostic(const unsigned char *, size_t, uint64_t, CwPlan *, uint32_t *);
 int cw_plan(const unsigned char *, size_t, uint64_t, CwPlan *);
 /* Caller owns arena: exactly plan.image_bytes + CW_STACK required. */
 int cw_load(const unsigned char *, size_t, uint64_t, unsigned char *, size_t, CwMachine *);

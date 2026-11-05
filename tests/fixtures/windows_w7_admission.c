@@ -10,6 +10,7 @@ int main(int argc, char **argv)
     FILE *file;
     size_t size;
     int status;
+    uint32_t directory;
 
     if(argc != 2 || (file = fopen(argv[1], "rb")) == NULL)
         return 1;
@@ -20,8 +21,12 @@ int main(int argc, char **argv)
     }
     if(fclose(file) != 0)
         return 1;
-    status = cw_plan(bytes, size, 0, &plan);
-    printf("{\"status\":%d,\"classification\":\"%s\",\"executed\":false}\n",
+    status = cw_plan_diagnostic(bytes, size, 0, &plan, &directory);
+    printf("{\"status\":%d,\"classification\":\"%s\",\"executed\":false,",
            status, cw_status_name(status));
+    if(directory == UINT32_MAX)
+        puts("\"first_unsupported_directory\":null}");
+    else
+        printf("\"first_unsupported_directory\":%u}\n", (unsigned int)directory);
     return 0;
 }
