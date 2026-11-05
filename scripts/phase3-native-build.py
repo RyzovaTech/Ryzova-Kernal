@@ -60,7 +60,7 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "--transform=s,^ryzova/compat/linux,sys/src/cmd/compact-linux,", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/cmd/rc", "sys/src/libc", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
+subprocess.run(["tar", "--format=ustar", "--transform=s,^ryzova/compat/linux,sys/src/cmd/compact-linux,", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/cmd/rc", "sys/src/cmd/mkfile", "sys/src/cmd/bind.c", "sys/src/cmd/cat.c", "sys/src/cmd/chmod.c", "sys/src/cmd/dd.c", "sys/src/cmd/echo.c", "sys/src/cmd/ls.c", "sys/src/cmd/mkdir.c", "sys/src/cmd/mount.c", "sys/src/cmd/mv.c", "sys/src/cmd/rm.c", "sys/src/cmd/sed.c", "sys/src/cmd/sleep.c", "sys/src/cmd/srv.c", "sys/src/cmd/test.c", "sys/src/cmd/unmount.c", "sys/src/libc", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
@@ -211,6 +211,25 @@ if m5_arm64_native:
 
     # Source-built ARM64 rc is mandatory inside the embedded bootfs.
     # Before this stage the kernel panicked at /bin/rc (not a boot pass).
+    # Native shell + essential rc bootrc utilities must exist in the
+    # ARM64 bootfs. The AMD64 guest's /amd64/bin tools cannot be reused.
+    # Build each from this checkout with real 7c/7l on the pinned guest.
+    arm64_core_cmds = ("bind","cat","chmod","dd","echo","ls","mkdir","mount","mv","rm","sed","sleep","srv","test","unmount")
+    for chunk in range(0, len(arm64_core_cmds), 2):
+        pair = arm64_core_cmds[chunk:chunk+2]
+        idx = chunk // 2
+        armstage("m6-arm64-core-build-" + str(idx),
+            "cd /sys/src/cmd; objtype=arm64 mk " +
+            " ".join("7." + name for name in pair) +
+            " > /tmp/m6-core-" + str(idx) + ".log >[2=1]; echo M6_ARM64_CORE_" +
+            str(idx) + "_STATUS_$status; tail -n 5 /tmp/m6-core-" +
+            str(idx) + ".log")
+        for name in pair:
+            armstage("m6-arm64-core-install-" + name,
+                "cd /sys/src/cmd; test -s 7." + name +
+                " && cp 7." + name + " /arm64/bin/" + name +
+                "; echo M6_ARM64_CORE_" + name.upper() + "_ARTIFACT_$status")
+
     armstage("m5-arm64-rc",
         "cd /sys/src/cmd/rc; objtype=arm64 mk install > /tmp/m5-arm64-rc.log >[2=1]; "
         "echo M5_ARM64_RC_STATUS_$status; tail -n 12 /tmp/m5-arm64-rc.log")
@@ -405,6 +424,17 @@ if m5_arm64_native:
         and re.search(r"(?:^|\r?\n)M5_ARM64_RC_STATUS_\s*(?:\r?\n)", text)
         and re.search(r"(?:^|\r?\n)M5_ARM64_RC_ARTIFACT_\s*(?:\r?\n)", text)
     )
+    arm64_core_binaries = {
+        name: bool(
+            marks.get("m6-arm64-core-install-" + name)
+            and marks.get("m6-arm64-core-build-" + str(i // 2))
+            and re.search(r"(?:^|\\r?\\n)M6_ARM64_CORE_" + str(i // 2)
+                          + r"_STATUS_\\s*(?:\\r?\\n)", text)
+            and re.search(r"(?:^|\\r?\\n)M6_ARM64_CORE_"
+                          + name.upper() + r"_ARTIFACT_\\s*(?:\\r?\\n)", text)
+        ) for i,name in enumerate(arm64_core_cmds)
+    }
+    arm64_core_ok = all(arm64_core_binaries.values())
     paqfs_ok = bool(marks.get("m5-arm64-paqfs") and marks.get("m5-arm64-paqfs-install")
         and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_STATUS_\s*(?:\r?\n)", text)
         and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_INSTALL_\s*(?:\r?\n)", text)
@@ -412,7 +442,7 @@ if m5_arm64_native:
     factotum_ok = bool(marks.get("m5-arm64-factotum") and marks.get("m5-arm64-factotum-install")
         and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_STATUS_\s*(?:\r?\n)", text)
         and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_INSTALL_\s*(?:\r?\n)", text))
-    arm64_link_ok = bool(arm64_libraries_ok and arm64_rc_ok and paqfs_ok and factotum_ok
+    arm64_link_ok = bool(arm64_libraries_ok and arm64_rc_ok and arm64_core_ok and paqfs_ok and factotum_ok
         and marks.get("m5-arm64-full-link") and marks.get("m5-arm64-link-check") and re.search(
         r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*9qemu", text))
@@ -431,6 +461,8 @@ if m5_arm64_native:
         },
         "arm64_bootstrap_libraries_complete": arm64_libraries_ok,
         "arm64_rc_userspace": "pass" if arm64_rc_ok else "blocked",
+        "arm64_bootfs_core_binaries": {name: "pass" if ok else "blocked" for name,ok in arm64_core_binaries.items()},
+        "arm64_bootfs_core_complete": arm64_core_ok,
         "arm64_paqfs_userspace": "pass" if paqfs_ok else "blocked",
         "arm64_factotum_userspace": "pass" if factotum_ok else "blocked",
         "arm64_kernel_link": "pass" if arm64_link_ok else "blocked",
