@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Compile a real freestanding Linux C program and inspect native evidence."""
 import hashlib
 from pathlib import Path

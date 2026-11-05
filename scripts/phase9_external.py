@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Native Plan 9 TCP-resource qualification, distinct from host reference I/O."""
 import hashlib
 from pathlib import Path

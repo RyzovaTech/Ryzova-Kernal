@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """CLX-02 native filesystem/resource-view acceptance, bounded profiles only."""
 from functools import lru_cache
 import hashlib

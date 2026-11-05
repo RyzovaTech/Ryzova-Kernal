@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """CLX-03A native private-file COW qualification; not full CLX-03 acceptance."""
 from functools import lru_cache
 import hashlib
