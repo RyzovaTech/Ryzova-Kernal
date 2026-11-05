@@ -15,6 +15,7 @@ typedef unsigned char uchar;
 
 #include "grant.h"
 #include "dynamic.h"
+#include "arm64.h"
 
 enum { ImageBytes = 8472, Page = MacPage, MaxSteps = 64, OutputLimit = 256 };
 enum { Base = MacBase, Stack = 0x400000, WriteThunk = MacWriteThunk, ReturnThunk = 0x10008 };
@@ -28,7 +29,8 @@ static const uchar m3_digest[32] = {
     0x1d,0x73,0xc1,0xac,0xa3,0x41,0xfa,0x1f,0xea,0x9f,0x47,0x16,0xf9,0x0b,0xf4,0x90
 };
 static MacDynamic dynamic_plan;
-static int dynamic_mode, m3, carry, guest_file = -1;
+static MacArmResult arm_result;
+static int arm_mode, dynamic_mode, m3, carry, guest_file = -1;
 static unsigned long file_offset;
 static uint opens, reads, writes, denials;
 static uchar image[MacImageLimit+1], text[Page], data[Page], stack[Page];
@@ -94,7 +96,7 @@ relative(uvlong next, uint displacement)
 static int
 load_dynamic(unsigned int length)
 {
-    if(!mac_dynamic_load(image, length, text, data, &dynamic_plan))
+    if(!mac_dynamic_load(image, length, text, data, &dynamic_plan, 0))
         return 0;
     ip = Base+dynamic_plan.entry;
     regs[Sp] = Stack+Page;
@@ -329,10 +331,11 @@ run_reference(int argc, char **argv)
 #endif
 
     dynamic_mode = argc==3 && strcmp(argv[1], "--dynamic")==0;
-    if(argc!=2 && argc!=5 && !dynamic_mode)
+    arm_mode = argc==3 && strcmp(argv[1], "--arm64")==0;
+    if(argc!=2 && argc!=5 && !dynamic_mode && !arm_mode)
         return 0;
     m3 = argc==5;
-    path = dynamic_mode ? argv[2] : argv[1];
+    path = (dynamic_mode || arm_mode) ? argv[2] : argv[1];
     expected = m3 ? Page : ImageBytes;
 #ifdef MAC_PLAN9
     fd = open(path, OREAD);
@@ -340,8 +343,10 @@ run_reference(int argc, char **argv)
         return 0;
     count = readn(fd, image, sizeof image);
     close(fd);
+    if(arm_mode)
+        return count>0 && count<=MacImageLimit && mac_arm64_run(image, count, &arm_result);
     if(dynamic_mode)
-        return count>0 && count<=MacImageLimit && load_dynamic(count) && execute();
+        return count>0 && count<=3*MacPage && load_dynamic(count) && execute();
     if(count!=expected)
         return 0;
     sha2_256(image, expected, digest, nil);
@@ -355,8 +360,10 @@ run_reference(int argc, char **argv)
         return 0;
     }
     fclose(file);
+    if(arm_mode)
+        return count>0 && count<=MacImageLimit && mac_arm64_run(image, count, &arm_result);
     if(dynamic_mode)
-        return count>0 && count<=MacImageLimit && load_dynamic(count) && execute();
+        return count>0 && count<=3*MacPage && load_dynamic(count) && execute();
     if(count!=expected || SHA256(image, expected, digest)==NULL)
         return 0;
 #endif
@@ -381,6 +388,13 @@ main(int argc, char **argv)
 {
     if(!run_reference(argc, argv))
         sysfatal("unsupported Mac reference image or execution fault");
+    if(arm_mode){
+        if(write(1, arm_result.output, arm_result.size)!=arm_result.size)
+            sysfatal("output failed");
+        print("MAC_M5_EXIT %ud STEPS %ud WRITE_CALLS %ud REBASES %ud\n",
+              arm_result.status, arm_result.steps, arm_result.calls, arm_result.rebases);
+        exits(nil);
+    }
     if(write(1, output, output_size)!=output_size)
         sysfatal("output failed");
     if(dynamic_mode)
@@ -400,6 +414,11 @@ main(int argc, char **argv)
     if(!run_reference(argc, argv)){
         fputs("unsupported Mac reference image or execution fault\n", stderr);
         return 125;
+    }
+    if(arm_mode){
+        if(fwrite(arm_result.output, 1, arm_result.size, stdout)!=arm_result.size || fflush(stdout)!=0)
+            return 125;
+        return arm_result.status&255;
     }
     if(fwrite(output, 1, output_size, stdout)!=output_size || fflush(stdout)!=0)
         return 125;

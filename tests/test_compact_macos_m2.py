@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 import hashlib
+import os
 import struct
 from pathlib import Path
 import subprocess
@@ -24,7 +25,8 @@ class ReferenceExecution(unittest.TestCase):
                         "-fsanitize=undefined", "-fno-sanitize-recover=all",
                         str(ROOT / "ryzova/compat/macos/m2.c"), "-lcrypto",
                         str(ROOT / "ryzova/compat/macos/grant.c"),
-                        str(ROOT / "ryzova/compat/macos/dynamic.c"), "-o", str(cls.runner)], check=True)
+                        str(ROOT / "ryzova/compat/macos/dynamic.c"),
+                        str(ROOT / "ryzova/compat/macos/arm64.c"), "-o", str(cls.runner)], check=True)
 
     def test_reference_matches_macos(self):
         self.assertEqual(hashlib.sha256(FIXTURE.read_bytes()).hexdigest(),
@@ -116,3 +118,29 @@ class ReferenceExecution(unittest.TestCase):
                 image[offset:offset+len(patch)] = patch
                 result = self.run_dynamic(image)
                 self.assertEqual((result.returncode, result.stdout), (125, b""))
+
+    def test_m5_apple_silicon_reference_and_architecture_boundary(self):
+        fixture = os.environ.get("MAC_M5_REFERENCE")
+        if fixture is None:
+            self.skipTest("Apple Silicon CI artifact is unavailable")
+        image = bytearray(Path(fixture).read_bytes())
+        result = subprocess.run([self.runner, "--arm64", fixture], capture_output=True, timeout=5)
+        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                         (53, b"FLEX_MACOS_M5_ARM64!\n", b""))
+        result = subprocess.run([self.runner, "--arm64", FIXTURE], capture_output=True, timeout=5)
+        self.assertEqual((result.returncode, result.stdout), (125, b""))
+        # A real loader input with a valid header but an unsupported first opcode.
+        offset = 32
+        for _ in range(struct.unpack_from("<I", image, 16)[0]):
+            kind, size = struct.unpack_from("<II", image, offset)
+            if kind == 0x80000028:
+                entry = struct.unpack_from("<Q", image, offset+8)[0]
+                break
+            offset += size
+        else:
+            self.fail("reference lacks LC_MAIN")
+        image[entry:entry+4] = bytes(4)
+        path = Path(self.work.name) / "arm-invalid.macho"
+        path.write_bytes(image)
+        result = subprocess.run([self.runner, "--arm64", path], capture_output=True, timeout=5)
+        self.assertEqual((result.returncode, result.stdout), (125, b""))
