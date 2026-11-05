@@ -8,6 +8,10 @@
 #define CW_MAX_SECTIONS 16U
 #define CW_MAX_IMPORTS 32U
 #define CW_MAX_STEPS 262144U
+#define CW_TLS_LIMIT 4096U
+#define CW_TLS_CALLBACKS 8U
+#define CW_TLS_RESERVE 8192U
+#define CW_TLS_RETURN (UINT64_MAX-1)
 #define CW_R 1U
 #define CW_W 2U
 #define CW_X 4U
@@ -29,6 +33,8 @@ typedef struct CwPlan {
     CwSection sections[CW_MAX_SECTIONS];
     uint32_t import_count, api_mask, iat_rva, iat_bytes;
     CwImport imports[CW_MAX_IMPORTS];
+    uint32_t tls_present, tls_rva, tls_bytes, tls_zero, tls_index, tls_count;
+    uint32_t tls_callbacks[CW_TLS_CALLBACKS];
 } CwPlan;
 enum CwStatus { CW_OK, CW_HEADER, CW_UNSUPPORTED, CW_BOUNDS, CW_MAPPING,
     CW_RELOCATION, CW_MEMORY, CW_OPCODE, CW_BUDGET, CW_ABI, CW_API, CW_DIVIDE, CW_CRT };
@@ -42,6 +48,7 @@ typedef struct CwMachine {
     uint32_t exit_kind; /* 0: bootstrap RET, 1: ExitProcess */
     struct CwServices *services;
     uint64_t last_guest_ip;
+    uint32_t tls_next;
 } CwMachine;
 /* No allocation, mapping or execution on admission failure. */
 /* The diagnostic reports UINT32_MAX when no unsupported directory is identified. */
@@ -53,6 +60,8 @@ int cw_load(const unsigned char *, size_t, uint64_t, unsigned char *, size_t, Cw
 int cw_read(CwMachine *, uint64_t, unsigned char *, size_t, unsigned int);
 int cw_write(CwMachine *, uint64_t, const unsigned char *, size_t);
 int cw_run(CwMachine *, uint32_t);
+/* Trusted synthetic return handling; guest code cannot map these tokens. */
+int cw_bootstrap_return(CwMachine *,uint64_t,uint64_t);
 const char *cw_status_name(int);
 /* Trusted API code uses this only after validating rights and full spans. */
 unsigned char *cw_memory(CwMachine *,uint64_t,size_t,unsigned int);

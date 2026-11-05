@@ -22,9 +22,9 @@ class Section(C.Structure):
 class Import(C.Structure):
     _fields_ = [("iat", C.c_uint32), ("api", C.c_uint32)]
 class Plan(C.Structure):
-    _fields_ = [('preferred_base', C.c_uint64), ('base', C.c_uint64)] + [(n, C.c_uint32) for n in ('image_bytes', 'headers', 'entry', 'count', 'reloc_rva', 'reloc_bytes')] + [('sections', Section * 16)] + [(n, C.c_uint32) for n in ('import_count', 'api_mask', 'iat_rva', 'iat_bytes')] + [('imports', Import * 32)]
+    _fields_ = [('preferred_base', C.c_uint64), ('base', C.c_uint64)] + [(n, C.c_uint32) for n in ('image_bytes', 'headers', 'entry', 'count', 'reloc_rva', 'reloc_bytes')] + [('sections', Section * 16)] + [(n, C.c_uint32) for n in ('import_count', 'api_mask', 'iat_rva', 'iat_bytes')] + [('imports', Import * 32)] + [(n, C.c_uint32) for n in ('tls_present', 'tls_rva', 'tls_bytes', 'tls_zero', 'tls_index', 'tls_count')] + [('tls_callbacks', C.c_uint32 * 8)]
 class Machine(C.Structure):
-    _fields_ = [('plan', Plan), ('image', C.c_void_p), ('stack', C.c_void_p), ('stack_base', C.c_uint64), ('initial_sp', C.c_uint64), ('r', C.c_uint64 * 16), ('ip', C.c_uint64), ('flags', C.c_uint64), ('xmm', (C.c_ubyte * 16) * 16), ('instructions', C.c_uint32), ('exit_code', C.c_uint32), ('exited', C.c_int), ('status', C.c_int), ('exit_kind', C.c_uint32), ('services', C.c_void_p), ('last_guest_ip', C.c_uint64)]
+    _fields_ = [('plan', Plan), ('image', C.c_void_p), ('stack', C.c_void_p), ('stack_base', C.c_uint64), ('initial_sp', C.c_uint64), ('r', C.c_uint64 * 16), ('ip', C.c_uint64), ('flags', C.c_uint64), ('xmm', (C.c_ubyte * 16) * 16), ('instructions', C.c_uint32), ('exit_code', C.c_uint32), ('exited', C.c_int), ('status', C.c_int), ('exit_kind', C.c_uint32), ('services', C.c_void_p), ('last_guest_ip', C.c_uint64), ('tls_next', C.c_uint32)]
 
 class WindowsW2Tests(unittest.TestCase):
     @classmethod
@@ -95,7 +95,7 @@ class WindowsW2Tests(unittest.TestCase):
         sentinel = 0xffffffff
         plan = Plan()
         for directories, expected_status, expected_directory in (
-            ((), 0, sentinel), ((9,), 2, 9), ((9, 13), 2, 9), ((0, 9), 2, 0),
+            ((), 0, sentinel), ((7,), 2, 7), ((7, 13), 2, 7), ((0, 9), 2, 0),
         ):
             image = pe(b'\xc3')
             for directory in directories:

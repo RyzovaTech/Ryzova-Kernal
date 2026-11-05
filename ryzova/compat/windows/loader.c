@@ -20,6 +20,54 @@ static int section_at(const CwPlan *p,uint32_t off,uint32_t size,int backed) {
     }
     return -1;
 }
+/* TLS VAs belong to this image; no host pointer is ever followed. */
+static int tls_address(const CwPlan *p,uint64_t va,uint32_t bytes,uint32_t *rva) {
+    if(va<p->preferred_base || !span(p->image_bytes,va-p->preferred_base,bytes))return 0;
+    *rva=(uint32_t)(va-p->preferred_base);return 1;
+}
+static int tls_location(const unsigned char *f,const CwPlan *p,uint32_t table,
+                         uint32_t rva,uint32_t bytes,unsigned int rights,int backed) {
+    int index=section_at(p,rva,bytes,backed);
+    if(index<0 || p->sections[index].permissions!=rights ||
+       !span(u32(f+table+(uint32_t)index*40+8),rva-p->sections[index].rva,bytes))return -1;
+    return index;
+}
+static int tls_metadata(const unsigned char *f,CwPlan *p,uint32_t table,uint32_t rva,uint32_t bytes) {
+    const unsigned char *d;uint64_t start,end,callbacks;uint32_t at,flags,i;int index;
+    if(!bytes)return CW_OK;
+    if(bytes!=40 || (rva&7))return CW_HEADER;
+    index=tls_location(f,p,table,rva,40,CW_R,1);
+    if(index<0)return CW_MAPPING;
+    d=f+p->sections[index].raw+rva-p->sections[index].rva;
+    start=u64(d);end=u64(d+8);callbacks=u64(d+24);flags=u32(d+36);
+    if((flags&~0x00f00000U) || ((flags>>20)&15)>13)return CW_UNSUPPORTED;
+    if(end<start || end-start>CW_TLS_LIMIT || u32(d+32)>CW_TLS_LIMIT-(end-start))return CW_BOUNDS;
+    p->tls_bytes=(uint32_t)(end-start);p->tls_zero=u32(d+32);
+    if(p->tls_bytes){
+        if(!tls_address(p,start,p->tls_bytes,&p->tls_rva))return CW_MAPPING;
+        index=section_at(p,p->tls_rva,p->tls_bytes,1);
+        if(index<0 || !(p->sections[index].permissions&CW_R) || (p->sections[index].permissions&CW_X) ||
+           !span(u32(f+table+(uint32_t)index*40+8),p->tls_rva-p->sections[index].rva,p->tls_bytes))return CW_MAPPING;
+    }else if(start && !tls_address(p,start,0,&at))return CW_MAPPING;
+    if(!tls_address(p,u64(d+16),4,&p->tls_index) || (p->tls_index&3) ||
+       tls_location(f,p,table,p->tls_index,4,CW_R|CW_W,0)<0)return CW_MAPPING;
+    if(p->iat_bytes && (uint64_t)p->tls_index<(uint64_t)p->iat_rva+p->iat_bytes &&
+       (uint64_t)p->iat_rva<(uint64_t)p->tls_index+4)return CW_MAPPING;
+    if(callbacks){
+        if(!tls_address(p,callbacks,8,&at) || (at&7))return CW_MAPPING;
+        for(i=0;i<=CW_TLS_CALLBACKS;i++){
+            uint64_t callback;uint32_t target;
+            index=tls_location(f,p,table,at+8*i,8,CW_R,1);
+            if(index<0)return CW_MAPPING;
+            callback=u64(f+p->sections[index].raw+at+8*i-p->sections[index].rva);
+            if(!callback)break;
+            if(i==CW_TLS_CALLBACKS)return CW_BOUNDS;
+            if(!tls_address(p,callback,1,&target) || tls_location(f,p,table,target,1,CW_R|CW_X,1)<0)return CW_MAPPING;
+            p->tls_callbacks[p->tls_count++]=target;
+        }
+    }
+    p->tls_present=1;return CW_OK;
+}
 /* Validate relocations using immutable file bytes, before touching the arena.
    Strict ordered DIR64 targets prevent duplicate patches and table self-mutation. */
 static int relocations(const unsigned char *f,const CwPlan *p,unsigned char *image) {
@@ -93,7 +141,8 @@ static int import_table(const unsigned char *f,CwPlan *p,uint32_t rva,uint32_t b
     const unsigned char *table;uint32_t modules,mi,seen=0,total=0,minimum=UINT32_MAX,maximum=0;
     uint32_t lookup_rva[2],iat_rva[2],iat_bytes[2],advertised_rva=p->iat_rva,advertised_bytes=p->iat_bytes;
     if(!bytes)return advertised_bytes?CW_HEADER:CW_OK;
-    if((bytes!=40 && bytes!=60) || !(table=backed(f,p,rva,bytes)))return CW_HEADER;
+    if(bytes<40 || !(table=backed(f,p,rva,bytes)))return CW_HEADER;
+    if(bytes!=40 && bytes!=60)return CW_UNSUPPORTED;
     modules=bytes/20-1;
     for(mi=0;mi<20;mi++)if(table[modules*20+mi])return CW_UNSUPPORTED;
     for(mi=0;mi<modules;mi++) {
@@ -179,6 +228,7 @@ int cw_plan_diagnostic(const unsigned char *f,size_t size,uint64_t base,CwPlan *
     uint16_t optional,count,characteristics;
     uint32_t debug_rva=0,debug_bytes=0,imports_rva=0,imports_bytes=0,unwind_rva=0,unwind_bytes=0;
     uint32_t resource_rva=0,resource_bytes=0,unsupported=UINT32_MAX;
+    uint32_t tls_rva=0,tls_bytes=0;
     if(unsupported_directory)*unsupported_directory=UINT32_MAX;
     if(out)memset(out,0,sizeof(*out));
     if(!f || !out || size>CW_MAX_FILE || !span(size,0,64) || f[0]!='M' || f[1]!='Z')return CW_HEADER;
@@ -214,6 +264,7 @@ int cw_plan_diagnostic(const unsigned char *f,size_t size,uint64_t base,CwPlan *
         else if(i==12){p.iat_rva=rva;p.iat_bytes=bytes;}
         else if(i==5){p.reloc_rva=rva;p.reloc_bytes=bytes;}
         else if(i==6){debug_rva=rva;debug_bytes=bytes;}
+        else if(i==9){tls_rva=rva;tls_bytes=bytes;}
         else if(unsupported==UINT32_MAX)unsupported=i;
     }
     if(p.reloc_bytes && (characteristics&1))return CW_RELOCATION;
@@ -259,7 +310,11 @@ int cw_plan_diagnostic(const unsigned char *f,size_t size,uint64_t base,CwPlan *
         if(unsupported_directory)*unsupported_directory=unsupported;
         return CW_UNSUPPORTED;
     }
+    i=(uint32_t)tls_metadata(f,&p,table,tls_rva,tls_bytes);if(i)return (int)i;
     i=(uint32_t)import_table(f,&p,imports_rva,imports_bytes);if(i)return (int)i;
+    /* The aggregate IAT may have been inferred when directory 12 was absent. */
+    if(p.tls_present && p.iat_bytes && (uint64_t)p.tls_index<(uint64_t)p.iat_rva+p.iat_bytes &&
+       (uint64_t)p.iat_rva<(uint64_t)p.tls_index+4)return CW_MAPPING;
     i=(uint32_t)unwind_metadata(f,&p,unwind_rva,unwind_bytes);if(i)return (int)i;
     i=(uint32_t)debug_metadata(f,&p,debug_rva,debug_bytes);if(i)return (int)i;
     i=(uint32_t)relocations(f,&p,NULL);if(i)return (int)i;
@@ -267,6 +322,34 @@ int cw_plan_diagnostic(const unsigned char *f,size_t size,uint64_t base,CwPlan *
 }
 int cw_plan(const unsigned char *f,size_t size,uint64_t base,CwPlan *out) {
     return cw_plan_diagnostic(f,size,base,out,NULL);
+}
+static void store64(unsigned char *p,uint64_t value) {
+    unsigned int i;for(i=0;i<8;i++)p[i]=(unsigned char)(value>>(8*i));
+}
+static void bootstrap(CwMachine *m) {
+    uint64_t token=UINT64_MAX;
+    m->r[4]=m->initial_sp;
+    if(m->tls_next<m->plan.tls_count){
+        m->ip=m->plan.base+m->plan.tls_callbacks[m->tls_next++];
+        m->r[1]=m->plan.base;m->r[2]=1;m->r[8]=0;token=CW_TLS_RETURN;
+    }else {
+        m->ip=m->plan.base+m->plan.entry;
+        m->r[0]=m->r[1]=m->r[2]=m->r[8]=m->r[9]=m->r[10]=m->r[11]=0;
+    }
+    store64(m->stack+CW_STACK-40,token);
+    memset(m->stack+CW_STACK-32,0,32);
+}
+int cw_bootstrap_return(CwMachine *m,uint64_t token,uint64_t sp) {
+    if(sp!=m->initial_sp)return CW_ABI;
+    if(token==CW_TLS_RETURN){
+        if(!m->tls_next || m->tls_next>m->plan.tls_count)return CW_ABI;
+        /* Mark startup finished so an entry point cannot replay a callback return. */
+        if(m->tls_next==m->plan.tls_count){bootstrap(m);m->tls_next=m->plan.tls_count+1;}
+        else bootstrap(m);
+        return CW_OK;
+    }
+    if(token!=UINT64_MAX || (m->plan.tls_count && m->tls_next<=m->plan.tls_count))return CW_ABI;
+    m->exit_code=(uint32_t)m->r[0];m->exited=1;return CW_OK;
 }
 unsigned char *cw_memory(CwMachine *m,uint64_t at,size_t n,unsigned int rights) {
     uint32_t i;
@@ -320,8 +403,19 @@ int cw_load(const unsigned char *f,size_t size,uint64_t base,unsigned char *aren
     /* Guard page between image and the non-executable stack; another after it. */
     m->stack_base=p.base+p.image_bytes+4096;m->initial_sp=m->stack_base+CW_STACK-40;
     m->r[4]=m->initial_sp;m->ip=p.base+p.entry;m->flags=2;
+    if(p.tls_present){
+        /* A single image and initial thread: isolated TEB, TLS vector and
+           <=4 KiB template inside the lower 8 KiB of the guest stack arena. */
+        store64(m->stack+8,m->stack_base+CW_STACK);
+        store64(m->stack+16,m->stack_base+CW_TLS_RESERVE);
+        store64(m->stack+0x30,m->stack_base);
+        store64(m->stack+0x58,m->stack_base+0x800);
+        store64(m->stack+0x800,m->stack_base+0x1000);
+        if(p.tls_bytes)memcpy(m->stack+0x1000,arena+p.tls_rva,p.tls_bytes);
+        memset(arena+p.tls_index,0,4);
+    }
     /* Synthetic trusted caller: return token is not mapped or executable.
        Only a top-level RET with balanced stack can finish the environment. */
-    for(i=0;i<8;i++)m->stack[CW_STACK-40+i]=(unsigned char)(UINT64_MAX>>(i*8));
+    bootstrap(m);
     return CW_OK;
 }

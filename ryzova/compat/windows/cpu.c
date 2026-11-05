@@ -10,7 +10,7 @@
 #define ZF 64U
 #define SF 128U
 #define OF 2048U
-typedef struct Decode { CwMachine *m; uint64_t start,cur; unsigned int rex,prefix; int error; } Decode;
+typedef struct Decode { CwMachine *m; uint64_t start,cur; unsigned int rex,prefix,gs; int error; } Decode;
 typedef struct Operand { int reg,high,rip;uint64_t at; } Operand;
 static uint64_t mask(unsigned int n) { return n==8?UINT64_MAX:(UINT64_C(1)<<(8*n))-1; }
 static uint64_t guest_read(Decode *d,uint64_t at,unsigned int n,unsigned int rights) {
@@ -52,7 +52,14 @@ static Operand operand(Decode *d,unsigned int *reg,unsigned int *group,unsigned 
     if(mod==2)o.at+=(uint64_t)(int64_t)(int32_t)fetch(d,4);
     return o;
 }
-static uint64_t address(Decode *d,Operand o) { return o.at+(o.rip?d->cur:0); }
+static uint64_t address(Decode *d,Operand o) {
+    uint64_t at=o.at+(o.rip?d->cur:0);
+    if(d->gs){
+        if(!d->m->plan.tls_present || at>UINT64_MAX-d->m->stack_base){d->error=CW_MEMORY;return 0;}
+        at+=d->m->stack_base;
+    }
+    return at;
+}
 static uint64_t get(Decode *d,Operand o,unsigned int n) {
     if(o.reg>=0)return (d->m->r[o.reg]>>(o.high?8:0))&mask(n);
     return guest_read(d,address(d,o),n,CW_R);
@@ -178,9 +185,10 @@ static int tick(CwMachine *m) {
     uint64_t a,b,v,target=0;int jump=0;
     memset(&d,0,sizeof(d));d.m=m;d.start=d.cur=m->ip;
     op=(unsigned int)fetch(&d,1);
-    while((op>=0x40 && op<=0x4f) || op==0x66 || op==0xf3) {
-        if(++prefixes>2){d.error=CW_OPCODE;break;}
+    while((op>=0x40 && op<=0x4f) || op==0x66 || op==0xf3 || op==0x65) {
+        if(++prefixes>3){d.error=CW_OPCODE;break;}
         if(op>=0x40 && op<=0x4f){if(d.rex){d.error=CW_OPCODE;break;}d.rex=op;}
+        else if(op==0x65){if(d.gs || d.rex){d.error=CW_OPCODE;break;}d.gs=1;}
         else {if(d.prefix || d.rex){d.error=CW_OPCODE;break;}d.prefix=op;}
         op=(unsigned int)fetch(&d,1);
     }
@@ -196,10 +204,8 @@ static int tick(CwMachine *m) {
     else if(op==0xc3){
         if(d.rex || d.prefix)return CW_OPCODE;
         a=m->r[4];v=pop(&d);
-        if(!d.error && v==UINT64_MAX) {
-            if(a!=m->initial_sp)return CW_ABI;
-            m->exit_code=(uint32_t)m->r[0];m->exited=1;
-        }else {jump=1;target=v;}
+        if(!d.error && v>=CW_TLS_RETURN)return cw_bootstrap_return(m,v,a);
+        else {jump=1;target=v;}
     }
     else if(op==0xc9){if(d.prefix || d.rex)return CW_OPCODE;m->r[4]=m->r[5];v=pop(&d);if(!d.error)m->r[5]=v;}
     else if(op==0xe8 || op==0xe9 || op==0xeb){if(d.prefix || d.rex)return CW_OPCODE;b=op==0xeb?(uint64_t)(int64_t)(int8_t)fetch(&d,1):(uint64_t)(int64_t)(int32_t)fetch(&d,4);target=d.cur+b;jump=1;if(op==0xe8)push(&d,d.cur);}
@@ -207,7 +213,7 @@ static int tick(CwMachine *m) {
     else if(op==0x88 || op==0x89 || op==0x8a || op==0x8b || op==0x8d){
         if(op==0x88 || op==0x8a)n=1;
         o=operand(&d,&reg,&group,n);q=regop(&d,reg,n);
-        if(op==0x8d){if(o.reg>=0)return CW_OPCODE;put(&d,q,n,address(&d,o));}
+        if(op==0x8d){if(o.reg>=0)return CW_OPCODE;put(&d,q,n,o.at+(o.rip?d.cur:0));}
         else if(op==0x88 || op==0x89)put(&d,o,n,get(&d,q,n));
         else put(&d,q,n,get(&d,o,n));
     }

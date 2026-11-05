@@ -235,10 +235,8 @@ int cw_api_dispatch(CwMachine *m) {
         else return CW_API;
     }
     m->r[0]=result;m->r[4]+=8;
-    if(ret==UINT64_MAX) {
-        if(m->r[4]-8!=m->initial_sp)return CW_ABI;
-        m->exited=1;m->exit_code=(uint32_t)result;
-    }else m->ip=ret;
+    if(ret>=CW_TLS_RETURN)return cw_bootstrap_return(m,ret,m->r[4]-8);
+    else m->ip=ret;
     /* Nonvolatile integer/vector state remains intact; volatile state is unspecified. */
     return CW_OK;
 }
