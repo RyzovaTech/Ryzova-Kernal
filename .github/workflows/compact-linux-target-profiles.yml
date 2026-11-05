@@ -19,8 +19,9 @@ on:
       - '.github/workflows/compact-linux-target-profiles.yml'
   workflow_dispatch:
 concurrency:
-  group: compact-target-profiles-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Use the repo-wide safe policy; never cancel manual or main runs.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:

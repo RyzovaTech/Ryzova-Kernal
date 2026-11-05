@@ -148,6 +148,8 @@ class IsaDiscoveryTests(unittest.TestCase):
         from compact_linux_isa_discovery import relocated_interpreter_bias
         image=minimal_elf(vaddr=0x1100)
         self.assertEqual(relocated_interpreter_bias(image),INTERP_BIAS)
+        misaligned=minimal_elf()  # Offsets and virtual pages disagree.
+        self.assertIsNone(relocated_interpreter_bias(misaligned))
         self.assertIsNone(relocated_interpreter_bias(image[:-0x104]))
         self.assertIsNone(relocated_interpreter_bias(b"not elf"))
         invalid=bytearray(image)
