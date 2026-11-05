@@ -196,3 +196,7 @@ The native source archive now includes checked-out `sys/src/libregexp` and
 builds/verifies its ARM64 archive **before** any bootrc tools and kernel
 bootfs packaging. M6.1 acceptance also requires the library; no
 kernel banner or source-only test can bypass this fail-closed gate.
+
+## 2026-11-05 QEMU PL011 short-console-input RX interrupt repair
+
+[Native M6.2 run #41959063374](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41959063374)\ncompiled all 17 bootstrap libraries and an ARM64 QEMU kernel with the embedded\nbootfs. Source-built kernel boot and SHA verification passed, but the second\nAArch64 guest repeatedly printed the `bootargs is` prompt while the host\nprobe had sent the short `!rc\\r` recovery-shell input. No guest-side HTTP,\nshell or block read/write evidence was obtained; M6.2 failed as required.\n\nThe PL011 driver enabled FIFO (`FEN`) and RX threshold interrupt\n(`RXIM`) but not receive-timeout interrupt (`RTIM`, bit 6). Short input\nmay remain below the FIFO trigger threshold. The experimental ARM64 QEMU\nconsole enables RX timeout as well, retaining the existing receive-drain\nand ICR acknowledgement logic. The QEMU scratch-disk SHA step now pipes\nread-back bytes directly into the digest command, without writing to\na possibly read-only embedded `/tmp`. This is a hypothesis-driven device\nfix pending actual fresh native QEMU serial and functional-I/O proof.\n

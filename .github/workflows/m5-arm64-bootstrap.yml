@@ -17,6 +17,8 @@ on:
       - 'scripts/m6_arm64_virtio_acceptance.py'
       - 'tests/test_m6_arm64_virtio_acceptance.py'
       - 'tests/test_m6_arm64_virtio_probe.py'
+      - 'tests/test_m6_arm64_uart.py'
+      - 'sys/src/9/arm64/uartqemu.c'
       - 'docs/drivers/M5-CLOSURE-TO-M6.md'
       - '.github/workflows/m5-arm64-bootstrap.yml'
   push:
@@ -44,6 +46,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_m5_native_bootstrap.py' -v
           python3 -m unittest discover -s tests -p 'test_m6_arm64_boot_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_m6_arm64_virtio_probe.py' -v
+          python3 -m unittest discover -s tests -p 'test_m6_arm64_uart.py' -v
           python3 -m unittest discover -s tests -p 'test_m6_arm64_virtio_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_m5_server_gates.py' -v
           python3 -m unittest discover -s tests -p 'test_m5_arm64_qemu_probe.py' -v

@@ -72,7 +72,7 @@ def _guest_commands(disk_payload: bytes):
         "ip/ipconfig -d ether /net/ether0; mkdir -p /mnt/web; webfs; echo M6_STAGE_0",
         f"hget http://10.0.2.100:{NET_GUEST_PORT}/m6-probe | sha1sum -2 256; echo M6_STAGE_1",
         f"echo {token} > /dev/sd01/data; echo M6_DISK_WRITE_STATUS_$status; echo M6_STAGE_2",
-        f"dd -if /dev/sd01/data -of /tmp/m6-disk-read -bs 1 -count {len(disk_payload)} > /tmp/m6-dd.log >[2=1]; sha1sum -2 256 /tmp/m6-disk-read; echo M6_STAGE_3",
+        f"dd -if /dev/sd01/data -bs 1 -count {len(disk_payload)} | sha1sum -2 256; echo M6_STAGE_3",
     ]
 
 

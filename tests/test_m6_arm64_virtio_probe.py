@@ -21,7 +21,7 @@ class VirtioContract(unittest.TestCase):
             b"term%\r\nM6_STAGE_0\r\n" +
             m.sha256(self.net).encode() + b"\t-\r\nM6_STAGE_1\r\n" +
             b"M6_DISK_WRITE_STATUS_\r\nM6_STAGE_2\r\n" +
-            m.sha256(self.disk).encode() + b"\t/tmp/m6-disk-read\r\nM6_STAGE_3\r\n"
+            m.sha256(self.disk).encode() + b"\r\nM6_STAGE_3\r\n"
         )
 
     def adjudicate(self, **overrides):
@@ -77,7 +77,8 @@ class VirtioContract(unittest.TestCase):
         self.assertTrue(any("> /dev/sd01/data" in c for c in cmds))
         self.assertTrue(any("dd -if /dev/sd01/data" in c for c in cmds))
         self.assertFalse(any("> /dev/sd00/data" in c for c in cmds))
-        self.assertTrue(any("sha1sum -2 256 /tmp/m6-disk-read" in c for c in cmds))
+        self.assertTrue(any("| sha1sum -2 256" in c for c in cmds))
+        self.assertFalse(any("/tmp/m6-disk-read" in c for c in cmds))
 
     def test_valid_kernel_requires_existing_root_disk_before_qemu(self):
         with tempfile.TemporaryDirectory() as td:
