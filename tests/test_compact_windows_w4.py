@@ -106,10 +106,14 @@ class WindowsW4Tests(unittest.TestCase):
         def read(n):
             result=self.api(first,'ReadFile',(0x10000,address,n,count,0))
             length=struct.unpack('<I',self.read(first,count,4))[0]
-            return result,length,self.read(first,address,length)
+            # The guest correctly reports EOF with a zero-byte count.
+            # cw_read intentionally rejects zero-length memory spans; do not
+            # dereference an empty guest range in the *test harness*.
+            return result,length,(self.read(first,address,length) if length else b'')
         self.assertEqual(read(6),(1,6,b'orange'))
         self.assertEqual(read(20),(1,7,b'\napple\n'))
         self.assertEqual(read(20),(1,0,b''))
+        self.assertEqual(read(0),(1,0,b''))  # zero-length request is also valid
         self.assertEqual(first[1].stdin_pos,13)
         self.assertEqual(first[1].stdin_bytes,13)
         self.assertEqual(second[1].stdin_configured,0)
