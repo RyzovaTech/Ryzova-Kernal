@@ -118,16 +118,29 @@ The runner is required to:
    9front builder using its own `7c`/`7l` tools and create the actual
    `9qemu.u` image. A compiler-missing or build-failed result is a
    **hard failed qualification**, not a simulation or a skipped test.
-4. Copy the kernel to the builder's FAT volume, independently re-extract
-   it from its QEMU block-device image and compare byte-for-byte SHA-256.
-5. Start a **separate** `qemu-system-aarch64` with the produced binary;
-   require both the original ARM64 kernel `Plan 9` boot banner and
-   `cpu0: 1000MHz QEMU` marker, preserving the bounded serial log.
+4. On the frozen AMD64 builder image, ARM64 `7c`/`7l` exist but
+   `/arm64/lib/libc.a` is initially absent. Cross-build all seven
+   mandatory ARM64 kernel link libraries from exact tracked source.
+   The native ARM64 full bootfs requires additional unbuilt
+   `/arm64/bin/paqfs`, `factotum` and other userland tools. A
+   **separately hashed test-only EARLY-BOOT qemu config** therefore omits
+   the final `bootdir` section. The original qemu source hash is retained
+   and the deterministic derived config SHA is independently verified.
+5. Build the resulting *early-boot-only* kernel with forced 9front `7c/7l`
+   rebuild, copy it to the builder's FAT volume and independently
+   re-extract/hash the actual binary.
+6. Start a separate `qemu-system-aarch64` and require the ARM64
+   `Plan 9` and `cpu0: 1000MHz QEMU` serial markers. Even if this
+   passes, it is **kernel early-main proof**, not a complete boot to
+   functional userland, and absolutely not a Windows ARM64 PE execution.
 
-This is a strict **experimental** test: a pass must be backed by the
-actual runner and source-hashed build/boot artifact, never the mocked
-serial data in Python unit tests. As of introduction, it is not
-independently qualified until the live native-system workflow runs.
+This is a strict **experimental EARLY-BOOT** test: a pass must be
+backed by actual full-system QEMU AArch64 console evidence, never mocked
+serial data in Python unit tests. Earlier real attempts proved source
+libraries compiled on the W6 AMD64 builder but exposed missing ARM64
+bootfs executable dependencies. No native ARM64 **full** boot,
+Windows guest PE, driver binding or physical board is qualified by this
+test.
 
 Even a successful native ARM64 *kernel boot* **does not execute a Windows
 ARM64 PE in that kernel**. That requires a future original ARM64 Plan 9
