@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """M2 chipset family audit and adversarial metadata checks."""
 import copy
 from pathlib import Path

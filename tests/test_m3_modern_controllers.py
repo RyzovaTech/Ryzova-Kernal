@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """M3 modern Intel 10GbE and NVMe hardware safety regression.
 
 Static invariants complement native 6c/6l/QEMU compilation. They do not

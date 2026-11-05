@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """M5.2 / M5.3 kernel lifecycle + honest evidence qualification tests."""
 import copy
 from pathlib import Path
