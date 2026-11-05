@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #include "../ryzova/compat/linux/syscall.h"
 #include "../ryzova/compat/linux/namespace.h"
 #include <stdio.h>
