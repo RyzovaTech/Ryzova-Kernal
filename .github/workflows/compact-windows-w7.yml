@@ -1,0 +1,50 @@
+name: Compact Windows W7 jq baseline
+on:
+  pull_request:
+    paths:
+      - 'scripts/compact_windows_w7_jq.py'
+      - 'tests/fixtures/windows_w7_admission.c'
+      - 'ryzova/compat/windows/**'
+      - '.github/workflows/compact-windows-w7.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-reference:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - shell: pwsh
+        run: git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: /scripts/compact_windows_w7_jq.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/compact_windows_w7_jq.py reference --out artifacts/w7-reference
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w7-jq-reference
+          path: artifacts/w7-reference
+          if-no-files-found: error
+  admission-audit:
+    runs-on: ubuntu-24.04
+    needs: windows-reference
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-w7-jq-reference
+          path: artifacts/w7-reference
+      - run: python3 scripts/compact_windows_w7_jq.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w7-jq-admission-audit
+          path: artifacts/w7-audit
+          if-no-files-found: error
