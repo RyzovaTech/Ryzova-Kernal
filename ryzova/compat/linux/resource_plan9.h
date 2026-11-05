@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Native directory capabilities: local/9P namespace paths explicitly selected
  * by the trusted launcher. Native Plan 9 has no host symbolic-link traversal.
  * Same-directory rename is atomic and never removes an existing destination;

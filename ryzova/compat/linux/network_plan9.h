@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Explicit TCP resources implemented through the native Plan 9 namespace. */
 #include "network_cli.h"
 typedef struct NetworkHost {const char *target;char directory[NETPATHLEN];} NetworkHost;

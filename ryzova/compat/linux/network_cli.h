@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Guest destination parser only. Native backends separately parse the grant. */
 static int network_guest(const char *text,RyzNetworkGrant *grant,const char **target)
 {
