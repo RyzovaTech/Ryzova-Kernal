@@ -58,3 +58,68 @@ synthetic temporary data and self-generated test keys, explicitly *not*
 physical measurements. Even a correctly signed and hashed bundle still
 reports `physical_hardware_qualified=false` until separately witnessed
 real power-cut tests and human review have actually occurred.
+
+
+## W9 external lab operator evidence packaging — non-certifying
+
+A real, authorized lab operator can now use
+`scripts/compact_windows_w9_lab_bundle.py` to prepare a reproducible,
+**unsigned** physical-event report from already-collected original logs.
+This program **does not command an external power controller**, reset any
+device, generate witness keys, sign a report, or create physical evidence.
+
+Before running it, the operator and independent observer must establish:
+
+- A **disposable** SSD/controller and separate physical cut-and-power
+  measurement fixture. Never test personal or production disks. Document
+  firmware, model, sector size, hashed serial and exact kernel commit.
+- Three independently measured, monotonically numbered hardware events:
+  successful flush ACK/nonce, physically measured power absence, cold power
+  restoration, exact post-reboot file SHA-256 recovery.
+- Separate original, nonempty, bounded logs for each cycle:
+  `<cycle-id>/flush-ack.serial`,
+  `<cycle-id>/power-cut.serial`,
+  `<cycle-id>/reboot.serial`; and two independent error-injection
+  logs: `negative/flush-fault.serial` and
+  `negative/flush-sticky.serial`.
+- An **operator-provided** `operator-events.json` containing actual measured
+  event fields and device identity in the existing
+  `compact-windows-external-powercut/v1` schema. The preparation tool
+  computes and binds only raw log SHA-256 values. It **never sets**
+  `power_absent_measured`,
+  `cut_by_independent_controller`,
+  `flush_acked` or any other claimed observation. Missing or
+  inconsistent observed facts fail closed.
+
+Run it **outside GitHub hosted CI**, after the hardware run, on an offline
+review machine with the original log files:
+
+```sh
+python3 scripts/compact_windows_w9_lab_bundle.py \
+  --operator-report operator-events.json \
+  --raw-logs original-hardware-serial-logs \
+  --unsigned-output external-powercut-UNSIGNED.json
+```
+
+This produces deterministic JSON bytes for an **independent** Ed25519 witness
+to review and sign using their own externally controlled key. The public
+key fingerprint must be pinned **out-of-band by the reviewer**. Only after
+external signing should the original verifier be run with the external
+public key, fingerprint, signature and the original log directory:
+
+```sh
+python3 scripts/compact_windows_physical_powercut.py \
+  external-powercut-UNSIGNED.json \
+  --trusted-public-key independent-witness-public.pem \
+  --trusted-key-sha256 OUT_OF_BAND_TRUSTED_DER_SHA256 \
+  --signature external-witness.sig \
+  --evidence-directory original-hardware-serial-logs
+```
+
+**Neither successful packaging nor signed-file verification is a hardware
+release approval.** The independent operator, hardware observer and release
+reviewer must evaluate the actual electrical measurement, controller logs,
+cut timing, cold recovery and device provenance before any later release
+gate can be considered. Tests in CI create only synthetic filesystem
+fixtures and **all** generated receipts retain
+`physical_hardware_qualified=false`.
