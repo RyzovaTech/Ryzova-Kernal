@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 4 closeout — AMD64 Ryzova Kernel and Phase 5 entry (experimental)
 
 **Meaning of 'complete' here:** The planned Phase 4.0–4.9 engineering **infrastructure** is integrated in `main` and verified by unit tests, protected source baseline checks and source-built AMD64 QEMU runtime CI. This is **not** a declaration of production reliability, physical hardware certification or a binary release.

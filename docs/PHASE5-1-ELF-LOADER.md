@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 5.1 — Linux AMD64 ELF64 load-plan foundation
 
 Files: [elf64.c](../ryzova/compat/linux/elf64.c), [elf64.h](../ryzova/compat/linux/elf64.h), [elf64_probe.c](../ryzova/compat/linux/elf64_probe.c).

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 4.5–4.9 — Reliability and release-candidate engineering
 
 **Scope:** AMD64 experimental kernel. This is infrastructure for release qualification, not a production-release claim. No automatic 9front synchronization, driver implementation changes, kernel binary upload or RyzovaOS distribution.

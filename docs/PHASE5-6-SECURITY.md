@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 5.6 — Host-only compatibility security regressions
 
 The tests on the Phase 5 draft branch exercise an untrusted-binary parser boundary and a virtual-namespace path policy. They use deterministic input mutation, strict GCC and Clang builds, UndefinedBehaviorSanitizer and explicit negative-case checks.

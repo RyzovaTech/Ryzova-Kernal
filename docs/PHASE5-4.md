@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 5.4 — Real Linux ELF static application, bounded **host interpreter** PoC
 
 **Verified scope is an offline instruction interpreter on a Linux GitHub CI host, NOT native Ryzova Kernel application execution inside QEMU.** Native Ryzova/9front kernel loader and trap path remain unmodified.

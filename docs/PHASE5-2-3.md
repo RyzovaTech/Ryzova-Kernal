@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 5.2–5.3 — Linux ABI virtual process and namespace foundations
 
 **Experimental isolated C modules. Do not merge into main until full Phase 5.**

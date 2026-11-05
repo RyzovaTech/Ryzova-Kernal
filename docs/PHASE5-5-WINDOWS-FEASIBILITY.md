@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 5.5 — Windows x64 compatibility feasibility and boundaries
 
 **Not Windows app support.** This phase provides a strict PE/COFF PE32+ x64 *metadata* parser and architectural threat model. No PE instructions execute, no Windows DLL loaded, no Win32/NT syscalls or kernel graphics/audio/UI imported.
