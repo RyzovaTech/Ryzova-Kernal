@@ -52,7 +52,9 @@ jobs:
       - name: Install independent Linux ARM64 compiler and QEMU userspace
         run: |
           sudo apt-get -o Acquire::Retries=2 update -qq
-          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends gcc-aarch64-linux-gnu qemu-user lld
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross linux-libc-dev-arm64-cross qemu-user lld
+          test -f /usr/aarch64-linux-gnu/include/bits/libc-header-start.h
+          test -f /usr/aarch64-linux-gnu/lib/libc.a
           command -v aarch64-linux-gnu-gcc
           command -v qemu-aarch64
           command -v clang
