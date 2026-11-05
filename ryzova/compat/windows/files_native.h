@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef CW_FILES_NATIVE_H
 #define CW_FILES_NATIVE_H
 #include "files.h"
