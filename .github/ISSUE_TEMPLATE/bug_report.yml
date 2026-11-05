@@ -1,0 +1,52 @@
+name: "Bug report"
+description: "Report a reproducible, non-security issue in Ryzova Kernel"
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping. Do not include secret data or exploit details here.
+        For security issues, see SECURITY.md and use a private reporting channel if configured.
+  - type: input
+    id: revision
+    attributes:
+      label: Commit SHA / branch
+      description: "Paste the exact Ryzova commit tested"
+      placeholder: "40-character SHA or branch name"
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - "Host-side test (Linux/macOS/Windows)"
+        - "Native AMD64 QEMU guest"
+        - "ARM64 QEMU / cross-build"
+        - "Physical hardware"
+        - "Documentation / CI"
+        - "Other"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: "Commands, input conditions and non-sensitive tool versions"
+      placeholder: "1. ...\n2. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Expected vs actual
+      description: "What did you expect, and what happened?"
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and limitations
+      description: "Paste or link non-sensitive logs. Distinguish tests passed, failed and not run."
+    validations:
+      required: false
