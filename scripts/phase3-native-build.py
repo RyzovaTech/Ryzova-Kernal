@@ -60,7 +60,7 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "--transform=s,^ryzova/compat/linux,sys/src/cmd/compact-linux,", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/cmd/rc", "sys/src/cmd/mkfile", "sys/src/cmd/sha1sum.c", "sys/src/cmd/webfs", "sys/src/cmd/ip", "rc/bin/hget", "sys/src/cmd/bind.c", "sys/src/cmd/cat.c", "sys/src/cmd/chmod.c", "sys/src/cmd/dd.c", "sys/src/cmd/echo.c", "sys/src/cmd/ls.c", "sys/src/cmd/mkdir.c", "sys/src/cmd/mount.c", "sys/src/cmd/mv.c", "sys/src/cmd/rm.c", "sys/src/cmd/sed.c", "sys/src/cmd/sleep.c", "sys/src/cmd/srv.c", "sys/src/cmd/test.c", "sys/src/cmd/unmount.c", "sys/src/libc", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
+subprocess.run(["tar", "--format=ustar", "--transform=s,^ryzova/compat/linux,sys/src/cmd/compact-linux,", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/cmd/rc", "sys/src/cmd/mkfile", "sys/src/cmd/sha1sum.c", "sys/src/cmd/webfs", "sys/src/cmd/ip", "rc/bin/hget", "sys/src/cmd/bind.c", "sys/src/cmd/cat.c", "sys/src/cmd/chmod.c", "sys/src/cmd/dd.c", "sys/src/cmd/echo.c", "sys/src/cmd/ls.c", "sys/src/cmd/mkdir.c", "sys/src/cmd/mount.c", "sys/src/cmd/mv.c", "sys/src/cmd/rm.c", "sys/src/cmd/sed.c", "sys/src/cmd/sleep.c", "sys/src/cmd/srv.c", "sys/src/cmd/test.c", "sys/src/cmd/unmount.c", "sys/src/libc", "sys/src/libregexp", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
@@ -195,7 +195,7 @@ if m5_arm64_native:
     # Cross-link prerequisites: the pinned AMD64 9front guest has 7c/7l,
     # but /arm64/lib/libc.a and other ARM64 archives are not preinstalled.
     # Build from this exact Ryzova checkout, separately from host AMD64 libs.
-    arm64_libs = ("libc", "libbio", "libflate", "libString", "libthread", "lib9p",
+    arm64_libs = ("libc", "libregexp", "libbio", "libflate", "libString", "libthread", "lib9p",
                   "libmp", "libsec", "libip", "libndb", "libdraw",
                   "libmemdraw", "libmemlayer", "libauth", "libauthsrv")
     armstage("m5-arm64-libdirs",

@@ -186,3 +186,13 @@ actual ARM64 native 7c/7l and fail-closed provenance gates before the
 embedded QEMU bootfs is linked. This is an experimental QEMU research
 configuration, not hardware release qualification. Negative synthetic
 contract tests must not be confused with actual HTTP and disk I/O.
+
+## ARM64 native libregexp cross-link dependency (2026-11-05)
+
+[Run #41958001641](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41958001641)
+compiled fourteen of fifteen source-built bootrc core executables but failed
+`7.sed` at `7l`: `cannot open file: /arm64/lib/libregexp.a`.
+The native source archive now includes checked-out `sys/src/libregexp` and
+builds/verifies its ARM64 archive **before** any bootrc tools and kernel
+bootfs packaging. M6.1 acceptance also requires the library; no
+kernel banner or source-only test can bypass this fail-closed gate.

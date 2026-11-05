@@ -14,7 +14,7 @@ import subprocess
 HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 REQUIRED_LIBRARIES = (
-    "libc", "libbio", "libflate", "libString", "libthread", "lib9p",
+    "libc", "libregexp", "libbio", "libflate", "libString", "libthread", "lib9p",
     "libmp", "libsec", "libip", "libndb", "libdraw",
     "libmemdraw", "libmemlayer", "libauth", "libauthsrv",
 )
