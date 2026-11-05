@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 8.2.1-8.2.4: opt-in, bounded real TLS/9P and pure-compute node PoC.
 
 Two independent *processes/network namespaces* are tested in CI; NOT two

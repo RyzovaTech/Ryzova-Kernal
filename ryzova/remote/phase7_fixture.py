@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Ephemeral fixture for localhost native QEMU 9P -> mutually TLS peer tests."""
 from contextlib import AbstractContextManager
 import hashlib

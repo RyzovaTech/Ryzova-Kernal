@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 6.4 opt-in failure containment and privacy-minimal telemetry.
 
 Host-side prototype only: a synchronous call cannot be interrupted here.

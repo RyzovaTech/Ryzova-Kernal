@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 6.1: minimal read-only 9P2000 frame server/client over injected transport.
 
 Only protocol subset, no real mount, no network sockets. Authentication is
