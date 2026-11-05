@@ -92,8 +92,8 @@ class VirtioContract(unittest.TestCase):
         source = (ROOT / "scripts/m6_arm64_virtio_probe.py").read_text()
         self.assertIn('"arm64-root-cow.qcow2"', source)
         self.assertIn('"qemu-img", "create", "-f", "qcow2"', source)
-        self.assertIn('"m6root,format=qcow2,file={root_disk}"', source)
-        self.assertIn('"m6disk,format=raw,file={disk}"', source)
+        self.assertIn('id=m6root,format=qcow2,file={root_disk}', source)
+        self.assertIn('id=m6disk,format=raw,file={disk}', source)
         self.assertIn('"root_disk_copy_on_write": False', source)
 
     def test_invalid_kernel_sha_never_starts_qemu(self):
