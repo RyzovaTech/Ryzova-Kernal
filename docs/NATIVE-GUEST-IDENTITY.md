@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Native guest mTLS identity: experimental acceptance path
 
 An opt-in TLS 1.2 listener now requires an authenticated client certificate,

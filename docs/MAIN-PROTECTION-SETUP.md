@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Main protection: administrator action still required
 
 At the 2026-10-26 check, the repository is public, `main.protected` is false

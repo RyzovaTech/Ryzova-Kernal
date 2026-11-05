@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # First physical PC qualification: evidence, not a support claim
 
 The owner has selected their physical PC as the first test target. Its exact

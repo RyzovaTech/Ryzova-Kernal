@@ -1,37 +1,32 @@
-# Contributor and outbound licensing rules
+# Contributor and outbound licensing rules — Phase 2
 
-## Licenses attach to files and copyright holders
+## Licenses attach to files and rights, not to the project name
 
-| Origin / file class | Default handling | Optional alternative commercial rights |
+| Origin / file class | Default outbound handling | Commercial relicensing |
 | --- | --- | --- |
-| Original Plan 9 / 9front | Retain original MIT terms when applicable, plus file-level exceptions | Ryzova cannot replace upstream and third-party grants |
-| Independently licensed fonts, libraries, firmware or assets | Retain original terms and notices | Not automatically covered |
-| Original Ryzova-owned file expressly marked `GPL-3.0-only` | **GPLv3 only**, text in `LICENSES/GPL-3.0-only.txt` | Possible **only when** all required rights are held |
-| Earlier Ryzova file/version marked `AGPL-3.0-only` | Historical AGPLv3 grants remain valid for those versions | Depends on rights; transition does not withdraw prior grants |
-| New external GPLv3 contribution | GPLv3 under the submitted copyright holder's valid grant | **Not commercially relicensable by Ryzova by default** |
-| Other licensed material | Follow actual inbound grant and compatibility obligations | Only with separately documented permission |
+| Original Plan 9 / 9front | Original MIT terms where applicable plus listed exceptions | Ryzova cannot replace third-party grants or disclaimers |
+| Special third-party dependencies / restricted fonts | Keep individual license and copying restrictions | Not covered by Ryzova commercial offers |
+| New Ryzova-authored file explicitly marked `AGPL-3.0-only` | AGPLv3; license text in `LICENSES/` | Alternative agreement only if sufficient rights are held |
+| New external AGPL contribution | AGPLv3 according to actual inbound grant | **Not** commercially relicensable by default |
+| Externally sourced code under another license | Follow its exact text and compatibility obligations | Requires separately documented authorization |
 
-## New contribution policy
+## Contribution acceptance process
 
-- Identify the source and copyright/provenance for material new code and generated assets. Never submit code you have no right to license.
-- Preserve existing upstream copyright statements and special exceptions.
-- For **new original Ryzova-controlled code**, use `SPDX-License-Identifier: GPL-3.0-only` where rights and compatibility allow.
-- **Do not copy or change old AGPLv3 identifiers without copyright-holder authority.** Ryzova's GPLv3 policy covers eligible Ryzova-controlled work, not every file in a Ryzova-named directory.
-- A pull request, DCO sign-off or GPLv3 license is **not** a copyright assignment or a grant of additional proprietary relicensing rights.
-- If proposed code is intended to be included in a separately commercial-licensed component, obtain an explicit, sufficient **written contributor grant** reviewed by appropriate counsel **before** offering those alternative terms.
-- If permission is not available, preserve the contribution under its authorized public license where compatible, keep it out of the optional commercial offer, or decline it.
-- Record contributor credit, provenance, source commits, SPDX markers and test evidence.
+- Require a source/provenance statement for material code, generated assets, or substantial copied code.
+- Check file- and directory-level notices before approving an import.
+- New Ryzova-specific source should include `SPDX-License-Identifier: GPL-3.0-only` **only** if its actual rights permit this.
+- An AGPLv3 submission is **not** a copyright assignment.
+- If the code is intended for a commercial alternative, obtain a **specific written contributor grant or agreement approved by counsel**. A DCO or a normal pull request alone does not establish proprietary relicensing rights.
+- Where such a grant is unavailable, retain it only in an AGPL-compatible module or decline it for the dual-licensed component; never quietly claim rights.
+- Maintain contributor credit, original copyright notices, license inventory and merge commit provenance.
 
-## Public and commercial use
+## Open-source and commercial uses
 
-The GPLv3 and AGPLv3 are open-source licenses permitting compliant commercial use. Ryzova does **not** charge a mandatory license fee for business use of Ryzova-owned GPLv3-marked code under GPLv3. A separate paid alternative covers only negotiated and controlled rights.
+Personal use, education, open-source projects and businesses may all use appropriately licensed code according to its license. AGPL imposes copyleft/source-sharing obligations in applicable circumstances; it is **not a “noncommercial only” license**. A separately signed commercial agreement is an alternative for covered rights-controlled files and may allow terms AGPL does not.
 
-## Human approval still required
+## Decisions needing human/legal sign-off
 
-- Rights inventory and ownership verification for any file-level relicensing;
-- trademark rights and any separate branding permissions;
-- contributor commercial relicensing grants, if desired;
-- actual commercial contract, warranties, terms, taxes and pricing;
-- third-party distribution clearance and software release authorization.
-
-This policy does not override earlier grants or any third-party license. See [`../LICENSE.md`](../LICENSE.md), [`../COMMERCIAL-LICENSING.md`](../COMMERCIAL-LICENSING.md) and [`LICENSE-REVIEW.md`](LICENSE-REVIEW.md).
+- Ownership and trademarks for Ryzova brand assets.
+- Actual Contributor License Agreement form, if a dual-license grant is required.
+- Commercial contract, warranty/indemnity scope, pricing and tax matters.
+- File-level redistribution approval for upstream exceptions; no full clearance claimed.
