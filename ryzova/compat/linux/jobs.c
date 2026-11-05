@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Cooperative bounded guest processes. No native fork, exec or pipe forwarding. */
 #include "jobs.h"
 #ifndef RYZ_PLAN9

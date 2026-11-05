@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Bounded integer AMD64 interpreter. Unsupported encodings fail closed. */
 #include "process.h"
 #define CF 1U

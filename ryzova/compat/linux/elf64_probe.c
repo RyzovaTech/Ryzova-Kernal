@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Host-only test probe: NEVER transfers control to ELF entry. */
 #include "elf64.h"
 #include <stdio.h>

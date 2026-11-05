@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Shared initializer for syscall and snapshot translation units. No host paths. */
 static void vfs_init(RyzLinuxWorld *w)
 {

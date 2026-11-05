@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Queue keys retain shared backing objects, independently of current VA/maps. */
 static int futex_equal(const RyzFutexKey *a,const RyzFutexKey *b)
 {return a->kind==b->kind && a->memory==b->memory && a->identity==b->identity && a->offset==b->offset;}
