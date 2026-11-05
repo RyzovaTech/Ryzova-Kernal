@@ -60,7 +60,7 @@ jobs:
       - name: Compile genuine MIT sbase wc and pin original exact Windows-host PE for native QEMU
         shell: pwsh
         run: |
-          python scripts/compact_windows_w8_sbase_wc.py --output artifacts/compact-windows/w6-fixtures/w8-sbase-wc-reference.json
+          python scripts/compact_windows_w8_sbase_wc.py --output artifacts/compact-windows/w6-fixtures/w8-sbase-wc-reference.json --probe-ip 0x140001549
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item artifacts/windows/w8-sbase/sbase-wc-mincrt.exe artifacts/compact-windows/w6-fixtures/sbase-wc-mincrt.exe
           $receipt = Get-Content artifacts/compact-windows/w6-fixtures/w8-sbase-wc-reference.json -Raw | ConvertFrom-Json

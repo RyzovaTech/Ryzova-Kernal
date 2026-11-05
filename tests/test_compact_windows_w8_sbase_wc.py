@@ -52,6 +52,53 @@ class SbaseW8SourceTests(unittest.TestCase):
             self.assertEqual(git_blob_sha(source),digest)
 
 
+
+class SbaseW8PeOpcodeWindowTests(unittest.TestCase):
+    def fixture(self):
+        # Minimal PE32+ with one verified executable section, no runtime.
+        image=bytearray(1024)
+        image[:2]=b"MZ"
+        image[0x3c:0x40]=(0x80).to_bytes(4,"little")
+        image[0x80:0x84]=b"PE\0\0"
+        image[0x84:0x86]=(0x8664).to_bytes(2,"little")
+        image[0x86:0x88]=(1).to_bytes(2,"little")
+        image[0x94:0x96]=(0xf0).to_bytes(2,"little")
+        image[0x98:0x9a]=(0x20b).to_bytes(2,"little")
+        image[0xb0:0xb8]=(0x140000000).to_bytes(8,"little")
+        sh=0x80+24+0xf0
+        image[sh+12:sh+16]=(0x1000).to_bytes(4,"little")
+        image[sh+16:sh+20]=(0x100).to_bytes(4,"little")
+        image[sh+20:sh+24]=(0x200).to_bytes(4,"little")
+        image[sh+36:sh+40]=(0x20000020).to_bytes(4,"little")
+        image[0x249:0x249+8]=bytes.fromhex("488b4424080f1f00")
+        return bytes(image)
+
+    def test_exact_ip_executable_section_maps_to_original_bytes(self):
+        from compact_windows_w8_sbase_wc import pe_instruction_window
+        image=self.fixture()
+        receipt=pe_instruction_window(image,0x140001049)
+        self.assertEqual(receipt["rva_hex"],"0x1049")
+        self.assertEqual(receipt["image_base_hex"],"0x140000000")
+        self.assertTrue(receipt["at_ip_bytes_hex"].startswith("488b4424080f1f00"))
+        self.assertEqual(receipt["pe_sha256"],hashlib.sha256(image).hexdigest())
+        self.assertFalse(receipt["supported_instruction_claim"])
+
+    def test_unmapped_nonexecutable_and_invalid_pe_fail_closed(self):
+        from compact_windows_w8_sbase_wc import pe_instruction_window
+        original=self.fixture()
+        with self.assertRaises(ValueError):
+            pe_instruction_window(original,0x140010000)
+        with self.assertRaises(ValueError):
+            pe_instruction_window(original,0x141001049)
+        with self.assertRaises(ValueError):
+            pe_instruction_window(b"not a PE",0x140001049)
+        nonexec=bytearray(original)
+        sh=0x80+24+0xf0
+        nonexec[sh+36:sh+40]=(0x40000040).to_bytes(4,"little")
+        with self.assertRaises(ValueError):
+            pe_instruction_window(bytes(nonexec),0x140001049)
+
+
 class SbaseW8ReferenceTests(unittest.TestCase):
     def test_outputs_and_windows_crlf_normalization(self):
         for name, args, data, expected in CASES:

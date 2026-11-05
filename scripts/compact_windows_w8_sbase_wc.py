@@ -35,6 +35,67 @@ CASES = (
 )
 
 
+
+def pe_instruction_window(image, absolute_ip):
+    """Extract bounded executable-section bytes from the *exact* PE file.
+
+    This is read-only triage, not a decoder, loader or evidence of execution.
+    Never guess byte offsets from an RVA without validating PE headers.
+    """
+    if (type(image) is not bytes or not 256 <= len(image) <= 4*1024*1024 or
+            image[:2] != b"MZ" or type(absolute_ip) is not int):
+        raise ValueError("bounded PE image and absolute guest IP required")
+    def value(off, size):
+        if off < 0 or size not in (2, 4, 8) or off > len(image)-size:
+            raise ValueError("out-of-range PE field")
+        return int.from_bytes(image[off:off+size], "little")
+    pe=value(0x3c, 4)
+    if pe > len(image)-24 or image[pe:pe+4] != b"PE\0\0":
+        raise ValueError("invalid PE signature")
+    if value(pe+4,2) != 0x8664:
+        raise ValueError("diagnostic is AMD64-only")
+    count=value(pe+6,2)
+    opt_bytes=value(pe+20,2)
+    if not 1 <= count <= 96 or opt_bytes < 112:
+        raise ValueError("unbounded PE sections")
+    opt=pe+24
+    if opt > len(image)-opt_bytes or value(opt,2) != 0x20b:
+        raise ValueError("PE32+ optional header required")
+    base=value(opt+24,8)
+    if absolute_ip < base or absolute_ip-base > 0xffffffff:
+        raise ValueError("guest IP outside original PE image base")
+    rva=absolute_ip-base
+    section_table=opt+opt_bytes
+    if count*40 > len(image)-section_table:
+        raise ValueError("truncated PE section table")
+    for index in range(count):
+        section=section_table+index*40
+        section_rva=value(section+12,4)
+        raw_bytes=value(section+16,4)
+        raw_off=value(section+20,4)
+        characteristics=value(section+36,4)
+        if not (characteristics & 0x20000000):
+            continue  # only IMAGE_SCN_MEM_EXECUTE executable sections
+        if (section_rva <= rva and rva-section_rva < raw_bytes and
+                raw_off <= len(image) and raw_bytes <= len(image)-raw_off):
+            delta=rva-section_rva
+            before=min(12,delta)
+            count=min(24,raw_bytes-delta)
+            at=raw_off+delta
+            if count < 4:
+                raise ValueError("insufficient mapped instruction bytes")
+            return {
+                "pe_sha256": hashlib.sha256(image).hexdigest(),
+                "image_base_hex": hex(base),
+                "guest_ip_hex": hex(absolute_ip),
+                "rva_hex": hex(rva),
+                "mapped_section_index": index,
+                "preceding_bytes_hex": image[at-before:at].hex(),
+                "at_ip_bytes_hex": image[at:at+count].hex(),
+                "supported_instruction_claim": False,
+            }
+    raise ValueError("guest IP not backed by an executable PE section")
+
 def git_blob_sha(blob):
     if type(blob) is not bytes:
         raise TypeError("blob bytes required")
@@ -286,6 +347,8 @@ def run_reference(app, plan, provenance, commit, runner_version):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--output", type=Path, required=True)
+    ap.add_argument("--probe-ip", type=lambda v: int(v,0), default=None,
+                    help="guest VM unsupported absolute AMD64 instruction pointer, diagnostics only")
     args = ap.parse_args()
     provenance = verify_upstream_sources()
     if os.name != "nt":
@@ -309,6 +372,10 @@ if __name__ == "__main__":
     mincrt = compile_mincrt_windows(str(Path(found)/"VC/Auxiliary/Build/vcvars64.bat"),
                                    FIXTURE, output)
     report["no_crt_candidate"] = run_mincrt_reference(mincrt, plan, report)
+    if args.probe_ip is not None:
+        diagnostic=pe_instruction_window(mincrt.read_bytes(), args.probe_ip)
+        report["no_crt_opcode_probe"] = diagnostic
+        print("W8_REAL_PE_OPCODE_PROBE "+json.dumps(diagnostic,sort_keys=True))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True)+"\n",
                            encoding="utf-8")
