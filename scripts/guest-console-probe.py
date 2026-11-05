@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Drive a disposable 9front QEMU serial boot to probe access to its native rc shell.
 
 This is an experimental prerequisite for building exact Ryzova source IN the 9front VM.

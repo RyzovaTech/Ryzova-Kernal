@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Deterministic PCI source-candidate table for native Ryzova pc64 diagnostics.
 
 Only converts validated M0 candidate metadata; never provides a driver binder.
