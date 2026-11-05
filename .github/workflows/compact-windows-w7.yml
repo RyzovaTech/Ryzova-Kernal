@@ -5,6 +5,8 @@ on:
     paths:
       - 'ryzova/compat/windows/arm64_probe*'
       - 'tests/test_compact_windows_w7_arm64.py'
+      - 'scripts/compact_windows_w7_arm64_qemu_user.py'
+      - 'tests/test_compact_windows_w7_qemu_user_receipt.py'
       - 'tests/fixtures/windows_w7_arm64_reference.c'
       - 'tests/fixtures/windows_w7_arm64_call_reference.c'
       - '.github/workflows/compact-windows-w7.yml'
@@ -36,3 +38,36 @@ jobs:
         env:
           CW_W7_STRICT: '1'
         run: python3 -m unittest discover -s tests -p 'test_compact_windows_w7_arm64.py' -v
+
+  qemu-linux-aarch64-source-pe-differential:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install independent Linux ARM64 compiler and QEMU userspace
+        run: |
+          sudo apt-get -o Acquire::Retries=2 update -qq
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends gcc-aarch64-linux-gnu qemu-user lld
+          command -v aarch64-linux-gnu-gcc
+          command -v qemu-aarch64
+          command -v clang
+          command -v lld-link
+      - name: Require strict bounded and original-architecture receipts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_windows_w7_qemu_user_receipt.py' -v
+          python3 -m py_compile scripts/compact_windows_w7_arm64_qemu_user.py
+      - name: Run original source-produced Windows ARM64 PE on both ISA interpreters
+        run: |
+          python3 scripts/compact_windows_w7_arm64_qemu_user.py --output artifacts/compact-windows/w7-arm64-qemu-user.json
+      - name: Archive evidence without any native kernel or hardware claims
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-w7-linux-arm64-qemu-user-evidence
+          path: artifacts/compact-windows/w7-arm64-qemu-user.json
+          if-no-files-found: error
+          retention-days: 14
