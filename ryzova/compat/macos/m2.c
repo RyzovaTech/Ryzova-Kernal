@@ -194,7 +194,7 @@ file_trap(void)
     case TrapOpen:
         if(guest_file<0 && regs[Si]==2 && within(handle, Data, Page, 64)){
             bytes = data+handle-Data;
-            if(memchr(bytes, 0, 64)!=NULL){
+            if(memchr(bytes, 0, 64)){
                 guest_file = mac_grant_open((const char *)bytes);
                 if(guest_file>=0){
                     file_offset = 0;
