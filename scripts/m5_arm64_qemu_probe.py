@@ -40,6 +40,19 @@ def find_fat(raw):
                 yield off
 
 
+def inspect_native_boot_serial(output: bytes) -> dict:
+    """Kernel banner alone does not imply a non-panicking boot."""
+    banner = bool(re.search(rb"(?:^|\r?\n)Plan 9(?:\r?\n)", output))
+    cpu = bool(re.search(rb"(?:^|\r?\n)cpu0:[^\r\n]{1,160}(?:\r?\n)", output))
+    panic = bool(re.search(rb"(?:^|\r?\n)panic:[^\r\n]{1,200}", output))
+    return {
+        "banner": banner,
+        "cpu": cpu,
+        "panic": panic,
+        "boot_observed": bool(banner and cpu and not panic),
+    }
+
+
 def probe(overlay):
     cross=json.loads(CROSS.read_text(encoding="utf-8"))
     source=cross.get("source_sha","")
@@ -48,6 +61,7 @@ def probe(overlay):
         "source_sha":source,
         "arm64_kernel_link":cross.get("arm64_kernel_link"),
         "arm64_qemu_boot_observed":False,
+        "arm64_boot_panic_observed":False,
         "arm64_userland_function_verified":False,
         "arm64_virtio_network_verified":False,
         "arm64_virtio_storage_verified":False,
@@ -100,11 +114,13 @@ def probe(overlay):
         (OUT/"m5-arm64-boot-serial.log").write_bytes(output)
         # A kernel banner and CPU0 print coming from QEMU, not a unit test echo,
         # make a boot OBSERVATION, not an operational hardware certification.
-        banner=bool(re.search(rb"(?:^|\r?\n)Plan 9(?:\r?\n)",output))
-        cpu=bool(re.search(rb"(?:^|\r?\n)cpu0:[^\r\n]{1,160}(?:\r?\n)",output))
-        report["arm64_qemu_boot_observed"]=banner and cpu
-        report["outcome"]="kernel-boot-observed" if banner and cpu else "kernel-boot-unconfirmed"
-        if banner and cpu:
+        evidence=inspect_native_boot_serial(output)
+        report["arm64_boot_panic_observed"]=evidence["panic"]
+        report["arm64_qemu_boot_observed"]=evidence["boot_observed"]
+        report["outcome"]=("kernel-boot-observed" if evidence["boot_observed"]
+                           else "kernel-boot-panicked" if evidence["panic"]
+                           else "kernel-boot-unconfirmed")
+        if evidence["boot_observed"]:
             # M6.2 is a distinct, non-certifying VM. Preserve M6.1 success
             # if actual guest userland cannot yet reach a shell or I/O path.
             try:
