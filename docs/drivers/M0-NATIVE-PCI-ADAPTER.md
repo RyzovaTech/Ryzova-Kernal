@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # M0 Native AMD64 source-candidate adapter
 
 This is **real kernel linkage of the source-only candidate selector**, not hardware driver support.

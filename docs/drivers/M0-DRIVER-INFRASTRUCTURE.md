@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # M0 — Million Device Initiative: driver infrastructure
 
 **M0.1 is a source-candidate research index, NOT a runtime kernel driver registry.** It does not claim any new model works. Existing D0 source inventory, D-series release evidence, physical-tests.json and fail-closed approval requirements remain authoritative.

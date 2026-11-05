@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # M1 — Universal USB Class Driver Program
 
 ## Delivered in initial class-validation wave

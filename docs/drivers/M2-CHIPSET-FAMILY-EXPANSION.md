@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # M2 — Intel / AMD / Realtek chipset family expansion
 
 ## Engineering deliverables: source integration, not certification
