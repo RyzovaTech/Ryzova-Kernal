@@ -23,14 +23,14 @@ REFERENCE = "478499eefd5228f56ffaed4dafc07436b01ae1319f1cc95998aecb92e46afc1f"
 OUTPUT = b"FLEX_MACOS_M1_REFERENCE"
 
 
-def digest_line(log, path):
+def digest_line(log, path, last=False):
     matches = re.findall(rb"(?m)^([0-9a-f]{64})\s+" + re.escape(path.encode()) + rb"\r?$", log)
-    if len(matches) != 1:
+    if not matches or (not last and len(matches) != 1):
         raise ValueError(f"expected exactly one digest for {path}")
-    return matches[0].decode()
+    return matches[-1].decode()
 
 
-def main(image, bootstrap, include_m3=False, m4_reference=None, m5_reference=None):
+def main(image, bootstrap, include_m3=False, m4_reference=None, m5_reference=None, m6_reference=None):
     base_sha = bootstrap_provenance(image, bootstrap)
     output = ROOT / "artifacts/compact-macos-m2"
     output.mkdir(parents=True, exist_ok=True)
@@ -66,6 +66,21 @@ def main(image, bootstrap, include_m3=False, m4_reference=None, m5_reference=Non
                 (m5_reference / "exit.txt").read_text().strip() != "53"):
             raise ValueError("M5 macOS reference evidence mismatch")
         (output / "reference-m5").write_bytes(m5_binary)
+    m6_hashes = {}
+    if m6_reference is not None:
+        for arch in ("x86_64", "arm64"):
+            ref = m6_reference / f"compact-macos-m6-{arch}"
+            binary = (ref / "m6").read_bytes()
+            digest = hashlib.sha256(binary).hexdigest()
+            if ((ref / "commit.txt").read_text().strip() != commit or
+                    (ref / "sha256.txt").read_text().split() != [digest, "evidence/m6"] or
+                    (ref / "stdout.txt").read_bytes() != b"IN!\n" or
+                    (ref / "stderr.txt").read_bytes() or
+                    (ref / "exit.txt").read_text().strip() != "61" or
+                    (ref / "entry.txt").read_bytes() != b"IN!\nFLEX_NOTE=demo"):
+                raise ValueError(f"M6 macOS reference evidence mismatch for {arch}")
+            (output / f"m6-{arch}").write_bytes(binary)
+            m6_hashes[arch] = digest
     source = subprocess.check_output(["git", "ls-files", "sys/src/9", "sys/include",
                                       "amd64/include", "ryzova/compat/macos"], cwd=ROOT, text=True)
     archive = output / "source.tgz"
@@ -119,6 +134,23 @@ def main(image, bootstrap, include_m3=False, m4_reference=None, m5_reference=Non
                     "hget http://10.0.2.2:8000/reference-m5 > /tmp/mac-m5; sha1sum -2 256 /tmp/mac-m5",
                     "echo M5_BEGIN; compact-macos-m2 --arm64 /tmp/mac-m5 && echo M5_END",
                 ])
+            for arch, mode in (("x86_64", "--files-x86"), ("arm64", "--files-arm64")):
+                if arch not in m6_hashes:
+                    continue
+                root = f"/tmp/m6-{arch}"
+                binary = f"/tmp/m6-bin-{arch}"
+                commands.extend([
+                    f"mkdir -p {root}; echo 'IN!' > {root}/entry.txt",
+                    f"hget http://10.0.2.2:8000/m6-{arch} > {binary}; sha1sum -2 256 {binary}",
+                ])
+                for case, grant, name in (("ok", root, "entry.txt"),
+                                          ("escape", root, "../mac-outside"),
+                                          ("nogrant", "-", "entry.txt")):
+                    marker = f"M6_{arch}_{case}"
+                    commands.append(f"echo {marker}; compact-macos-m2 {mode} {binary} {grant} {name} demo && echo {marker}_END")
+                commands.append(f"sha1sum -2 256 {root}/entry.txt")
+            if m6_hashes:
+                commands.append("sha1sum -2 256 /tmp/mac-outside")
             run = session(image, commands, output, "fresh", 120, {3:"MAC_M2_END"})
         finally:
             server.shutdown()
@@ -159,7 +191,7 @@ def main(image, bootstrap, include_m3=False, m4_reference=None, m5_reference=Non
         content = b"IN!\nFLEX_NOTE=demo"
         if digest_line(run, "/tmp/mac-grant/entry.txt") != hashlib.sha256(content).hexdigest():
             raise ValueError("M3 granted write bytes mismatch")
-        if digest_line(run, "/tmp/mac-outside") != hashlib.sha256(b"SAFE\n").hexdigest():
+        if digest_line(run, "/tmp/mac-outside", last=bool(m6_hashes)) != hashlib.sha256(b"SAFE\n").hexdigest():
             raise ValueError("M3 outside file changed")
         report["m3"] = {"fixture_sha256": M3_SHA, "allowed_exit": 37, "denied_exit": 13,
                         "missing_grant_exit": 13, "stdout": "IN!\n",
@@ -187,6 +219,25 @@ def main(image, bootstrap, include_m3=False, m4_reference=None, m5_reference=Non
                         "guest_exit": 53, "instruction_steps": int(m5[1]),
                         "write_calls": 1, "rebases": 1,
                         "guest_architecture": "arm64", "flex_host_architecture": "amd64"}
+    if m6_hashes:
+        report["m6"] = {}
+        for arch, digest in m6_hashes.items():
+            if digest_line(run, f"/tmp/m6-bin-{arch}") != digest:
+                raise ValueError(f"M6 executable hash mismatch for {arch}")
+            for case in ("ok", "escape", "nogrant"):
+                marker = f"M6_{arch}_{case}".encode()
+                prefix = (rb"IN!\r?\nMAC_M6_EXIT 61" if case == "ok" else rb"MAC_M6_EXIT 13")
+                stats = (b"OPEN 1 READ 1 WRITE 1 CLOSE 1 DENIED 0" if case == "ok" else
+                         b"OPEN 0 READ 0 WRITE 0 CLOSE 0 DENIED 1")
+                match = re.search(rb"(?m)^" + marker + rb"\r?\n" + prefix +
+                                  rb" STEPS ([0-9]+) " + stats + rb"\r?\n" + marker + rb"_END\r?$", run)
+                if not match or not 1 <= int(match[1]) <= 64:
+                    raise ValueError(f"M6 receipt mismatch for {arch} {case}: " + run[-4500:].decode(errors="replace"))
+            if digest_line(run, f"/tmp/m6-{arch}/entry.txt") != hashlib.sha256(b"IN!\nFLEX_NOTE=demo").hexdigest():
+                raise ValueError(f"M6 file bytes mismatch for {arch}")
+            report["m6"][arch] = {"reference_sha256": digest, "stdout": "IN!\n", "guest_exit": 61,
+                                  "file_bytes": "IN!\nFLEX_NOTE=demo", "escape_exit": 13,
+                                  "missing_grant_exit": 13, "outside_unchanged": True}
     (output / "qualification.json").write_text(json.dumps(report, indent=2)+"\n")
     print(json.dumps(report))
 
@@ -194,4 +245,5 @@ def main(image, bootstrap, include_m3=False, m4_reference=None, m5_reference=Non
 if __name__ == "__main__":
     main(Path(sys.argv[1]), Path(sys.argv[2]), "--m3" in sys.argv[3:],
          Path(sys.argv[4]) if len(sys.argv) >= 5 and sys.argv[3] == "--m3" else None,
-         Path(sys.argv[5]) if len(sys.argv) == 6 and sys.argv[3] == "--m3" else None)
+         Path(sys.argv[5]) if len(sys.argv) >= 6 and sys.argv[3] == "--m3" else None,
+         Path(sys.argv[6]) if len(sys.argv) == 7 and sys.argv[3] == "--m3" else None)

@@ -26,7 +26,8 @@ class ReferenceExecution(unittest.TestCase):
                         str(ROOT / "ryzova/compat/macos/m2.c"), "-lcrypto",
                         str(ROOT / "ryzova/compat/macos/grant.c"),
                         str(ROOT / "ryzova/compat/macos/dynamic.c"),
-                        str(ROOT / "ryzova/compat/macos/arm64.c"), "-o", str(cls.runner)], check=True)
+                        str(ROOT / "ryzova/compat/macos/arm64.c"),
+                        str(ROOT / "ryzova/compat/macos/workload.c"), "-o", str(cls.runner)], check=True)
 
     def test_reference_matches_macos(self):
         self.assertEqual(hashlib.sha256(FIXTURE.read_bytes()).hexdigest(),

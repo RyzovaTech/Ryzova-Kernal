@@ -1,4 +1,4 @@
-name: Compact macOS M2 through M5 execution proof
+name: Compact macOS M2 through M6 execution proof
 on:
   pull_request:
     paths:
@@ -8,8 +8,10 @@ on:
       - 'tests/fixtures/macos_m3_guest.S'
       - 'tests/fixtures/macos_m4_reference.S'
       - 'tests/fixtures/macos_m5_reference.S'
+      - 'tests/fixtures/macos_m6_reference.S'
       - 'scripts/compact_macos_m3_fixture.py'
       - 'scripts/compact_macos_m2_native.py'
+      - 'scripts/compact_macos_m6_check.py'
       - '.github/workflows/compact-macos-m2.yml'
   workflow_dispatch:
 permissions:
@@ -86,9 +88,50 @@ jobs:
           name: compact-macos-m5-reference
           path: evidence/
           if-no-files-found: error
+  macos-file-reference:
+    strategy:
+      matrix:
+        include:
+          - {arch: x86_64, runner: macos-15-intel}
+          - {arch: arm64, runner: macos-15}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            tests/fixtures
+      - name: Build and verify scoped file workload
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "$ARCH"
+          mkdir -p evidence
+          clang -arch "$ARCH" -Wl,-fixup_chains tests/fixtures/macos_m6_reference.S -o evidence/m6
+          test "$(lipo -archs evidence/m6)" = "$ARCH"
+          printf 'IN!\n' > evidence/entry.txt
+          status=0
+          (cd evidence && env -i FLEX_NOTE=demo ./m6 entry.txt > stdout.txt 2> stderr.txt) || status=$?
+          test "$status" -eq 61
+          test ! -s evidence/stderr.txt
+          printf 'IN!\n' | cmp - evidence/stdout.txt
+          printf 'IN!\nFLEX_NOTE=demo' | cmp - evidence/entry.txt
+          printf '%s\n' "$status" > evidence/exit.txt
+          git rev-parse HEAD > evidence/commit.txt
+          shasum -a 256 evidence/m6 > evidence/sha256.txt
+          sw_vers > evidence/platform.txt
+          otool -l evidence/m6 > evidence/load-commands.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compact-macos-m6-${{ matrix.arch }}
+          path: evidence/
+          if-no-files-found: error
   native:
     runs-on: ubuntu-24.04
-    needs: [reference, macos-dynamic-reference, macos-arm64-reference]
+    needs: [reference, macos-dynamic-reference, macos-arm64-reference, macos-file-reference]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -103,6 +146,14 @@ jobs:
         with:
           name: compact-macos-m5-reference
           path: artifacts/m5-reference
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: compact-macos-m6-*
+          path: artifacts/m6-reference
+      - run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=undefined -fno-sanitize-recover=all \
+            ryzova/compat/macos/{m2,grant,dynamic,arm64,workload}.c -lcrypto -o /tmp/mac-runner
+          python3 scripts/compact_macos_m6_check.py /tmp/mac-runner artifacts/m6-reference
       - run: MAC_M5_REFERENCE=artifacts/m5-reference/m5 python3 -m unittest discover -s tests -p test_compact_macos_m2.py -v
       - run: |
           sudo apt-get update -qq
@@ -113,7 +164,7 @@ jobs:
           echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  bootstrap.qcow2.gz' | sha256sum -c -
           gzip -dc bootstrap.qcow2.gz > bootstrap.qcow2
           qemu-img create -f qcow2 -F qcow2 -b bootstrap.qcow2 mac-m2.qcow2
-      - run: python3 scripts/compact_macos_m2_native.py mac-m2.qcow2 bootstrap.qcow2.gz --m3 artifacts/m4-reference artifacts/m5-reference
+      - run: python3 scripts/compact_macos_m2_native.py mac-m2.qcow2 bootstrap.qcow2.gz --m3 artifacts/m4-reference artifacts/m5-reference artifacts/m6-reference
       - uses: actions/upload-artifact@v4
         if: always()
         with:

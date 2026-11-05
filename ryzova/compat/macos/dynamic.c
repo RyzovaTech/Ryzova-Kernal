@@ -131,20 +131,25 @@ segment_ok(const Byte *cmd, U32 size, U32 length, unsigned int index, U64 *prefe
 
 /* One page, one chain, one strong _write bind. Rebase targets are image offsets. */
 static int
-apply_fixups(const Byte *p, U32 length, Byte *data, MacDynamic *plan, U32 page)
+apply_fixups(const Byte *p, U32 length, Byte *data, MacDynamic *plan, U32 page, int files)
 {
     U32 starts, imports, symbols, section, offset, name, next;
     U64 pointer, target;
+    static const char *names[] = {"_write", "_open", "_read", "_close"};
+    U32 imports_count, ids[MacImports], ordinal, id, j;
     unsigned int i;
-    int bound = 0;
 
-    if(length<28 || le32(p)!=0 || le32(p+16)!=1 || le32(p+20)!=1 || le32(p+24)!=0)
+
+    if(length<28 || le32(p)!=0 || le32(p+20)!=1 || le32(p+24)!=0)
+        return 0;
+    imports_count = le32(p+16);
+    if(imports_count!=(files ? MacImports : 1))
         return 0;
     starts = le32(p+4);
     imports = le32(p+8);
     symbols = le32(p+12);
-    if(starts<28 || !span(length, starts, 20) || !span(length, imports, 4) ||
-       symbols<imports+4 || symbols>=length || imports<starts+20)
+    if(starts<28 || !span(length, starts, 20) || !span(length, imports, imports_count*4) ||
+       symbols<imports+imports_count*4 || symbols>=length || imports<starts+20)
         return 0;
     if(le32(p+starts)!=4 || le32(p+starts+4)!=0 ||
        le32(p+starts+8)!=0 || le32(p+starts+16)!=0)
@@ -157,9 +162,20 @@ apply_fixups(const Byte *p, U32 length, Byte *data, MacDynamic *plan, U32 page)
        le16(p+section+6)!=6 || le64(p+section+8)!=page ||
        le32(p+section+16)!=0 || le16(p+section+20)!=1)
         return 0;
-    name = le32(p+imports);
-    if((name&0x1ff)!=1 || !exact_string(p+symbols, length-symbols, name>>9, "_write"))
-        return 0;
+    for(i=0; i<imports_count; i++){
+        name = le32(p+imports+4*i);
+        if((name&0x1ff)!=1)
+            return 0;
+        for(id=0; id<imports_count; id++)
+            if(exact_string(p+symbols, length-symbols, name>>9, names[id]))
+                break;
+        if(id==imports_count)
+            return 0;
+        for(j=0; j<i; j++)
+            if(ids[j]==id)
+                return 0;
+        ids[i] = id;
+    }
     offset = le16(p+section+22);
     for(i=0; i<32; i++){
         if(offset%4 || !span(page, offset, 8))
@@ -167,11 +183,17 @@ apply_fixups(const Byte *p, U32 length, Byte *data, MacDynamic *plan, U32 page)
         pointer = le64(data+offset);
         next = ((pointer>>51)&0xfff)*4;
         if(pointer>>63){
-            if(bound || (pointer&0x7ffffffffffffULL)!=0)
+            ordinal = pointer&0xffffff;
+            if(ordinal>=imports_count || ((pointer>>24)&0x7ffffff)!=0)
                 return 0;
-            plan->write_slot = offset;
-            store64(data+offset, MacWriteThunk);
-            bound = 1;
+            id = ids[ordinal];
+            if(plan->bound&(1U<<id))
+                return 0;
+            plan->slots[id] = offset;
+            plan->bound |= 1U<<id;
+            if(id==MacWrite)
+                plan->write_slot = offset;
+            store64(data+offset, MacWriteThunk+16*id);
         }else{
             target = pointer&0xfffffffffULL;
             if(((pointer>>36)&0x7fff)!=0 || target>=3*page)
@@ -180,7 +202,7 @@ apply_fixups(const Byte *p, U32 length, Byte *data, MacDynamic *plan, U32 page)
             plan->rebases++;
         }
         if(next==0)
-            return bound;
+            return plan->bound==(1U<<imports_count)-1;
         if(next<8)
             return 0;
         offset += next;
@@ -189,14 +211,16 @@ apply_fixups(const Byte *p, U32 length, Byte *data, MacDynamic *plan, U32 page)
 }
 
 int
-mac_dynamic_load(const Byte *image, U32 length, Byte *text, Byte *data, MacDynamic *out, int arm64)
+mac_dynamic_load(const Byte *image, U32 length, Byte *text, Byte *data, MacDynamic *out, int arm64, int files)
 {
     U32 commands, end, offset, size, kind, bit, seen, i, ncmd, name, segments;
     U32 page = arm64 ? MacArmPage : MacPage;
     U64 preferred = 0;
     Region fixups = {0, 0};
     const Byte *cmd;
-    MacDynamic plan = {0, 0, 0};
+    MacDynamic plan;
+
+    memset(&plan, 0, sizeof plan);
 
     if(length<=2*page || length>3*page || le32(image)!=0xfeedfacfU ||
        le32(image+4)!=(arm64 ? 0x0100000cU : 0x01000007U) ||
@@ -303,7 +327,7 @@ mac_dynamic_load(const Byte *image, U32 length, Byte *text, Byte *data, MacDynam
     if(offset!=end || segments!=4 || (seen&15)!=15 || (arm64 && !(seen&4096)))
         return 0;
     memmove(data, image+page, page);
-    if(!apply_fixups(image+fixups.offset, fixups.size, data, &plan, page))
+    if(!apply_fixups(image+fixups.offset, fixups.size, data, &plan, page, files))
         return 0;
     memmove(text, image, page);
     *out = plan;
