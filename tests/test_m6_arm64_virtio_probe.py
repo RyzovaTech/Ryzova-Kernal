@@ -63,6 +63,12 @@ class VirtioContract(unittest.TestCase):
         self.assertFalse(m.standalone_marker(fake, "M6_DISK_WRITE_STATUS_"))
         self.assertFalse(m.standalone_marker(fake, "M6_STAGE_2"))
 
+    def test_boot_prompt_enters_embedded_rc_recovery_shell(self):
+        source = (ROOT/"scripts/m6_arm64_virtio_probe.py").read_text()
+        self.assertIn('proc.stdin.write(b"!rc\\r")', source)
+        self.assertIn('b"bootargs is " in tail', source)
+        self.assertIn('if b"term%" in tail:', source)
+
     def test_guest_commands_use_disposable_sda_and_explicit_io(self):
         cmds = m._guest_commands(self.disk)
         self.assertEqual(len(cmds), 4)

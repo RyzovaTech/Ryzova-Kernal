@@ -190,7 +190,7 @@ def run_probe(kernel: Path, source_sha: str, expected_digest: str,
                             raw.extend(data[:MAX_SERIAL-len(raw)])
                     tail = bytes(raw[-16000:])
                     if b"bootargs is " in tail and not bootargs_answered:
-                        proc.stdin.write(b"\r")
+                        proc.stdin.write(b"!rc\r")
                         proc.stdin.flush()
                         bootargs_answered = True
                     if (b"user[glenda]:" in tail or b"user:" in tail) and not user_answered:

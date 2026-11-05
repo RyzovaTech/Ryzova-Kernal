@@ -23,6 +23,8 @@ def fixture():
         "arm64_paqfs_userspace": "pass",
         "arm64_factotum_userspace": "pass",
         "arm64_rc_userspace": "pass",
+        "arm64_bootfs_core_complete": True,
+        "arm64_bootfs_core_binaries": {name: "pass" for name in ("bind","cat","chmod","dd","echo","ls","mkdir","mount","mv","rm","sed","sleep","srv","test","unmount")},
         "arm64_kernel_link": "pass",
         "arm64_fat_copy_verified": True,
         "arm64_uimage_guest_sha256": DIGEST,
@@ -61,6 +63,14 @@ class M6NativeBootAcceptance(unittest.TestCase):
             report = gate.evaluate(cross, boot, SHA)
             self.assertFalse(report["checks"]["all_target_libraries_built"], lib)
             self.assertFalse(report["arm64_qemu_boot_accepted"], lib)
+
+    def test_missing_bootstrap_core_bin_blocks_source_built_boot_acceptance(self):
+        cross, boot = fixture()
+        cross["arm64_bootfs_core_binaries"]["echo"] = "blocked"
+        self.assertFalse(gate.evaluate(cross, boot, SHA)["arm64_qemu_boot_accepted"])
+        cross, boot = fixture()
+        cross["arm64_bootfs_core_complete"] = False
+        self.assertFalse(gate.evaluate(cross, boot, SHA)["arm64_qemu_boot_accepted"])
 
     def test_missing_native_rc_and_kernel_panic_block_acceptance(self):
         cross, boot = fixture()

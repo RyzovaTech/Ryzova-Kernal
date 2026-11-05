@@ -161,3 +161,18 @@ boot panic, even when the Plan 9 banner and cpu0 text were printed.
 This repairs prior false-positive boot qualification; kernel proof and
 functional data-plane qualification are still separate. Zero physical
 models are certified.
+
+## 2026-11-05 native ARM64 bootrc command repair
+
+The last exact-head guest serial in run
+https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41953538116
+proved source-built rc, but ARM64 echo, test, sed, bind and other bootfs
+commands were absent. The guest printed tens of thousands of repeated
+bootrc command errors rather than a usable interactive recovery shell.
+
+The native pinned-guest build now cross-builds 15 core ARM64 bootrc
+utilities from the same checkout. The kernel link qualification now
+requires each executable to be installed and verified, and rejects
+missing reports. M6.2 uses the explicit Plan 9 bootargs `!rc` prompt
+only for the research QEMU recovery shell, not for general boot success.
+Real network and scratch disk I/O remain separate mandatory tests.
