@@ -186,6 +186,26 @@ def run(image, archive, result_dir):
         index = len(commands)
         commands.append("ls " + libpaths + " && echo CW_W7_A64_ALL_LINK_LIBS_OK")
         required[index] = "CW_W7_A64_ALL_LINK_LIBS_OK"
+        # The frozen AMD64 image lacks the ARM64 /bin/paqfs, auth/factotum
+        # and other original ARM64 bootfs tools. For this test we generate
+        # a deterministic, separately hashed *EARLY-BOOT-ONLY* qemu profile
+        # by removing the final bootdir section. This does NOT qualify a
+        # functional ARM64 Plan9 userland, let alone Windows ARM64 PE.
+        original_qemu = (ROOT / "sys/src/9/arm64/qemu").read_bytes()
+        if b"\nbootdir\n" not in original_qemu:
+            raise ValueError("source qemu bootdir profile changed unexpectedly")
+        early_qemu = original_qemu.split(b"bootdir\n", 1)[0]
+        expected_early_conf_sha = hashlib.sha256(early_qemu).hexdigest()
+        index = len(commands)
+        commands.append(
+            "cd /sys/src/9/arm64; "
+            "sed '/^bootdir/,$d' qemu > /tmp/w7-a64-early-config; "
+            "test -s /tmp/w7-a64-early-config && "
+            "cp /tmp/w7-a64-early-config qemu && "
+            "echo CW_W7_A64_EXPLICIT_EARLY_PROFILE; "
+            "sha1sum -2 256 qemu"
+        )
+        required[index] = "CW_W7_A64_EXPLICIT_EARLY_PROFILE"
         index = len(commands)
         commands.append(
             "cd /sys/src/9/arm64; objtype=arm64 mk -a > "
@@ -210,6 +230,9 @@ def run(image, archive, result_dir):
     if not re.search(rb"(?m)^" + compressed.encode() +
                      rb"\s+/tmp/w7-a64\.tgz\r?$", serial):
         raise ValueError("original Ryzova ARM64 source archive SHA absent in guest")
+    if not re.search(rb"(?m)^" + expected_early_conf_sha.encode() +
+                     rb"\s+qemu\r?$", serial):
+        raise ValueError("early-boot-only configuration hash mismatch")
     hashes = re.findall(
         rb"(?m)^([0-9a-f]{64})\s+(?:9qemu\.u|/n/9fat/9qemu\.u)\r?$", serial)
     if len(hashes) != 2 or hashes[0] != hashes[1]:
@@ -227,8 +250,12 @@ def run(image, archive, result_dir):
         "ryzova_arm64_bundle_sha256": compressed,
         "source_built_arm64_9qemu_u_sha256": expected,
         "source_built_arm64_9qemu_u_bytes": n,
+        "derived_early_boot_qemu_config_sha256": expected_early_conf_sha,
+        "boot_profile": "source-identical-arm64-kernel-with-test-only-empty-bootdir",
         **boot,
-        "native_ryzova_arm64_kernel_boot_qualified": True,
+        "native_ryzova_arm64_kernel_early_boot_verified": True,
+        "native_ryzova_arm64_full_boot_qualified": False,
+        "native_ryzova_arm64_kernel_boot_qualified": False,
         "actual_native_arm64_windows_pe_qualified": False,
         "full_windows_v1_release_qualified": False,
         "real_physical_arm64_hardware_qualified": False,
@@ -242,7 +269,8 @@ def run(image, archive, result_dir):
         "schema": SCHEMA,
         "source_commit": source_commit,
         "arm64_kernel_sha256": expected,
-        "native_ryzova_arm64_kernel_boot_qualified": True,
+        "native_ryzova_arm64_kernel_early_boot_verified": True,
+        "native_ryzova_arm64_kernel_boot_qualified": False,
         "actual_native_arm64_windows_pe_qualified": False,
         "physical_power_cut_qualified": False,
     }, sort_keys=True))
