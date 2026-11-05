@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 6.3: allowlisted pure arithmetic task offload prototype.
 
 No arbitrary code/command execution, no OS process creation, no actual network

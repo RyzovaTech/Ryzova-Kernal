@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef CW_PORTABLE_H
 #define CW_PORTABLE_H
 #ifdef CW_PLAN9

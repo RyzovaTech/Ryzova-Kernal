@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #include "sync_protocol.h"
 static void hex(CwSyncNonce value,char *out) {
     static char digits[]="0123456789abcdef";unsigned int i;
