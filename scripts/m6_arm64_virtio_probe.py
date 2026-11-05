@@ -71,19 +71,21 @@ def _guest_commands(disk_payload: bytes):
     return [
         "ip/ipconfig -d ether /net/ether0; webfs; echo M6_STAGE_0",
         f"hget http://10.0.2.100:{NET_GUEST_PORT}/m6-probe | sha1sum -2 256; echo M6_STAGE_1",
-        f"echo {token} > /dev/sd00/data; echo M6_DISK_WRITE_STATUS_$status; echo M6_STAGE_2",
-        f"dd -if /dev/sd00/data -of /tmp/m6-disk-read -bs 1 -count {len(disk_payload)} > /tmp/m6-dd.log >[2=1]; sha1sum -2 256 /tmp/m6-disk-read; echo M6_STAGE_3",
+        f"echo {token} > /dev/sd01/data; echo M6_DISK_WRITE_STATUS_$status; echo M6_STAGE_2",
+        f"dd -if /dev/sd01/data -of /tmp/m6-disk-read -bs 1 -count {len(disk_payload)} > /tmp/m6-dd.log >[2=1]; sha1sum -2 256 /tmp/m6-disk-read; echo M6_STAGE_3",
     ]
 
 
 def run_probe(kernel: Path, source_sha: str, expected_digest: str,
-              out: Path, *, timeout_seconds: int = 80) -> dict:
+              out: Path, *, root_overlay: Path | None = None,
+              timeout_seconds: int = 100) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     result = {
         "schema": SCHEMA, "source_sha": source_sha,
         "expected_uimage_sha256": expected_digest,
         "verified_uimage_sha256": False,
         "qemu_virtio_devices_attached": False,
+        "root_disk_copy_on_write": False,
         "guest_shell_reached": False,
         "http_guest_request_observed": False,
         "guest_network_digest_verified": False,
@@ -103,6 +105,8 @@ def run_probe(kernel: Path, source_sha: str, expected_digest: str,
         result["outcome"] = "invalid-kernel-digest"
     elif not kernel.is_file() or sha256(kernel.read_bytes()) != expected_digest:
         result["outcome"] = "kernel-digest-mismatch"
+    elif root_overlay is None or not root_overlay.is_file():
+        result["outcome"] = "rootfs-disk-missing"
     else:
         result["verified_uimage_sha256"] = True
         net_payload = ("RYZOVA_M6_NET_DATA_" + source_sha + "\n").encode()
@@ -126,6 +130,17 @@ def run_probe(kernel: Path, source_sha: str, expected_digest: str,
 
         with tempfile.TemporaryDirectory(prefix="ryzova-m6-virtio-") as td:
             disk = Path(td) / "guest-only-scsi.img"
+            # The source-built 9front root filesystem is an AMD64 *build*
+            # guest image, not a bootable ARM64 QEMU firmware image. Mount its
+            # architecture-neutral hjfs root through VirtIO-SCSI; use the
+            # already source-built AArch64 uImage supplied separately.
+            # Never write to the original evidence disk: COW on an overlay.
+            root_disk = Path(td) / "arm64-root-cow.qcow2"
+            subprocess.run([
+                "qemu-img", "create", "-f", "qcow2", "-F", "qcow2",
+                "-b", str(root_overlay.resolve()), str(root_disk),
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            result["root_disk_copy_on_write"] = True
             with disk.open("wb") as d:
                 d.truncate(8 * 1024 * 1024)
             httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -141,6 +156,9 @@ def run_probe(kernel: Path, source_sha: str, expected_digest: str,
                 "-netdev", f"user,id=m6net,restrict=on,guestfwd=tcp:10.0.2.100:{NET_GUEST_PORT}-tcp:127.0.0.1:{host_port}",
                 "-device", "virtio-net-pci,netdev=m6net",
                 "-device", "virtio-scsi-pci,id=m6scsi",
+                # Boot root must enumerate as sd00; scratch as sd01.
+                "-drive", f"if=none,id=m6root,format=qcow2,file={root_disk}",
+                "-device", "scsi-hd,drive=m6root",
                 "-drive", f"if=none,id=m6disk,format=raw,file={disk}",
                 "-device", "scsi-hd,drive=m6disk",
             ]
