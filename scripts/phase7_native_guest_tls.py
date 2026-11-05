@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Fail-closed QEMU guest-native pinned TLS1.2 -> 9P file/digest proof."""
 import hashlib
 import re

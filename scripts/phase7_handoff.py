@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 7 entry: cross-check native QEMU 9P and source-built kernel evidence.
 
 This is a closeout reader of *actual runner-produced artifacts*. It is not an

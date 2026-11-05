@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Build unmodified musl release fixtures; never commit generated binaries."""
 import argparse
 import hashlib

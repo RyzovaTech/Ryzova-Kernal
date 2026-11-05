@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Pinned historical BusyBox applets: compatibility fixtures, not a distribution."""
 import hashlib
 from pathlib import Path

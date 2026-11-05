@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Historical unmodified TinyCC fixture: freestanding C -> ELF, no host exec."""
 import hashlib
 from pathlib import Path
