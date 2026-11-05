@@ -30,7 +30,7 @@ def digest_line(log, path):
     return matches[0].decode()
 
 
-def main(image, bootstrap, include_m3=False, m4_reference=None):
+def main(image, bootstrap, include_m3=False, m4_reference=None, m5_reference=None):
     base_sha = bootstrap_provenance(image, bootstrap)
     output = ROOT / "artifacts/compact-macos-m2"
     output.mkdir(parents=True, exist_ok=True)
@@ -55,6 +55,17 @@ def main(image, bootstrap, include_m3=False, m4_reference=None):
                 (m4_reference / "exit.txt").read_text().strip() != "47"):
             raise ValueError("M4 macOS reference evidence mismatch")
         (output / "reference-m4").write_bytes(m4_binary)
+    m5_hash = None
+    if m5_reference is not None:
+        m5_binary = (m5_reference / "m5").read_bytes()
+        m5_hash = hashlib.sha256(m5_binary).hexdigest()
+        if ((m5_reference / "commit.txt").read_text().strip() != commit or
+                (m5_reference / "sha256.txt").read_text().split() != [m5_hash, "evidence/m5"] or
+                (m5_reference / "stdout.txt").read_bytes() != b"FLEX_MACOS_M5_ARM64!\n" or
+                (m5_reference / "stderr.txt").read_bytes() != b"" or
+                (m5_reference / "exit.txt").read_text().strip() != "53"):
+            raise ValueError("M5 macOS reference evidence mismatch")
+        (output / "reference-m5").write_bytes(m5_binary)
     source = subprocess.check_output(["git", "ls-files", "sys/src/9", "sys/include",
                                       "amd64/include", "ryzova/compat/macos"], cwd=ROOT, text=True)
     archive = output / "source.tgz"
@@ -102,6 +113,11 @@ def main(image, bootstrap, include_m3=False, m4_reference=None):
                 commands.extend([
                     "hget http://10.0.2.2:8000/reference-m4 > /tmp/mac-m4; sha1sum -2 256 /tmp/mac-m4",
                     "echo M4_BEGIN; compact-macos-m2 --dynamic /tmp/mac-m4 && echo M4_END",
+                ])
+            if m5_reference is not None:
+                commands.extend([
+                    "hget http://10.0.2.2:8000/reference-m5 > /tmp/mac-m5; sha1sum -2 256 /tmp/mac-m5",
+                    "echo M5_BEGIN; compact-macos-m2 --arm64 /tmp/mac-m5 && echo M5_END",
                 ])
             run = session(image, commands, output, "fresh", 120, {3:"MAC_M2_END"})
         finally:
@@ -159,10 +175,23 @@ def main(image, bootstrap, include_m3=False, m4_reference=None):
         report["m4"] = {"reference_sha256": m4_hash, "stdout": "FLEX_MACOS_M4_DYNAMIC\n",
                         "guest_exit": 47, "instruction_steps": int(m4[1]),
                         "write_calls": 1, "rebases": 1}
+    if m5_reference is not None:
+        if digest_line(run, "/tmp/mac-m5") != m5_hash:
+            raise ValueError("guest M5 executable digest mismatch")
+        m5 = re.search(rb"(?m)^M5_BEGIN\r?\nFLEX_MACOS_M5_ARM64!\r?\n"
+                       rb"MAC_M5_EXIT 53 STEPS ([0-9]+) WRITE_CALLS 1 REBASES 1"
+                       rb"\r?\nM5_END\r?$", run)
+        if not m5 or not 1 <= int(m5[1]) <= 64:
+            raise ValueError("M5 output, exit or relocation evidence mismatch")
+        report["m5"] = {"reference_sha256": m5_hash, "stdout": "FLEX_MACOS_M5_ARM64!\n",
+                        "guest_exit": 53, "instruction_steps": int(m5[1]),
+                        "write_calls": 1, "rebases": 1,
+                        "guest_architecture": "arm64", "flex_host_architecture": "amd64"}
     (output / "qualification.json").write_text(json.dumps(report, indent=2)+"\n")
     print(json.dumps(report))
 
 
 if __name__ == "__main__":
     main(Path(sys.argv[1]), Path(sys.argv[2]), "--m3" in sys.argv[3:],
-         Path(sys.argv[4]) if len(sys.argv) == 5 and sys.argv[3] == "--m3" else None)
+         Path(sys.argv[4]) if len(sys.argv) >= 5 and sys.argv[3] == "--m3" else None,
+         Path(sys.argv[5]) if len(sys.argv) == 6 and sys.argv[3] == "--m3" else None)

@@ -2,7 +2,7 @@
 #ifndef MAC_DYNAMIC_H
 #define MAC_DYNAMIC_H
 
-enum { MacPage = 4096, MacImageLimit = 3*MacPage, MacBase = 0x200000, MacWriteThunk = 0x10000 };
+enum { MacPage = 4096, MacArmPage = 16384, MacImageLimit = 3*MacArmPage, MacBase = 0x200000, MacWriteThunk = 0x10000 };
 typedef struct MacDynamic MacDynamic;
 struct MacDynamic {
     unsigned int entry;
@@ -11,5 +11,5 @@ struct MacDynamic {
 };
 
 int mac_dynamic_load(const unsigned char *, unsigned int, unsigned char *,
-                     unsigned char *, MacDynamic *);
+                     unsigned char *, MacDynamic *, int);
 #endif
