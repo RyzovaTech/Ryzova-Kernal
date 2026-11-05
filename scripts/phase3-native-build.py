@@ -60,7 +60,7 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "--transform=s,^ryzova/compat/linux,sys/src/cmd/compact-linux,", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/libc", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
+subprocess.run(["tar", "--format=ustar", "--transform=s,^ryzova/compat/linux,sys/src/cmd/compact-linux,", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/cmd/rc", "sys/src/libc", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
@@ -208,6 +208,14 @@ if m5_arm64_native:
         armstage("m5-arm64-verify-" + lib,
             "test -s /arm64/lib/" + lib + ".a; echo M5_ARM64_" +
             lib.upper() + "_ARTIFACT_$status")
+
+    # Source-built ARM64 rc is mandatory inside the embedded bootfs.
+    # Before this stage the kernel panicked at /bin/rc (not a boot pass).
+    armstage("m5-arm64-rc",
+        "cd /sys/src/cmd/rc; objtype=arm64 mk install > /tmp/m5-arm64-rc.log >[2=1]; "
+        "echo M5_ARM64_RC_STATUS_$status; tail -n 12 /tmp/m5-arm64-rc.log")
+    armstage("m5-arm64-rc-check",
+        "test -s /arm64/bin/rc; echo M5_ARM64_RC_ARTIFACT_$status")
 
     armstage("m5-arm64-paqfs",
         "cd /sys/src/cmd/paqfs; objtype=arm64 mk 7.paqfs > /tmp/m5-paqfs.log >[2=1]; "
@@ -392,6 +400,11 @@ if m5_arm64_native:
         ) for lib in arm64_libs
     }
     arm64_libraries_ok = all(arm64_libraries.values())
+    arm64_rc_ok = bool(
+        marks.get("m5-arm64-rc") and marks.get("m5-arm64-rc-check")
+        and re.search(r"(?:^|\\r?\\n)M5_ARM64_RC_STATUS_\\s*(?:\\r?\\n)", text)
+        and re.search(r"(?:^|\\r?\\n)M5_ARM64_RC_ARTIFACT_\\s*(?:\\r?\\n)", text)
+    )
     paqfs_ok = bool(marks.get("m5-arm64-paqfs") and marks.get("m5-arm64-paqfs-install")
         and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_STATUS_\s*(?:\r?\n)", text)
         and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_INSTALL_\s*(?:\r?\n)", text)
@@ -399,7 +412,7 @@ if m5_arm64_native:
     factotum_ok = bool(marks.get("m5-arm64-factotum") and marks.get("m5-arm64-factotum-install")
         and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_STATUS_\s*(?:\r?\n)", text)
         and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_INSTALL_\s*(?:\r?\n)", text))
-    arm64_link_ok = bool(arm64_libraries_ok and paqfs_ok and factotum_ok
+    arm64_link_ok = bool(arm64_libraries_ok and arm64_rc_ok and paqfs_ok and factotum_ok
         and marks.get("m5-arm64-full-link") and marks.get("m5-arm64-link-check") and re.search(
         r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*9qemu", text))
@@ -417,6 +430,7 @@ if m5_arm64_native:
             lib: "pass" if ok else "blocked" for lib, ok in arm64_libraries.items()
         },
         "arm64_bootstrap_libraries_complete": arm64_libraries_ok,
+        "arm64_rc_userspace": "pass" if arm64_rc_ok else "blocked",
         "arm64_paqfs_userspace": "pass" if paqfs_ok else "blocked",
         "arm64_factotum_userspace": "pass" if factotum_ok else "blocked",
         "arm64_kernel_link": "pass" if arm64_link_ok else "blocked",
