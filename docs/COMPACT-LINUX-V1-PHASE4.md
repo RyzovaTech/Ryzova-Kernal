@@ -503,3 +503,25 @@ MINSS/MINPD variants fail closed.
 MXCSR exception sticky flags, non-default rounding/DAZ/FTZ, unmasked
 traps, complete SSE/AMD64 ABI and Python stdlib remain **unqualified**.
 No acceptance gate or budget is changed based on this isolated test.
+
+## 4R — Pinned CPython SSE2 ANDPD candidate and strict differential
+
+At exact head `da843592`, source-locked CPython 3.12.10's independently
+executed `-c` probe reached **9,140,361 guest instructions** before
+`VM status=3`, with SHA-locked main ELF sample at `RIP=62a25d`,
+bytes `66 0F 54 CA` (legacy SSE2 ANDPD). The sample is a diagnostic
+candidate, not proof of an instruction failure.
+
+The original AMD64 interpreter adds only `66 0F 54 /r` ANDPD,
+computing an exact 128-bit bitwise AND of destination and source XMM
+registers or aligned guest m128. Aliasing/REX XMM8, all 16 bytes,
+unaltered EFLAGS and checked guest memory bounds are covered.
+Legacy memory operands reject non-16-byte alignment. The unprefixed
+ANDPS form is **not** silently treated as ANDPD.
+
+The new host/guest differential static ELF compares **88 output bytes**
+including exact 128-bit lane bit patterns and carry-flag preservation.
+Independent negative tests cover host SIGSEGV vs guest denied
+unaligned m128, and an explicitly unsupported unprefixed opcode.
+This is not full AMD64/SSE2 ABI, pinned CPython stdlib execution,
+application resource qualification or a V1 acceptance gate completion.

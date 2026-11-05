@@ -59,3 +59,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_phase9_movhlps_differential.py' -v
       - name: Differential MINSD binary64 NaN signed-zero register memory and flags versus Linux
         run: python -m unittest discover -s tests -p 'test_phase9_minsd_differential.py' -v
+      - name: Differential ANDPD SSE2 bitwise semantics, alignment and aliases versus Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_andpd_differential.py' -v

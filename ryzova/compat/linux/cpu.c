@@ -118,6 +118,26 @@ static void vector_xor(Cpu *c, Operand o, unsigned int reg)
     }
     for(i=0;i<16;i++)c->xmm[reg][i]^=data[i];
 }
+/* SSE2 ANDPD 66 0F 54 /r: 128 raw bits, no FP conversion or EFLAGS.
+ * Legacy memory operands require 16-byte alignment, and all guest accesses
+ * remain within the checked memory API. Copy source before writing to allow
+ * xmmN,xmmN and extended REX aliases without intermediate corruption. */
+static void vector_and_pd(Cpu *c,Operand o,unsigned int reg)
+{
+    unsigned char data[16];
+    uint64_t at;
+    unsigned int i;
+    if(c->fault)return;
+    if(o.reg>=0)memcpy(data,c->xmm[o.reg],16);
+    else{
+        at=address(c,o)+c->segment;
+        if((at&15U) || !ryz_memory_access(c->m,at,16,RYZ_READ)){
+            c->fault=1;return;
+        }
+        memcpy(data,c->m->bytes+(size_t)(at-c->m->base),16);
+    }
+    for(i=0;i<16;i++)c->xmm[reg][i]&=data[i];
+}
 /* SSE2 POR is a 128-bit bitwise union. No EFLAGS are modified. */
 static void vector_or(Cpu *c, Operand o, unsigned int reg)
 {
@@ -1119,6 +1139,13 @@ static int step(Cpu *c)
                 for(j=0;j<8;j++)
                     c->xmm[reg][i*8U+j]=(unsigned char)(old_lane>>(8U*j));
             }
+        }
+        else if(op2==0x54 && c->operand16 && !c->repeat){
+            /* 66 0F 54 /r ANDPD xmm, xmm/m128. Do not claim ANDPS,
+             * ANDNPD, or AVX; unchanged MXCSR and EFLAGS. */
+            rm=decode(c,&reg,&group,16);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            vector_and_pd(c,rm,reg);
         }
         else if(op2==0xeb && c->operand16 && !c->repeat){
             /* 66 0F EB /r POR xmm, xmm/m128, no EFLAGS changes. */
