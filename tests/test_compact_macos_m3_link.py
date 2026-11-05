@@ -178,7 +178,13 @@ _ryz_other:
 
     def test_reject_oversize_or_truncated_object(self):
         self.denied(self.obj1.read_bytes()[:80],self.obj2.read_bytes())
-        self.denied(self.obj1.read_bytes()+bytes(65537),self.obj2.read_bytes())
+        # File-oriented probe rejects oversize input *before* entering
+        # the linker; its documented CLI error is 65, not link status 2.
+        oversize=self.folder/"oversize.o"
+        oversize.write_bytes(self.obj1.read_bytes()+bytes(65537))
+        result=subprocess.run([str(self.runner),str(oversize),str(self.obj2)],
+                              capture_output=True,text=True,timeout=8)
+        self.assertEqual(result.returncode,65,result.stdout+result.stderr)
 
     def test_linker_does_not_forward_syscall_or_load_dylib(self):
         first=r"""
