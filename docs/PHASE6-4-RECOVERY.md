@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 6.4 — Failure containment and telemetry foundation
 
 The default-disabled `RemoteCircuit` wraps the Phase 6.0–6.3 request transport with bounded requests/replies, a failure counter, a circuit breaker, cooldown and single recovery probe. A health recovery must be observed before the breaker clears. A failed request returns a *failure*, never unverified data or a pretend successful local RAM read.

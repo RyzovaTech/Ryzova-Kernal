@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 6.0 — Optional remote-resource trust and failure model
 
 This *source-only, host-tested* foundation is intentionally **OFF by default**. `ryzova.remote.trust` authenticates messages between explicitly allowlisted, in-process test peers using HMAC-SHA256, bounded payload quotas, peer-scoped monotonically increasing sequence numbers and expiry checks. Replays, malformed messages, unsupported operations and disabled peers fail closed. The prototype does **not** establish confidentiality: HMAC is NOT encryption.

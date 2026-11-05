@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 6.1 — Optional read-only 9P2000 storage (local PoC)
 
 A limited **real 9P2000 binary frame codec** with Tversion/Rversion, Tattach/Rattach, Twalk/Rwalk, Topen/Ropen, Tread/Rread, Tclunk/Rclunk and Rerror. The read-only server exposes an in-memory, allowlisted flat file tree; operations like Twrite, create, remove, privileged attach, nested traversal and arbitrary paths are forbidden. Frame sizes max 8 KiB; reads max 4 KiB; file and response budgets bounded.

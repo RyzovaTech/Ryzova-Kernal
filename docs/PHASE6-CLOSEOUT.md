@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 6.0–6.5 Closeout — Experimental Source Only
 
 The Phase 6 project now includes:

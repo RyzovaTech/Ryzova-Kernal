@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 6 entry — optional remote resource architecture (research plan)
 
 **Current status:** ready to begin isolated Phase 6 engineering research; no remote resources are enabled. Phase 5 experimental source can merge without claiming production app compatibility.

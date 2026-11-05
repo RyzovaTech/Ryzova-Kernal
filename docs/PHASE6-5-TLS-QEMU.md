@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 6.5 — Authenticated real TCP loopback PoC and native QEMU regression
 
 The integration suite uses actual IPv4 TCP sockets bound **only to 127.0.0.1**, encrypted with TLS **1.3**, plus TLS client certificates required by the server and verified server names/certificates by the client. The trusted leaf fingerprints are pinned and rechecked; the Phase 6.0 application-level message HMAC and replay checks also remain mandatory. The test generates short-lived RSA private keys/certificates at runtime through OpenSSL; it NEVER commits or uploads private keys.

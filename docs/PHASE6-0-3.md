@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 6.0–6.3 developer prototype status
 
 This is an **experimental host-only, in-process** optional remote-resource foundation. All features are **OFF by default**. The code is written under `ryzova/remote/` and deliberately does not change 9front/Ryzova kernel code, native driver source, device firmware or branch-protection rules.

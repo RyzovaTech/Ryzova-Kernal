@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 5.7 — macOS Mach-O amd64 foundation (metadata only)
 
 This is **NOT** macOS compatibility or application execution. It provides a standalone and bounded Mach-O x86_64 64-bit metadata validator for feasibility research.

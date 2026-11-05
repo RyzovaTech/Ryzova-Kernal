@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Phase 5.8 — Cross-platform integration inventory, NOT release certification
 
 The independent static/dynamic host test workflows now cover three mutually different maturity levels:
