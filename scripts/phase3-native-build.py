@@ -428,10 +428,10 @@ if m5_arm64_native:
         name: bool(
             marks.get("m6-arm64-core-install-" + name)
             and marks.get("m6-arm64-core-build-" + str(i // 2))
-            and re.search(r"(?:^|\\r?\\n)M6_ARM64_CORE_" + str(i // 2)
-                          + r"_STATUS_\\s*(?:\\r?\\n)", text)
-            and re.search(r"(?:^|\\r?\\n)M6_ARM64_CORE_"
-                          + name.upper() + r"_ARTIFACT_\\s*(?:\\r?\\n)", text)
+            and re.search(r"(?:^|\r?\n)M6_ARM64_CORE_" + str(i // 2)
+                          + r"_STATUS_\s*(?:\r?\n)", text)
+            and re.search(r"(?:^|\r?\n)M6_ARM64_CORE_"
+                          + name.upper() + r"_ARTIFACT_\s*(?:\r?\n)", text)
         ) for i,name in enumerate(arm64_core_cmds)
     }
     arm64_core_ok = all(arm64_core_binaries.values())
