@@ -12,8 +12,8 @@ The NOTICE explicitly lists important exceptions:
 - Source/Terminus bitmapped fonts under `lib/font/bit/` have SIL Open Font License notices.
 - Other files may carry individual COPYING, COPYRIGHT or LICENSE terms.
 
-**Action before binary/source distribution:** review each of the above paths (including any missing, moved, or additional files), collect file-level license inventory, classify redistributability, and exclude/relicense incompatible payloads when necessary. Do not imply that all repository contents may be copied as MIT, GPLv3 or AGPLv3.
+**Action before binary/source distribution:** review each of the above paths (including any missing, moved, or additional files), collect file-level license inventory, classify redistributability, and exclude/relicense incompatible payloads when necessary. Do not imply that all repository contents may be copied as MIT or GPLv3.
 
-**Phase 2 policy files now present:** see `LICENSE.md`, `COMMERCIAL-LICENSING.md`, `TRADEMARKS.md`, `docs/CONTRIBUTOR-LICENSING.md` and the CI-generated inventory. The audit is an automated inventory, **not comprehensive legal clearance**. GPLv3 and historical AGPLv3 do not forbid compliant commercial usage. Eligible Ryzova-owned code may be newly offered under GPL-3.0-only while earlier AGPL grants remain valid. Ryzova cannot grant proprietary rights to code it does not own or have sufficient relicensing permission for.
+**Phase 2 policy files now present:** see `LICENSE.md`, `COMMERCIAL-LICENSING.md`, `TRADEMARKS.md`, `docs/CONTRIBUTOR-LICENSING.md` and the CI-generated inventory. The audit is an automated inventory, **not comprehensive legal clearance**. GPLv3 and AGPLv3 both permit commercial usage under their respective conditions. New Ryzova-owned files may be GPL-3.0-only; historical AGPLv3 releases and any file still marked AGPLv3 retain their applicable terms. Ryzova cannot grant proprietary rights to code it does not own or have sufficient relicensing permission for.
 
 Source references: `lib/legal/NOTICE`, `lib/legal/mit`, `lib/legal/contributing` in the imported upstream history.

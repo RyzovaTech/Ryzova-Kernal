@@ -1,27 +1,25 @@
-# Ryzova Kernel — optional commercial licensing policy
+# Ryzova Kernel — GPLv3 and optional commercial licensing
 
-Ryzova Technologies' selected model is **GPLv3 open source for eligible Ryzova-controlled code, plus an optional negotiated commercial alternative**. This does **not** turn Ryzova Kernel into commercial-use-restricted or source-available-only software.
+Ryzova's public direction for **eligible Ryzova-controlled files** is **GNU GPL-3.0-only**, with an **optional separately negotiated commercial alternative** if a recipient wants contractual permissions different from GPLv3 and the licensor has sufficient rights to grant them.
 
-## Public GPLv3 rights
+## The free/open-source path
 
-Newly authored, rights-controlled Ryzova files explicitly marked `SPDX-License-Identifier: GPL-3.0-only` may be used, studied, modified, redistributed and used **commercially** when the GPLv3 obligations are met. Commercial companies do not need a paid license simply to run the software or distribute compliant GPLv3 versions.
+- Anyone, including a commercial business, can use, study, modify and redistribute Ryzova-owned GPLv3-covered files subject to the GPLv3 terms.
+- **No paid license is required for GPL-compliant commercial use.**
+- GPLv3 source and distribution requirements apply when triggered by the actual usage/distribution. A paid alternative is **not** mandatory for companies.
 
-The new GPLv3 offer does not revoke valid historical AGPLv3 grants for earlier copies. Files not yet validly relicensed remain under their applicable terms.
+## Optional individually negotiated license
 
-## Optional separate agreement
+An alternative agreement could provide different proprietary redistribution or contractual terms **for identified code that Ryzova or the grantor actually owns or can sublicense on those terms**. It is not automatically available for every file and no standard price, warranty, SLA, indemnity or final commercial contract is being offered by this document.
 
-An organization may request **different terms** for *specifically identified* Ryzova code, such as a negotiated proprietary distribution arrangement. Such terms may be offered **only by those who possess all required rights** for that code, including any necessary written contributor permissions. There is no automatic commercial license to the kernel as a whole and no announced fee schedule or signed standard agreement.
+Rights in third-party materials (including inherited Plan 9/9front software, libraries, fonts and independently owned contributor changes) remain governed by their original applicable licenses. An optional agreement cannot erase those rights, and no external contributors' copyrights are transferred by simply opening a PR.
 
-Paid engineering support, custom development, integration and service contracts are separate possible business arrangements, not preconditions for using GPLv3 code.
+## Legacy AGPLv3 versions
 
-## Exclusions and limitations
+Previously published Ryzova-authored versions under AGPL-3.0-only remain subject to valid existing AGPLv3 grants held by their recipients. Their public license cannot be retroactively withdrawn. Existing code still tagged AGPLv3 remains governed by that per-file notice until duly and lawfully relicensed.
 
-No separately negotiated Ryzova agreement automatically grants:
+## Attribution and branding
 
-- Rights in original Plan 9/9front material, third-party drivers, fonts, libraries or restricted assets;
-- Commercial relicensing of outside contributions without sufficient written permissions;
-- Exemptions from independent MIT, GPL, AFPL, OFL or other source terms;
-- Ryzova trademarks, patents, warranties, indemnities or service-level guarantees unless expressly covered;
-- Permission to misrepresent an experimental feature as certified production software.
+A code license does not grant rights to the Ryzova name, logo, endorsement or trademarks. See [TRADEMARKS.md](TRADEMARKS.md), [LICENSE.md](LICENSE.md), and [docs/CONTRIBUTOR-LICENSING.md](docs/CONTRIBUTOR-LICENSING.md).
 
-All commercial negotiations require rights review and a signed written agreement. Review the applicable file headers, [LICENSE.md](LICENSE.md), [TRADEMARKS.md](TRADEMARKS.md) and [docs/CONTRIBUTOR-LICENSING.md](docs/CONTRIBUTOR-LICENSING.md).
+**This is a licensing policy, not a binding offer of negotiated commercial terms or an assertion of rights in third-party code.** Independent legal review is advisable before any actual proprietary contract.

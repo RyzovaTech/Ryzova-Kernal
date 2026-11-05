@@ -18,7 +18,7 @@ REQUIRED = (
     "lib/legal/gpl",
     "lib/legal/ofl",
     "LICENSE.md",
-    "LICENSES/AGPL-3.0-only.txt",  # retained for historical grants and unmigrated files
+    "LICENSES/AGPL-3.0-only.txt",  # preserved historical text
     "LICENSES/GPL-3.0-only.txt",
     "COMMERCIAL-LICENSING.md",
     "TRADEMARKS.md",
@@ -68,17 +68,17 @@ def main() -> int:
         if not content.startswith("GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007"):
             errors.append("Bundled AGPL text does not match expected SPDX license opening")
 
-    gpl_file = ROOT / "LICENSES/GPL-3.0-only.txt"
-    if gpl_file.is_file():
-        content = gpl_file.read_text(encoding="utf-8", errors="replace")
-        if not content.startswith("GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007"):
+    gpl_path = ROOT / "LICENSES/GPL-3.0-only.txt"
+    if gpl_path.is_file():
+        gpl_text = gpl_path.read_text(encoding="utf-8", errors="replace")
+        if not gpl_text.startswith("GNU GENERAL PUBLIC LICENSE\\nVersion 3, 29 June 2007"):
             errors.append("Bundled GPLv3 text does not match expected SPDX license opening")
 
     copyright_markers = [p for p in paths if MARKER.search(p)]
     spdx_files: list[dict[str, str]] = []
     for name in paths:
         # Bounded reads: inventory common source formats without scanning binary data.
-        if not name.endswith((".c", ".h", ".s", ".S", ".py", ".sh", ".mk", ".rs", ".go", ".y", ".l")):
+        if not name.endswith((".c", ".h", ".s", ".S", ".py", ".sh", ".mk", ".rs", ".go", ".y", ".l", ".ps1")):
             continue
         try:
             with (ROOT / name).open("rb") as handle:
@@ -95,6 +95,21 @@ def main() -> int:
             errors.append(f"Missing Ryzova script: {name}")
         elif not any(item["path"] == name and item["spdx"] == "GPL-3.0-only" for item in spdx_files):
             errors.append(f"Missing GPL-3.0-only SPDX identifier on Ryzova script: {name}")
+
+    # A missing explicit header is not proof of ownership; leave upstream,
+    # unmarked, vendor, and the independently maintained driver files untouched.
+    # New Ryzova-owned source should not revert to the old outbound AGPL policy.
+    legacy_core = [
+        item["path"] for item in spdx_files
+        if item["spdx"] == "AGPL-3.0-only"
+        and (item["path"].startswith(("ryzova/", "scripts/", "tests/")))
+        and "driver" not in item["path"].lower()
+        and "hardware" not in item["path"].lower()
+        and "d2-" not in item["path"].lower()
+        and "d6-" not in item["path"].lower()
+    ]
+    for name in legacy_core:
+        errors.append(f"Old AGPLv3 identifier in GPLv3-transition core path: {name}")
 
     mapped_exceptions = []
     for prefix, reason in EXCEPTIONS:
@@ -113,7 +128,6 @@ def main() -> int:
             "SPDX identifiers are not a definitive determination of actual license rights.",
             "Unmarked third-party assets may have additional terms; manual review is required.",
             "Commercial license applicability requires specific documented ownership and grants.",
-            "Historical AGPL public grants and inherited third-party licenses remain in force.",
         ],
         "errors": errors,
     }
