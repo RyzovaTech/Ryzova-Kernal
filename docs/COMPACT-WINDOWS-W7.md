@@ -99,6 +99,43 @@ These jobs do not boot the Ryzova ARM64 kernel, validate imported Win32
 APIs, demonstrate arbitrary Windows applications, or perform physical
 ARM64 device/firmware qualification. All native Ryzova ARM64, Windows V1
 and W9 physical hardware release flags remain false.
+## W7.5: Native Ryzova ARM64 QEMU-system boot qualification — implementation under test
+
+The new `scripts/compact_windows_w7_native_arm64_system.py` and
+`.github/workflows/compact-windows-w7-native-system.yml` attempt the
+**first actual source-derived Ryzova ARM64 kernel boot**. This is deliberately
+different from Linux `qemu-aarch64` userspace translation and from executing
+Windows ARM64 PE images on Microsoft's own ARM64 Windows host.
+
+The runner is required to:
+
+1. Verify the unchanged, pinned W6 9front AMD64 builder image by its
+   original SHA-256, then boot it in a separate writable QEMU layer.
+2. Archive and SHA-256 hash tracked original Ryzova ARM64 kernel,
+   port and boot sources from the **exact PR head**; transfer the archive
+   over isolated QEMU user-mode networking with independent in-guest SHA.
+3. Cross-compile the original `sys/src/9/arm64/qemu` kernel inside the
+   9front builder using its own `7c`/`7l` tools and create the actual
+   `9qemu.u` image. A compiler-missing or build-failed result is a
+   **hard failed qualification**, not a simulation or a skipped test.
+4. Copy the kernel to the builder's FAT volume, independently re-extract
+   it from its QEMU block-device image and compare byte-for-byte SHA-256.
+5. Start a **separate** `qemu-system-aarch64` with the produced binary;
+   require both the original ARM64 kernel `Plan 9` boot banner and
+   `cpu0: 1000MHz QEMU` marker, preserving the bounded serial log.
+
+This is a strict **experimental** test: a pass must be backed by the
+actual runner and source-hashed build/boot artifact, never the mocked
+serial data in Python unit tests. As of introduction, it is not
+independently qualified until the live native-system workflow runs.
+
+Even a successful native ARM64 *kernel boot* **does not execute a Windows
+ARM64 PE in that kernel**. That requires a future original ARM64 Plan 9
+userspace bridge/PE admission and actual guest I/O/exit receipt linked
+to the very same Windows ARM64 PE32+ built on Windows ARM64 in W7.4,
+then strict import/exception/TEB/capability tests. Physical ARM64 board
+and W9 power-cut gates remain independent and false.
+
 ## W7B: Real hardware power cut
 
 `scripts/compact_windows_physical_powercut.py` and
