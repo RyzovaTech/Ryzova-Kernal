@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Provider-independent resource ownership, budget and contract regression. */
 #include "../ryzova/compat/linux/jobs.h"
 #include <stdio.h>
