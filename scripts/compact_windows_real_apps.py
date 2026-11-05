@@ -134,7 +134,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     plan = json.loads(args.plan.read_text(encoding="utf-8"))
     report = collect(plan, runner_version=os.environ.get("ImageVersion"),
-                     commit=os.environ.get("GITHUB_SHA"))
+                     commit=os.environ.get("RYZOVA_SOURCE_SHA") or os.environ.get("GITHUB_SHA"))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({
