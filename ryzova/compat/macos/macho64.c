@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #include "macho64.h"
 #include <string.h>
 #define MAGIC 0xfeedfacfU
