@@ -30,7 +30,7 @@ def digest_line(log, path):
     return matches[0].decode()
 
 
-def main(image, bootstrap, include_m3=False):
+def main(image, bootstrap, include_m3=False, m4_reference=None):
     base_sha = bootstrap_provenance(image, bootstrap)
     output = ROOT / "artifacts/compact-macos-m2"
     output.mkdir(parents=True, exist_ok=True)
@@ -43,6 +43,18 @@ def main(image, bootstrap, include_m3=False):
         if hashlib.sha256(fixture_m3).hexdigest() != M3_SHA:
             raise ValueError("M3 fixture provenance mismatch")
         (output / "reference-m3").write_bytes(fixture_m3)
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    m4_hash = None
+    if m4_reference is not None:
+        m4_binary = (m4_reference / "m4").read_bytes()
+        m4_hash = hashlib.sha256(m4_binary).hexdigest()
+        if ((m4_reference / "commit.txt").read_text().strip() != commit or
+                (m4_reference / "sha256.txt").read_text().split() != [m4_hash, "evidence/m4"] or
+                (m4_reference / "stdout.txt").read_bytes() != b"FLEX_MACOS_M4_DYNAMIC\n" or
+                (m4_reference / "stderr.txt").read_bytes() != b"" or
+                (m4_reference / "exit.txt").read_text().strip() != "47"):
+            raise ValueError("M4 macOS reference evidence mismatch")
+        (output / "reference-m4").write_bytes(m4_binary)
     source = subprocess.check_output(["git", "ls-files", "sys/src/9", "sys/include",
                                       "amd64/include", "ryzova/compat/macos"], cwd=ROOT, text=True)
     archive = output / "source.tgz"
@@ -86,6 +98,11 @@ def main(image, bootstrap, include_m3=False):
                     "echo M3_NO_GRANT; compact-macos-m2 /tmp/mac-m3 - entry.txt demo && echo M3_NO_GRANT_END",
                     "sha1sum -2 256 /tmp/mac-grant/entry.txt /tmp/mac-outside",
                 ])
+            if m4_reference is not None:
+                commands.extend([
+                    "hget http://10.0.2.2:8000/reference-m4 > /tmp/mac-m4; sha1sum -2 256 /tmp/mac-m4",
+                    "echo M4_BEGIN; compact-macos-m2 --dynamic /tmp/mac-m4 && echo M4_END",
+                ])
             run = session(image, commands, output, "fresh", 120, {3:"MAC_M2_END"})
         finally:
             server.shutdown()
@@ -99,7 +116,7 @@ def main(image, bootstrap, include_m3=False):
         raise ValueError("native output, exit or bounded execution mismatch")
     report = {
         "reference_sha256": REFERENCE,
-        "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+        "source_commit": commit,
         "source_archive_sha256": source_sha,
         "bootstrap_sha256": base_sha,
         "kernel_sha256": kernel_sha,
@@ -131,9 +148,21 @@ def main(image, bootstrap, include_m3=False):
         report["m3"] = {"fixture_sha256": M3_SHA, "allowed_exit": 37, "denied_exit": 13,
                         "missing_grant_exit": 13, "stdout": "IN!\n",
                         "granted_bytes": content.decode(), "outside_unchanged": True}
+    if m4_reference is not None:
+        if digest_line(run, "/tmp/mac-m4") != m4_hash:
+            raise ValueError("guest M4 executable digest mismatch")
+        m4 = re.search(rb"(?m)^M4_BEGIN\r?\nFLEX_MACOS_M4_DYNAMIC\r?\n"
+                       rb"MAC_M4_EXIT 47 STEPS ([0-9]+) WRITE_CALLS 1 REBASES 1"
+                       rb"\r?\nM4_END\r?$", run)
+        if not m4 or not 1 <= int(m4[1]) <= 64:
+            raise ValueError("M4 output, exit or relocation evidence mismatch")
+        report["m4"] = {"reference_sha256": m4_hash, "stdout": "FLEX_MACOS_M4_DYNAMIC\n",
+                        "guest_exit": 47, "instruction_steps": int(m4[1]),
+                        "write_calls": 1, "rebases": 1}
     (output / "qualification.json").write_text(json.dumps(report, indent=2)+"\n")
     print(json.dumps(report))
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]), Path(sys.argv[2]), "--m3" in sys.argv[3:])
+    main(Path(sys.argv[1]), Path(sys.argv[2]), "--m3" in sys.argv[3:],
+         Path(sys.argv[4]) if len(sys.argv) == 5 and sys.argv[3] == "--m3" else None)
