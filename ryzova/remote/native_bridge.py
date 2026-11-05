@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 7 localhost 9P/mTLS gateway; opt-in Phase 8.1 peer authorization.
 
 Legacy Phase 7 guest-to-gateway TCP remains PLAINTEXT. Separately, the native
