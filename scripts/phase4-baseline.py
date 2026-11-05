@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 4.0: verify frozen baseline or prepare a NON-DESTRUCTIVE local recovery ref.
 
 Never resets main, force-pushes, downloads drivers, or updates upstream/front.

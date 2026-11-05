@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Bounded extra QEMU runtime probes, not a long-duration soak or security audit."""
 import re
 from phase4_1_stability import _mem_stats, _section, _standalone

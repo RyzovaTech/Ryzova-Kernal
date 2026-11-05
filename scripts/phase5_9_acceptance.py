@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 5.9 acceptance of experimental source only; never release an OS image."""
 import argparse
 import hashlib

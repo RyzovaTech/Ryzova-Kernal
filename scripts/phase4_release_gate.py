@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Fail-closed evidence inventory for kernel release candidacy; never publishes."""
 import argparse
 import json
