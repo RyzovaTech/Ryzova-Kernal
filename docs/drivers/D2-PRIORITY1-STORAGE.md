@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # D2 Priority 1 — NVMe / VirtIO storage source hardening
 
 - NVMe: reject zero sector size or a transfer window smaller than one sector instead of looping with zero progress.

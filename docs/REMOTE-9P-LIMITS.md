@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Research 9P state validation and listener budgets
 
 Ryzova-owned host Python research services now stage each native 9P request

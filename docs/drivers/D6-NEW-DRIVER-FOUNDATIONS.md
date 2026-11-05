@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # D6 — Experimental new driver foundations (not hardware-certified)
 
 ## Bluetooth: new opt-in nusb/bt utility

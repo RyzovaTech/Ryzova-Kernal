@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Ryzova Kernel Driver Series (D0–D6) — engineering gates
 
 This is an engineering record for the independent **AMD64 Ryzova Kernel**,

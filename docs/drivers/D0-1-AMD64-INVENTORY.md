@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # D0.1 — AMD64 configuration inventory (experimental)
 
 This driver-track deliverable converts the **existing** 9front-derived AMD64

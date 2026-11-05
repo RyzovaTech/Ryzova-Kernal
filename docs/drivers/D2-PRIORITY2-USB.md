@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # D2 Priority 2 — USB xHCI bounds and capacity hardening
 
 - Reject invalid port indices (zero, negative or greater than enumerated port count) before reading/writing xHCI port MMIO for status, enable, reset, warm reset and power operations.

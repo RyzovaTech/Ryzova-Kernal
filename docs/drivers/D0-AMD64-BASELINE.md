@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
 # D0 — AMD64 driver baseline and qualification plan
 
 **Scope:** Ryzova Kernel driver engineering only. No kernel, driver, scheduler, ABI, licensing-policy or upstream-sync changes are authorized by this report.
