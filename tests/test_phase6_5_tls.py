@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Real TCP loopback + ephemeral TLS 1.3 mutual certs; no Git-tracked private keys."""
 import hashlib
 from pathlib import Path

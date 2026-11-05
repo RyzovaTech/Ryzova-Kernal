@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Native guest-facing 9P2000 server protocol tests over real loopback TCP."""
 import socket
 import struct
