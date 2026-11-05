@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Actual 2 isolated Linux network namespaces + host controller CI fixture.
 
 Not separate QEMU guests or physical hosts. Requires root and iproute2 on an

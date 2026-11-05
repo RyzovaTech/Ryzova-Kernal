@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Fail-closed native Ryzova QEMU guest -> TCP 9P2000 test evidence parser."""
 import hashlib
 import re

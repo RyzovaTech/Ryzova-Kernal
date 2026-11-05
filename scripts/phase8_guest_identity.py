@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Research native guest certificate possession proof; not production PKI."""
 import hashlib
 import re
