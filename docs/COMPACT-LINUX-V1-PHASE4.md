@@ -455,3 +455,28 @@ instruction-step exhaustion vs supported instruction bytes.
 No CPU instruction or resource cap is changed by this improvement;
 it prevents false forensic conclusions and does not close any
 of the 17 mandatory Linux V1 acceptance gates.
+
+## 4P — Locked CPython 16M-step probe MOVHLPS candidate
+
+On exact head `50db500d`, the pinned CPython `-c` guest probe
+progressed past prior musl STMXCSR and the former 8,388,608-step
+limit. At its bounded 16,777,216-step hard ceiling it instead
+recorded **VM status=3** and `RIP=506485` with main-ELF candidate
+bytes beginning `0F 12 D0` (legacy SSE MOVHLPS register form).
+The sampled RIP is only a candidate until differentiated execution.
+
+Original interpreter code now handles unprefixed `0F 12` with
+MOVHLPS register-low/high source semantics and MOVLPS m64
+unaligned memory loads, and unprefixed `0F 13` with MOVLPS m64
+stores. The ModRM register encoding of `0F 13` is rejected;
+faulting guest memory is rejected and EFLAGS is preserved. It does
+not claim MOVLPD, AVX, aligned-only restrictions or unrelated SSE
+instructions. A **single identical source-built static ELF** verifies
+byte-for-byte host Linux versus Ryzova output, self-aliasing,
+XMM8 with REX, unaligned memory and invalid operands.
+
+The separate read-only diagnostic staged in the same PR rejects
+claiming opcode candidates on step limit, syscall or mapping errors.
+These incremental tests do **not** close `AMD64-ABI`, `APP-PYTHON`,
+or any other V1 gate; the next source-pinned Python code/stdlib,
+native kernel and resource workflows must be independently verified.

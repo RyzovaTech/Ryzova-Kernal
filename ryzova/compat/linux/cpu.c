@@ -1021,6 +1021,33 @@ static int step(Cpu *c)
             else{v=load(c,address(c,rm)+c->segment,8,RYZ_READ);for(count=0;count<8;count++)bytes[count]=(unsigned char)(v>>(count*8));}
             if(!c->fault)memcpy(c->xmm[reg]+8,bytes,8);
         }
+        else if((op2==0x12 || op2==0x13) && !c->operand16 && !c->repeat){
+            /* 0F 12 /r MOVHLPS register: take source high qword into
+             * destination low qword, preserving destination high qword.
+             * Memory form: MOVLPS m64 -> low qword, unaligned allowed.
+             * 0F 13 /r MOVLPS memory store of source low qword only;
+             * the register form of 0F 13 is invalid. Neither changes
+             * EFLAGS. Copy first to handle xmmN,xmmN aliases safely.
+             * No host pointer can be used as a guest memory address. */
+            unsigned char bytes[8];unsigned int i;
+            rm=decode(c,&reg,&group,8);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(op2==0x12){
+                if(rm.reg>=0)memcpy(bytes,c->xmm[rm.reg]+8,8);
+                else{
+                    v=get(c,rm,8);
+                    if(c->fault)return RYZ_VM_MAP_ERROR;
+                    for(i=0;i<8;i++)bytes[i]=(unsigned char)(v>>(8U*i));
+                }
+                memcpy(c->xmm[reg],bytes,8);
+            }else{
+                if(rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED;
+                v=0;
+                for(i=0;i<8;i++)v|=(uint64_t)c->xmm[reg][i]<<(8U*i);
+                store(c,address(c,rm)+c->segment,8,v);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+            }
+        }
         else if((op2==0x16 || op2==0x17) && !c->operand16 && !c->repeat){
             /* 0F 16 /r: MOVHPS from memory, MOVLHPS from XMM register.
              * 0F 17 /r: MOVHPS store to memory only (reg form invalid).

@@ -55,3 +55,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_phase9_pcmpeqd_differential.py' -v
       - name: Differential STMXCSR and default-only LDMXCSR versus native Linux
         run: python -m unittest discover -s tests -p 'test_phase9_mxcsr_differential.py' -v
+      - name: Differential MOVHLPS register and unaligned MOVLPS m64 vs native Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_movhlps_differential.py' -v
