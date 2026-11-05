@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 8.0 host-only trust-policy security tests; NOT guest TLS certification."""
 import hashlib
 import unittest

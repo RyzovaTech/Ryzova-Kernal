@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Real socket TLS 1.3 9P gateway, negative cert and read-only tests."""
 import hashlib
 import socket

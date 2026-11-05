@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Actual TLS client-certificate verification and native evidence rejection."""
 import hashlib
 from pathlib import Path
