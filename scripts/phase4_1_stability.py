@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Bounded Phase 4.1 memory, process, scheduler and kernel-access QEMU checks.
 
 Commands are native Plan 9 rc, run ONLY after a newly compiled Ryzova kernel
