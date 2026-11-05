@@ -145,6 +145,64 @@ class WindowsW2Tests(unittest.TestCase):
         callee=callee.replace(bytes.fromhex('7515'),bytes.fromhex('750e'))
         code=caller+b'\xe8'+struct.pack('<i',5)+bytes.fromhex('4883c428c3')+callee
         result=self.run_pe(pe(code));self.assertEqual(result['status'],0,result);self.assertEqual(result['exit_code'],15,result)
+    def test_legacy_sse2_movsd_m64_register_and_store_semantics(self):
+        # F2 0F 10: actual MSVC sbase wc native QEMU failed at
+        # 0x140001549 with F2 0F 10 05 ... after five guest steps.
+        # Memory source clears high 64 bits of XMM destination, unlike
+        # register source, which preserves high 64 bits. No FP arithmetic.
+        data=bytes([0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88])
+        machine,arena=self.loaded(pe(bytes.fromhex("f20f1005f80f0000c3"),data))
+        machine.flags=0x246
+        machine.xmm[0][:]=bytes([0x55]*16)
+        self.assertEqual(self.lib.cw_run(C.byref(machine),100),0)
+        self.assertTrue(machine.exited)
+        self.assertEqual(bytes(machine.xmm[0]),data+bytes(8))
+        self.assertEqual(machine.flags,0x246)
+        self.assertTrue(arena)
+
+        # Register-to-register MOVSD xmm0,xmm1 must *preserve* high half.
+        machine,arena=self.loaded(pe(bytes.fromhex("f20f10c1c3")))
+        machine.xmm[0][:]=bytes([0x55]*8+[0xaa]*8)
+        machine.xmm[1][:]=bytes(range(1,17))
+        self.assertEqual(self.lib.cw_run(C.byref(machine),100),0)
+        self.assertEqual(bytes(machine.xmm[0]),bytes(range(1,9))+bytes([0xaa]*8))
+        self.assertEqual(bytes(machine.xmm[1]),bytes(range(1,17)))
+
+        # Register destination of MOVSD xmm1,xmm0 uses F2 0F 11 /r.
+        machine,arena=self.loaded(pe(bytes.fromhex("f20f11c1c3")))
+        machine.xmm[0][:]=bytes(range(1,17))
+        machine.xmm[1][:]=bytes([0x77]*8+[0x99]*8)
+        self.assertEqual(self.lib.cw_run(C.byref(machine),100),0)
+        self.assertEqual(bytes(machine.xmm[1]),bytes(range(1,9))+bytes([0x99]*8))
+
+        # MOVSD m64,xmm0 writes exactly the low 8 bytes to RW .data.
+        machine,arena=self.loaded(pe(bytes.fromhex("f20f1105f80f0000c3"),bytes(16)))
+        machine.xmm[0][:]=bytes(range(1,17))
+        self.assertEqual(self.lib.cw_run(C.byref(machine),100),0)
+        result=C.create_string_buffer(16)
+        self.assertEqual(self.lib.cw_read(C.byref(machine),PREFERRED+0x2000,result,16,1),0)
+        self.assertEqual(result.raw,bytes(range(1,9))+bytes(8))
+
+    def test_legacy_sse2_movsd_rex_extension_and_fail_closed_boundaries(self):
+        # F2 44 0F 10 C1: source XMM1 -> destination XMM8.
+        machine,arena=self.loaded(pe(bytes.fromhex("f2440f10c1c3")))
+        machine.xmm[1][:]=bytes(range(1,17))
+        machine.xmm[8][:]=bytes([0x12]*8+[0xa5]*8)
+        self.assertEqual(self.lib.cw_run(C.byref(machine),100),0)
+        self.assertEqual(bytes(machine.xmm[8]),bytes(range(1,9))+bytes([0xa5]*8))
+
+        # Unimplemented SSE2 FP math and illegal opcode combinations are
+        # not accepted merely because they carry the F2 prefix.
+        for code in ("f20f58c1c3","f290c3","f20f5ec1c3"):
+            with self.subTest(code=code):
+                self.assertEqual(self.run_pe(pe(bytes.fromhex(code)))['status'],7)
+        # Memory source outside the mapped image and a text-section store
+        # must be rejected without silently granting read/write privileges.
+        self.assertEqual(
+            self.run_pe(pe(bytes.fromhex("f20f1005f80f0000c3")))['status'],6)
+        self.assertEqual(
+            self.run_pe(pe(bytes.fromhex("f20f1105f8ffffffc3")))['status'],6)
+
     def test_nonvolatile_gpr_and_xmm_state_survive_save_restore(self):
         code=bytes.fromhex('53 4883ec10 f30f7f3424 660feff6 f30f6f3424 4883c410 bb01000000 5b b825000000 c3')
         result=self.run_pe(pe(code));self.assertEqual(result['status'],0,result);self.assertTrue(result['nonvolatile_preserved']);self.assertEqual(result['exit_code'],37)

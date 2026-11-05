@@ -1,0 +1,75 @@
+name: Compact Windows W8 source-pinned MIT sbase wc reference
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tests/fixtures/windows_w8_sbase_wc/**'
+      - 'scripts/compact_windows_w8_sbase_wc.py'
+      - 'tests/test_compact_windows_w8_sbase_wc.py'
+      - 'scripts/compact_windows_import_audit.py'
+      - 'ryzova/compact/windows-v1-plan.json'
+      - '.github/workflows/compact-windows-sbase-wc.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  genuine-upstream-blob-host-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify exact upstream MIT source and compile actual C wc on Linux
+        run: |
+          python -m unittest discover -s tests -p 'test_compact_windows_w8_sbase_wc.py' -v
+          python -m py_compile scripts/compact_windows_w8_sbase_wc.py
+  genuine-windows-compiler-reference:
+    runs-on: windows-2022
+    timeout-minutes: 18
+    env:
+      # The default pull_request GITHUB_SHA points at a synthetic merge
+      # commit, even when checkout explicitly pins the contributor's head.
+      RYZOVA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Configure approved Windows-safe checkout
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_w8_sbase_wc.py
+            /scripts/compact_windows_import_audit.py
+            /tests/fixtures/windows_w8_sbase_wc/**
+            /tests/test_compact_windows_w8_sbase_wc.py
+            /ryzova/compact/windows-v1-plan.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile original sbase wc using MSVC and verify 4 named Windows workflows
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -p 'test_compact_windows_w8_sbase_wc.py' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/compact_windows_w8_sbase_wc.py --output artifacts/windows/w8-sbase-wc-reference.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve JSON provenance only, not built executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: w8-mit-sbase-wc-host-evidence
+          path: artifacts/windows/w8-sbase-wc-reference.json
+          if-no-files-found: error
+          retention-days: 14

@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 $ErrorActionPreference='Stop'
+# W6 native fixture provenance: explicit PR head, never synthetic merge SHA.
+if ($env:RYZOVA_SOURCE_SHA) {
+  if ($env:RYZOVA_SOURCE_SHA.Length -ne 40 -or $env:RYZOVA_SOURCE_SHA -match '[^0-9a-f]') { throw 'Invalid exact SHA' }
+  $env:GITHUB_SHA = $env:RYZOVA_SOURCE_SHA
+}
 $root=Split-Path $PSScriptRoot -Parent
 & (Join-Path $PSScriptRoot 'compact_windows_w5_reference.ps1')
 & (Join-Path $PSScriptRoot 'compact_windows_w4_reference.ps1')

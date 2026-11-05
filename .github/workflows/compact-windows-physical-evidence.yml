@@ -1,0 +1,34 @@
+name: Compact Windows physical power-cut witness integrity
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/compact_windows_physical_powercut.py'
+      - 'scripts/compact_windows_w9_lab_bundle.py'
+      - 'tests/test_compact_windows_w9_lab_bundle.py'
+      - 'tests/test_compact_windows_physical_powercut.py'
+      - 'docs/COMPACT-WINDOWS-HARDWARE-QUALIFICATION.md'
+      - '.github/workflows/compact-windows-physical-evidence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify-external-witness-evidence-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify real OpenSSL Ed25519 implementation exists
+        run: openssl version
+      - name: Exercise signed report tampering / no false hardware claim
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_windows_physical_powercut.py' -v
+          python3 -m py_compile scripts/compact_windows_physical_powercut.py
+          python3 -m unittest discover -s tests -p 'test_compact_windows_w9_lab_bundle.py' -v
+          python3 -m py_compile scripts/compact_windows_w9_lab_bundle.py

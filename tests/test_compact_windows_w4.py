@@ -51,8 +51,9 @@ class WindowsW4Tests(unittest.TestCase):
     def tearDown(self):
         for ctx in reversed(self.resources):
             self.lib.cw_files_close_all(C.byref(ctx[0]));self.host.cw_file_host_destroy(ctx[5])
-    def context(self,rights=31,drive='C',root=None,blob=None,provider=None):
+    def context(self,rights=31,drive='C',root=None,blob=None,provider=None,stdin_grant=False):
         config=w3.launch();config.api_mask=32767
+        if stdin_grant: config.console_mask=7
         m,s,arena,heap=w3.WindowsW3Tests.context(self,config=config,blob=blob or imported_pe(b'\xc3',names=FILE_IMPORTS,payload=bytes(512)))
         # W3 launch enables nine APIs only; W4 requires the additional explicit bits.
         s.launch.api_mask=32767
@@ -83,6 +84,45 @@ class WindowsW4Tests(unittest.TestCase):
         if name=='WriteFile':self.write(ctx,buffer,data)
         result=self.api(ctx,name,(h,buffer,len(data) if n is None else n,count,overlapped))
         return result,struct.unpack('<I',self.read(ctx,count,4))[0]
+    def test_trusted_bounded_stdin_grant_ReadFile_and_default_deny(self):
+        # Explicit input token is private to one guest; 9P file grants and
+        # inherited host stdin remain isolated. Default launch still denies.
+        source=imported_pe(b'\xc3',names=(*FILE_IMPORTS,'GetStdHandle'),payload=bytes(512))
+        first=self.context(blob=source,stdin_grant=True)
+        second=self.context(blob=source)
+        self.lib.cw_attach_console_input.argtypes=[
+            C.POINTER(w2.Machine),C.c_void_p,C.c_size_t]
+        self.lib.cw_attach_console_input.restype=C.c_int
+        data=C.create_string_buffer(b'orange\napple\n')
+        self.assertEqual(self.lib.cw_attach_console_input(
+            C.byref(first[0]),data,13),0)
+        self.assertEqual(self.lib.cw_attach_console_input(
+            C.byref(first[0]),data,13),10)
+        self.assertEqual(self.lib.cw_attach_console_input(
+            C.byref(second[0]),data,13),10)
+        self.assertEqual(self.api(first,'GetStdHandle',(0xfffffff6,)),0x10000)
+        self.assertEqual(self.api(second,'GetStdHandle',(0xfffffff6,)),0)
+        address=PREFERRED+0x2500;count=PREFERRED+0x25f0
+        def read(n):
+            result=self.api(first,'ReadFile',(0x10000,address,n,count,0))
+            length=struct.unpack('<I',self.read(first,count,4))[0]
+            # The guest correctly reports EOF with a zero-byte count.
+            # cw_read intentionally rejects zero-length memory spans; do not
+            # dereference an empty guest range in the *test harness*.
+            return result,length,(self.read(first,address,length) if length else b'')
+        self.assertEqual(read(6),(1,6,b'orange'))
+        self.assertEqual(read(20),(1,7,b'\napple\n'))
+        self.assertEqual(read(20),(1,0,b''))
+        self.assertEqual(read(0),(1,0,b''))  # zero-length request is also valid
+        self.assertEqual(first[1].stdin_pos,13)
+        self.assertEqual(first[1].stdin_bytes,13)
+        self.assertEqual(second[1].stdin_configured,0)
+        self.assertEqual(self.api(second,'ReadFile',(0x10000,address,1,count,0)),0)
+        self.assertEqual(self.err(second),6)
+        self.assertEqual(self.api(first,'ReadFile',(0x10000,address,4097,count,0)),0)
+        self.assertEqual(self.err(first),87)
+        self.assertEqual(first[1].stdin_pos,13)
+
     def test_create_write_read_seek_size_flush_and_persistent_bytes(self):
         ctx=self.context();h=self.open(ctx);self.assertNotEqual(h,INVALID)
         self.assertEqual(self.io(ctx,'WriteFile',h,b'hello'),(1,5));self.assertEqual(self.api(ctx,'FlushFileBuffers',(h,)),1)

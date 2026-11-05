@@ -1,0 +1,85 @@
+name: Compact Windows W8 real Windows named-app reference inventory
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/compact_windows_real_apps.py'
+      - 'scripts/compact_windows_import_audit.py'
+      - 'scripts/compact_windows_w8_triage.py'
+      - 'tests/test_compact_windows_real_apps.py'
+      - 'tests/test_compact_windows_w8_triage.py'
+      - 'ryzova/compact/windows-v1-plan.json'
+      - '.github/workflows/compact-windows-real-apps.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  fail-closed-offline-inventory-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify fixed application set and no guest-execution claims
+        run: |
+          python -m unittest discover -s tests -p 'test_compact_windows_real_apps.py' -v
+          python -m unittest discover -s tests -p 'test_compact_windows_w8_triage.py' -v
+          python -m unittest discover -s tests -p 'test_compact_windows_import_audit.py' -v
+          python -m py_compile scripts/compact_windows_real_apps.py
+  genuine-windows-system32-reference:
+    runs-on: windows-2022
+    timeout-minutes: 18
+    env:
+      # The default pull_request GITHUB_SHA points at a synthetic merge
+      # commit, even when checkout explicitly pins the contributor's head.
+      RYZOVA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      # Existing W6 Windows workflow requires disabling Git's NTFS-name
+      # checkout rejection for legacy 9front con.scat; use with sparse paths.
+      - name: Apply Windows-safe Git checkout configuration
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_real_apps.py
+            /scripts/compact_windows_import_audit.py
+            /scripts/compact_windows_w8_triage.py
+            /tests/test_compact_windows_w8_triage.py
+            /ryzova/compat/windows/runtime.h
+            /tests/test_compact_windows_real_apps.py
+            /ryzova/compact/windows-v1-plan.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Execute only named System32 references and audit original PE binaries
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -p 'test_compact_windows_real_apps.py' -v
+          python scripts/compact_windows_real_apps.py --output artifacts/windows/w8-real-system32-apps.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/compact_windows_w8_triage.py --reference artifacts/windows/w8-real-system32-apps.json --output artifacts/windows/w8-candidate-triage.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload only hashed JSON evidence; never proprietary Windows executables
+        uses: actions/upload-artifact@v4
+        with:
+          name: w8-real-windows-app-reference
+          path: |
+            artifacts/windows/w8-real-system32-apps.json
+            artifacts/windows/w8-candidate-triage.json
+          if-no-files-found: error
+          retention-days: 14

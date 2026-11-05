@@ -1,0 +1,158 @@
+name: Compact Windows W7 real ARM64 PE research
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/compat/windows/arm64_probe*'
+      - 'tests/test_compact_windows_w7_arm64.py'
+      - 'scripts/compact_windows_w7_arm64_qemu_user.py'
+      - 'scripts/compact_windows_w7_windows_arm64_reference.ps1'
+      - 'scripts/compact_windows_w7_native_host_triplet.py'
+      - 'tests/test_compact_windows_w7_native_host_receipt.py'
+      - 'tests/test_compact_windows_w7_qemu_user_receipt.py'
+      - 'tests/fixtures/windows_w7_arm64_reference.c'
+      - 'tests/fixtures/windows_w7_arm64_call_reference.c'
+      - '.github/workflows/compact-windows-w7.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  import-free-arm64-pe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install independent LLVM PE linker
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y lld
+      - name: Require real C compiler and ARM64 Windows linker
+        run: |
+          command -v cc
+          command -v clang
+          command -v lld-link
+      - name: Run real compiler-built ARM64 PE and malformed image/ISA denials
+        env:
+          CW_W7_STRICT: '1'
+        run: python3 -m unittest discover -s tests -p 'test_compact_windows_w7_arm64.py' -v
+
+  qemu-linux-aarch64-source-pe-differential:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install independent Linux ARM64 compiler and QEMU userspace
+        run: |
+          sudo apt-get -o Acquire::Retries=2 update -qq
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross linux-libc-dev-arm64-cross qemu-user lld
+          test -f /usr/aarch64-linux-gnu/include/bits/libc-header-start.h
+          test -f /usr/aarch64-linux-gnu/lib/libc.a
+          command -v aarch64-linux-gnu-gcc
+          command -v qemu-aarch64
+          command -v clang
+          command -v lld-link
+      - name: Require strict bounded and original-architecture receipts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_windows_w7_qemu_user_receipt.py' -v
+          python3 -m py_compile scripts/compact_windows_w7_arm64_qemu_user.py
+      - name: Run original source-produced Windows ARM64 PE on both ISA interpreters
+        run: |
+          python3 scripts/compact_windows_w7_arm64_qemu_user.py --output artifacts/compact-windows/w7-arm64-qemu-user.json
+      - name: Archive evidence without any native kernel or hardware claims
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-w7-linux-arm64-qemu-user-evidence
+          path: artifacts/compact-windows/w7-arm64-qemu-user.json
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-arm64-native-host-reference:
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 20
+    steps:
+      - name: Configure narrow Windows-compatible checkout
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_w7_windows_arm64_reference.ps1
+            /tests/fixtures/windows_w7_arm64_reference.c
+            /tests/fixtures/windows_w7_arm64_call_reference.c
+      - name: Require actual Windows ARM64 OS and Clang/LLD
+        shell: pwsh
+        run: |
+          if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne [System.Runtime.InteropServices.Architecture]::Arm64) { throw 'Not Windows ARM64 OS' }
+          Get-Command clang -ErrorAction Stop
+          Get-Command lld-link -ErrorAction Stop
+      - name: Compile and execute four original Windows ARM64 native PE files
+        shell: pwsh
+        env:
+          CW_W7_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          ./scripts/compact_windows_w7_windows_arm64_reference.ps1 -OutDir artifacts/windows/w7-arm64 -SourceCommit $env:CW_W7_SOURCE_SHA
+      - name: Retain original PE files and genuine Windows ARM64 reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-w7-original-arm64-native-host-fixtures
+          path: |
+            artifacts/windows/w7-arm64/*.exe
+            artifacts/windows/w7-arm64/*.json
+          if-no-files-found: error
+          retention-days: 14
+
+  same-pe-windows-arm64-host-qemu-triplet:
+    needs: [windows-arm64-native-host-reference, qemu-linux-aarch64-source-pe-differential]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-w7-original-arm64-native-host-fixtures
+          path: artifacts/windows/w7-arm64-host-fixtures
+      - name: Install Linux AArch64 cross interpreter tools
+        run: |
+          sudo apt-get -o Acquire::Retries=2 update -qq
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross linux-libc-dev-arm64-cross qemu-user
+          test -f /usr/aarch64-linux-gnu/include/bits/libc-header-start.h
+      - name: Compare exact Windows-host PE on AMD64 and emulated AArch64 Linux
+        env:
+          CW_W7_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_windows_w7_native_host_receipt.py' -v
+          python3 -m py_compile scripts/compact_windows_w7_native_host_triplet.py
+          python3 scripts/compact_windows_w7_native_host_triplet.py \
+            --windows-host-dir artifacts/windows/w7-arm64-host-fixtures \
+            --source-sha "$CW_W7_SOURCE_SHA" \
+            --output artifacts/compact-windows/w7-native-arm64-triplet.json
+      - name: Preserve bound native Windows ARM64 host/ISA triplet evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-w7-native-arm64-host-triplet-evidence
+          path: artifacts/compact-windows/w7-native-arm64-triplet.json
+          if-no-files-found: error
+          retention-days: 14
