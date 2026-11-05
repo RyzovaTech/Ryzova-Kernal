@@ -1,0 +1,277 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+#ifdef MAC_PLAN9
+#include <u.h>
+#include <libc.h>
+#include <libsec.h>
+#else
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <openssl/sha.h>
+typedef uint64_t uvlong;
+typedef uint32_t uint;
+typedef unsigned char uchar;
+#endif
+
+enum { ImageBytes = 8472, Page = 4096, MaxSteps = 64, OutputLimit = 256 };
+enum { Base = 0x200000, Stack = 0x400000, WriteThunk = 0x10000, ReturnThunk = 0x10008 };
+enum { Ax, Cx, Dx, Bx, Sp, Bp, Si, Di };
+static const uchar reference_digest[32] = {
+    0x47,0x84,0x99,0xee,0xfd,0x52,0x28,0xf5,0x6f,0xfa,0xed,0x4d,0xaf,0xc0,0x74,0x36,
+    0xb0,0x1a,0xe1,0x31,0x9f,0x1c,0xc9,0x59,0x98,0xae,0xcb,0x92,0xe4,0x6a,0xfc,0x1f
+};
+static uchar image[ImageBytes+1], text[Page], data[Page], linkedit[Page], stack[Page];
+static uchar output[OutputLimit];
+static uvlong regs[8], ip;
+static uint output_size, calls, steps;
+static int equal;
+
+static uint
+read32(const uchar *p)
+{
+    return (uint)p[0] | (uint)p[1]<<8 | (uint)p[2]<<16 | (uint)p[3]<<24;
+}
+
+static uvlong
+read64(const uchar *p)
+{
+    return read32(p) | (uvlong)read32(p+4)<<32;
+}
+
+static void
+write64(uchar *p, uvlong value)
+{
+    int i;
+    for(i=0; i<8; i++)
+        p[i] = value>>(8*i);
+}
+
+static int
+within(uvlong addr, uvlong start, uvlong length, uvlong count)
+{
+    return addr >= start && addr-start <= length && count <= length-(addr-start);
+}
+
+static int
+push(uvlong value)
+{
+    if(regs[Sp]<8 || !within(regs[Sp]-8, Stack, Page, 8))
+        return 0;
+    regs[Sp] -= 8;
+    write64(stack+regs[Sp]-Stack, value);
+    return 1;
+}
+
+static int
+pop(uvlong *value)
+{
+    if(!within(regs[Sp], Stack, Page, 8))
+        return 0;
+    *value = read64(stack+regs[Sp]-Stack);
+    regs[Sp] += 8;
+    return 1;
+}
+
+static uvlong
+relative(uvlong next, uint displacement)
+{
+    if(displacement & 0x80000000U)
+        return next - ((uvlong)0x100000000ULL-displacement);
+    return next+displacement;
+}
+
+/* Only called after checking the digest of the complete M1 executable.
+ * Read its load commands and copy its three mapped segments into private
+ * backing arrays. PAGEZERO remains unmapped. The fixture has no rebases. */
+static int
+load_reference(void)
+{
+    const uchar *command, *fixups, *starts, *segment, *imports, *symbols;
+    uchar *target;
+    uint i, kind, offset, length, entry, fixup_offset, fixup_size;
+    uvlong preferred, va, file, size, pointer;
+
+    preferred = 0x100000000ULL;
+    entry = fixup_offset = fixup_size = 0;
+    command = image+32;
+    for(i=0; i<read32(image+16); i++){
+        kind = read32(command);
+        length = read32(command+4);
+        if(kind==0x19){
+            va = read64(command+24);
+            file = read64(command+40);
+            size = read64(command+48);
+            if(va!=0){
+                if(va==preferred)
+                    target = text;
+                else if(va==preferred+Page)
+                    target = data;
+                else if(va==preferred+2*Page)
+                    target = linkedit;
+                else
+                    return 0;
+                memmove(target, image+file, size);
+            }
+        }else if(kind==0x80000028U){
+            entry = read32(command+8);
+        }else if(kind==0x80000034U){
+            fixup_offset = read32(command+8);
+            fixup_size = read32(command+12);
+        }
+        command += length;
+    }
+    if(entry>=Page || entry==0 || fixup_offset!=2*Page || fixup_size!=96)
+        return 0;
+    fixups = linkedit;
+    starts = fixups+read32(fixups+4);
+    segment = starts+read32(starts+12); /* segment index 2, DATA_CONST */
+    imports = fixups+read32(fixups+8);
+    symbols = fixups+read32(fixups+12);
+    offset = segment[22] | (uint)segment[23]<<8;
+    if(read32(fixups+16)!=1 || read32(fixups+20)!=1 ||
+       segment[6]!=6 || segment[7]!=0 || offset!=0)
+        return 0;
+    pointer = read64(data+offset);
+    if(pointer!=((uvlong)1<<63) || (read32(imports)&0xff)!=1 ||
+       strcmp((const char *)symbols+(read32(imports)>>9), "_write")!=0)
+        return 0;
+    write64(data+offset, WriteThunk);
+    ip = Base+entry;
+    regs[Sp] = Stack+Page;
+    return push(ReturnThunk);
+}
+
+static int
+execute(void)
+{
+    const uchar *p;
+    uvlong next, slot, value, count;
+    uchar op;
+
+    for(steps=0; steps<MaxSteps; steps++){
+        if(!within(ip, Base, Page, 1))
+            return 0;
+        p = text+ip-Base;
+        op = p[0];
+        if(op>=0x50 && op<=0x57){
+            if(!push(regs[op-0x50]))
+                return 0;
+            ip++;
+        }else if(op>=0x58 && op<=0x5f){
+            if(op==0x5c || !pop(&regs[op-0x58]))
+                return 0;
+            ip++;
+        }else if(op>=0xb8 && op<=0xbf && within(ip,Base,Page,5)){
+            regs[op-0xb8] = read32(p+1);
+            ip += 5;
+        }else if(op==0x48 && within(ip,Base,Page,3) && p[1]==0x89 && p[2]==0xe5){
+            regs[Bp] = regs[Sp];
+            ip += 3;
+        }else if(op==0x48 && within(ip,Base,Page,7) && p[1]==0x8d && p[2]==0x35){
+            regs[Si] = relative(ip+7, read32(p+3));
+            ip += 7;
+        }else if(op==0xe8 && within(ip,Base,Page,5)){
+            next = ip+5;
+            if(!push(next))
+                return 0;
+            ip = relative(next, read32(p+1));
+        }else if(op==0xff && within(ip,Base,Page,6) && p[1]==0x25){
+            slot = relative(ip+6, read32(p+2));
+            if(slot!=Base+Page || read64(data)!=WriteThunk ||
+               (regs[Sp]&15)!=8 || regs[Di]!=1 || calls!=0)
+                return 0;
+            count = regs[Dx];
+            if(count>OutputLimit || !within(regs[Si],Base,Page,count))
+                return 0;
+            memmove(output, text+regs[Si]-Base, count);
+            output_size = count;
+            regs[Ax] = count;
+            calls++;
+            if(!pop(&ip))
+                return 0;
+        }else if(op==0x48 && within(ip,Base,Page,4) && p[1]==0x83 && p[2]==0xf8){
+            value = p[3];
+            if(value>=128)
+                value |= ~(uvlong)255;
+            equal = regs[Ax]==value;
+            ip += 4;
+        }else if(op==0x0f && within(ip,Base,Page,3) && p[1]==0x45 && p[2]==0xc3){
+            if(!equal)
+                regs[Ax] = (uint)regs[Bx];
+            ip += 3;
+        }else if(op==0x48 && within(ip,Base,Page,4) && p[1]==0x83 && p[2]==0xc4){
+            if(p[3]>=128 || !within(regs[Sp],Stack,Page,p[3]))
+                return 0;
+            regs[Sp] += p[3];
+            ip += 4;
+        }else if(op==0xc3){
+            if(!pop(&ip))
+                return 0;
+            if(ip==ReturnThunk)
+                return regs[Sp]==Stack+Page && calls==1;
+        }else
+            return 0;
+    }
+    return 0;
+}
+
+static int
+run_reference(const char *path)
+{
+    uchar digest[32];
+    long count;
+#ifdef MAC_PLAN9
+    int fd;
+
+    fd = open(path, OREAD);
+    if(fd<0)
+        return 0;
+    count = readn(fd, image, sizeof image);
+    close(fd);
+    if(count!=ImageBytes)
+        return 0;
+    sha2_256(image, ImageBytes, digest, nil);
+#else
+    FILE *file;
+
+    file = fopen(path, "rb");
+    if(file==NULL)
+        return 0;
+    count = fread(image, 1, sizeof image, file);
+    if(ferror(file)){
+        fclose(file);
+        return 0;
+    }
+    fclose(file);
+    if(count!=ImageBytes || SHA256(image, ImageBytes, digest)==NULL)
+        return 0;
+#endif
+    if(memcmp(digest, reference_digest, sizeof digest)!=0)
+        return 0;
+    return load_reference() && execute();
+}
+
+#ifdef MAC_PLAN9
+void
+main(int argc, char **argv)
+{
+    if(argc!=2 || !run_reference(argv[1]))
+        sysfatal("unsupported M2 reference image or execution fault");
+    if(write(1, output, output_size)!=output_size)
+        sysfatal("output failed");
+    print("MAC_M2_EXIT %ud STEPS %ud WRITE_CALLS %ud\n", (uint)regs[Ax], steps+1, calls);
+    exits(nil);
+}
+#else
+int
+main(int argc, char **argv)
+{
+    if(argc!=2 || !run_reference(argv[1])){
+        fputs("unsupported M2 reference image or execution fault\n", stderr);
+        return 125;
+    }
+    if(fwrite(output, 1, output_size, stdout)!=output_size || fflush(stdout)!=0)
+        return 125;
+    return (uint)regs[Ax]&255;
+}
+#endif
