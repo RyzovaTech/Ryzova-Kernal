@@ -233,6 +233,18 @@ if m5_arm64_native:
     armstage("m5-arm64-hash",
         "cd /sys/src/9/arm64; test -s 9qemu.u && sha1sum -2 256 9qemu.u")
 
+# Preserve Compact Linux service and persistent hjfs flush from current main.
+# The ARM64 stages must not replace these mandatory native guest checks.
+index = len(stages)
+stages.append(("compact-linux-service",
+    "cd /sys/src/cmd/compact-linux/service && mk install > /tmp/compact-fs.log >[2=1] "
+    "&& echo COMPACT_SERVICE_BUILD_OK; tail -n 30 /tmp/compact-fs.log; echo PHASE3_END_" + str(index)))
+
+index = len(stages)
+stages.append(("flush-native-filesystem",
+    "echo sync >> /srv/hjfs.cmd && sleep 3 && echo COMPACT_FS_SYNC_OK; "
+    "echo PHASE3_END_" + str(index)))
+
 raw=bytearray()
 session = dict(bootargs=False, user=False, shell=False, stage=0, sent=False, final=False)
 marks = {}
