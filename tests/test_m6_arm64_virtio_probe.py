@@ -68,8 +68,33 @@ class VirtioContract(unittest.TestCase):
         self.assertEqual(len(cmds), 4)
         self.assertTrue(all(len(c) < 190 for c in cmds))
         self.assertTrue(any("hget http://10.0.2.100" in c for c in cmds))
-        self.assertTrue(any("> /dev/sd00/data" in c for c in cmds))
+        self.assertTrue(any("> /dev/sd01/data" in c for c in cmds))
+        self.assertTrue(any("dd -if /dev/sd01/data" in c for c in cmds))
+        self.assertFalse(any("> /dev/sd00/data" in c for c in cmds))
         self.assertTrue(any("sha1sum -2 256 /tmp/m6-disk-read" in c for c in cmds))
+
+    def test_valid_kernel_requires_existing_root_disk_before_qemu(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            kernel = out / "synthetic-not-a-real-kernel.u"
+            kernel.write_bytes(b"not a real AArch64 boot image")
+            from hashlib import sha256
+            image_digest = sha256(kernel.read_bytes()).hexdigest()
+            report = m.run_probe(kernel, "a" * 40, image_digest, out,
+                                 root_overlay=out / "not-present.qcow2")
+            self.assertEqual(report["outcome"], "rootfs-disk-missing")
+            self.assertFalse(report["qemu_virtio_devices_attached"])
+            self.assertFalse(report["arm64_virtio_network_verified"])
+            self.assertFalse(report["arm64_virtio_storage_verified"])
+            self.assertEqual(report["newly_certified_physical_models"], 0)
+
+    def test_host_root_disk_remains_copy_on_write(self):
+        source = (ROOT / "scripts/m6_arm64_virtio_probe.py").read_text()
+        self.assertIn('"arm64-root-cow.qcow2"', source)
+        self.assertIn('"qemu-img", "create", "-f", "qcow2"', source)
+        self.assertIn('"m6root,format=qcow2,file={root_disk}"', source)
+        self.assertIn('"m6disk,format=raw,file={disk}"', source)
+        self.assertIn('"root_disk_copy_on_write": False', source)
 
     def test_invalid_kernel_sha_never_starts_qemu(self):
         with tempfile.TemporaryDirectory() as td:
