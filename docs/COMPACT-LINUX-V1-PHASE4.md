@@ -416,3 +416,25 @@ unmasked traps, DAZ/FTZ, altered rounding and multi-thread FP state
 qualification remain open. Native CPython full code/stdlib and
 AMD64-ABI acceptance require the subsequent frozen guest result and
 native QEMU evidence before any completion claim.
+
+## 4N — Step-limit classification after musl STMXCSR fix
+
+At PR #81 commit `5524ee2`, the pinned CPython `-c` probe progressed
+from `vm_status=3` (unsupported `0F AE /3 STMXCSR` candidate in pinned
+musl) to **`vm_status=4`**, exactly **8,388,608 guest instructions**.
+The current RIP `4bddf4` maps to main-ELF bytes beginning
+`48 8B 94 C5 78 0F 00 00`; this is **not** a demonstrated unsupported
+opcode or application success. The failure is the declared step budget.
+
+For a new *diagnostic only*, increase CPython's `-c` probe from 8,388,608
+to **16,777,216 instructions**, exactly the already audited
+`jobs_probe -b` hard maximum. No kernel/runtime maximum, production
+default, file size, host RAM, resource grant or native guest security
+ceiling is increased. Both 120-second wall timeout and explicit
+failed-probe records remain in place. Unit tests assert the new finite
+budget, reject values above it and prevent arbitrary other frozen
+targets using this enlarged diagnostic profile.
+
+A successful short `-c` print still cannot qualify full Python stdlib
+or resource budgets. If 16,777,216 steps expire, it is a **STEP_LIMIT**
+result and must NOT be misrepresented as an opcode failure or PASS.

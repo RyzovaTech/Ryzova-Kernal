@@ -14,10 +14,11 @@ ROOT=Path(__file__).resolve().parents[1]
 # Keep these in lockstep with process.h; unit tests assert both ceilings.
 IMAGE_MAX_BYTES=32*1024*1024
 IMAGE_TOTAL_BYTES=48*1024*1024
-# Probe-only limit, below audited jobs_probe -b hard ceiling of 16M.
+# Probe-only limit, at audited jobs_probe -b hard ceiling of 16M.
+# This remains a diagnostic, NOT a production default or RESOURCE claim.
 # Unmodified production defaults and other locked targets are unchanged.
 GUEST_VERSION_STEPS=1_048_576
-PYTHON_CODE_STEPS=8_388_608
+PYTHON_CODE_STEPS=16_777_216
 PYTHON_CODE_TIMEOUT_SECONDS=120
 GUEST_HARD_STEP_CEILING=16_777_216
 

@@ -13,7 +13,7 @@ class GuestProbeBudgetTests(unittest.TestCase):
  def test_source_locked_python_diagnostic_step_ceiling_is_explicit_and_finite(self):
   import compact_linux_target_profiles as profile
   self.assertEqual(profile.probe_step_limit('python'),1048576)
-  self.assertEqual(profile.probe_step_limit('python',True),8388608)
+  self.assertEqual(profile.probe_step_limit('python',True),16777216)
   self.assertLessEqual(profile.PYTHON_CODE_STEPS,profile.GUEST_HARD_STEP_CEILING)
   self.assertLessEqual(profile.PYTHON_CODE_TIMEOUT_SECONDS,120)
   for target in ('busybox','git','gcc','binutils','make','musl'):
