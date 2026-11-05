@@ -1,4 +1,4 @@
-name: Compact macOS M2 and M3 execution proof
+name: Compact macOS M2 through M4 execution proof
 on:
   pull_request:
     paths:
@@ -6,6 +6,7 @@ on:
       - 'tests/fixtures/macos_m1_reference.macho'
       - 'tests/test_compact_macos_m2.py'
       - 'tests/fixtures/macos_m3_guest.S'
+      - 'tests/fixtures/macos_m4_reference.S'
       - 'scripts/compact_macos_m3_fixture.py'
       - 'scripts/compact_macos_m2_native.py'
       - '.github/workflows/compact-macos-m2.yml'
@@ -21,15 +22,50 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 -m unittest discover -s tests -p test_compact_macos_m2.py -v
+  macos-dynamic-reference:
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            tests/fixtures
+      - name: Build and run the dynamic PIE reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          test "$(uname -m)" = x86_64
+          clang -arch x86_64 -Wl,-fixup_chains tests/fixtures/macos_m4_reference.S -o evidence/m4
+          test "$(lipo -archs evidence/m4)" = x86_64
+          status=0
+          ./evidence/m4 > evidence/stdout.txt 2> evidence/stderr.txt || status=$?
+          test "$status" -eq 47
+          test ! -s evidence/stderr.txt
+          printf 'FLEX_MACOS_M4_DYNAMIC\n' | cmp - evidence/stdout.txt
+          printf '%s\n' "$status" > evidence/exit.txt
+          git rev-parse HEAD > evidence/commit.txt
+          shasum -a 256 evidence/m4 > evidence/sha256.txt
+          otool -l evidence/m4 > evidence/load-commands.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compact-macos-m4-reference
+          path: evidence/
+          if-no-files-found: error
   native:
     runs-on: ubuntu-24.04
-    needs: reference
+    needs: [reference, macos-dynamic-reference]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: compact-macos-m4-reference
+          path: artifacts/m4-reference
       - run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils mtools
@@ -39,7 +75,7 @@ jobs:
           echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  bootstrap.qcow2.gz' | sha256sum -c -
           gzip -dc bootstrap.qcow2.gz > bootstrap.qcow2
           qemu-img create -f qcow2 -F qcow2 -b bootstrap.qcow2 mac-m2.qcow2
-      - run: python3 scripts/compact_macos_m2_native.py mac-m2.qcow2 bootstrap.qcow2.gz --m3
+      - run: python3 scripts/compact_macos_m2_native.py mac-m2.qcow2 bootstrap.qcow2.gz --m3 artifacts/m4-reference
       - uses: actions/upload-artifact@v4
         if: always()
         with:

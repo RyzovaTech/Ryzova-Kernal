@@ -14,9 +14,10 @@ typedef unsigned char uchar;
 #endif
 
 #include "grant.h"
+#include "dynamic.h"
 
-enum { ImageBytes = 8472, Page = 4096, MaxSteps = 64, OutputLimit = 256 };
-enum { Base = 0x200000, Stack = 0x400000, WriteThunk = 0x10000, ReturnThunk = 0x10008 };
+enum { ImageBytes = 8472, Page = MacPage, MaxSteps = 64, OutputLimit = 256 };
+enum { Base = MacBase, Stack = 0x400000, WriteThunk = MacWriteThunk, ReturnThunk = 0x10008 };
 enum { Ax, Cx, Dx, Bx, Sp, Bp, Si, Di };
 static const uchar reference_digest[32] = {
     0x47,0x84,0x99,0xee,0xfd,0x52,0x28,0xf5,0x6f,0xfa,0xed,0x4d,0xaf,0xc0,0x74,0x36,
@@ -26,10 +27,11 @@ static const uchar m3_digest[32] = {
     0x4b,0x2f,0xdd,0x6c,0x3f,0xbe,0x8c,0x4c,0x98,0x41,0xf6,0xbe,0x0b,0x3b,0x97,0x2e,
     0x1d,0x73,0xc1,0xac,0xa3,0x41,0xfa,0x1f,0xea,0x9f,0x47,0x16,0xf9,0x0b,0xf4,0x90
 };
-static int m3, carry, guest_file = -1;
+static MacDynamic dynamic_plan;
+static int dynamic_mode, m3, carry, guest_file = -1;
 static unsigned long file_offset;
 static uint opens, reads, writes, denials;
-static uchar image[ImageBytes+1], text[Page], data[Page], linkedit[Page], stack[Page];
+static uchar image[MacImageLimit+1], text[Page], data[Page], stack[Page];
 static uchar output[OutputLimit];
 static uvlong regs[8], ip;
 static uint output_size, calls, steps;
@@ -89,63 +91,12 @@ relative(uvlong next, uint displacement)
     return next+displacement;
 }
 
-/* Only called after checking the digest of the complete M1 executable.
- * Read its load commands and copy its three mapped segments into private
- * backing arrays. PAGEZERO remains unmapped. The fixture has no rebases. */
 static int
-load_reference(void)
+load_dynamic(unsigned int length)
 {
-    const uchar *command, *fixups, *starts, *segment, *imports, *symbols;
-    uchar *target;
-    uint i, kind, offset, length, entry, fixup_offset, fixup_size;
-    uvlong preferred, va, file, size, pointer;
-
-    preferred = 0x100000000ULL;
-    entry = fixup_offset = fixup_size = 0;
-    command = image+32;
-    for(i=0; i<read32(image+16); i++){
-        kind = read32(command);
-        length = read32(command+4);
-        if(kind==0x19){
-            va = read64(command+24);
-            file = read64(command+40);
-            size = read64(command+48);
-            if(va!=0){
-                if(va==preferred)
-                    target = text;
-                else if(va==preferred+Page)
-                    target = data;
-                else if(va==preferred+2*Page)
-                    target = linkedit;
-                else
-                    return 0;
-                memmove(target, image+file, size);
-            }
-        }else if(kind==0x80000028U){
-            entry = read32(command+8);
-        }else if(kind==0x80000034U){
-            fixup_offset = read32(command+8);
-            fixup_size = read32(command+12);
-        }
-        command += length;
-    }
-    if(entry>=Page || entry==0 || fixup_offset!=2*Page || fixup_size!=96)
+    if(!mac_dynamic_load(image, length, text, data, &dynamic_plan))
         return 0;
-    fixups = linkedit;
-    starts = fixups+read32(fixups+4);
-    segment = starts+read32(starts+12); /* segment index 2, DATA_CONST */
-    imports = fixups+read32(fixups+8);
-    symbols = fixups+read32(fixups+12);
-    offset = segment[22] | (uint)segment[23]<<8;
-    if(read32(fixups+16)!=1 || read32(fixups+20)!=1 ||
-       segment[6]!=6 || segment[7]!=0 || offset!=0)
-        return 0;
-    pointer = read64(data+offset);
-    if(pointer!=((uvlong)1<<63) || (read32(imports)&0xff)!=1 ||
-       strcmp((const char *)symbols+(read32(imports)>>9), "_write")!=0)
-        return 0;
-    write64(data+offset, WriteThunk);
-    ip = Base+entry;
+    ip = Base+dynamic_plan.entry;
     regs[Sp] = Stack+Page;
     return push(ReturnThunk);
 }
@@ -277,6 +228,13 @@ execute(void)
         }else if(op==0x48 && within(ip,Base,Page,7) && p[1]==0x8d && p[2]==0x35){
             regs[Si] = relative(ip+7, read32(p+3));
             ip += 7;
+        }else if(dynamic_mode && op==0x48 && within(ip,Base,Page,7) &&
+                 p[1]==0x8b && p[2]==0x35){
+            slot = relative(ip+7, read32(p+3));
+            if(!within(slot, Data, Page, 8))
+                return 0;
+            regs[Si] = read64(data+slot-Data);
+            ip += 7;
         }else if(m3 && op==0x48 && within(ip,Base,Page,4) &&
                  p[1]==0x8b && p[2]==0x7e && p[3]==8){
             if(!within(regs[Si],Data,Page,16))
@@ -317,7 +275,8 @@ execute(void)
             ip = relative(next, read32(p+1));
         }else if(op==0xff && within(ip,Base,Page,6) && p[1]==0x25){
             slot = relative(ip+6, read32(p+2));
-            if(slot!=Base+Page || read64(data)!=WriteThunk ||
+            if(m3 || slot!=Data+dynamic_plan.write_slot ||
+               read64(data+dynamic_plan.write_slot)!=WriteThunk ||
                (regs[Sp]&15)!=8 || regs[Di]!=1 || calls!=0)
                 return 0;
             count = regs[Dx];
@@ -369,10 +328,11 @@ run_reference(int argc, char **argv)
     FILE *file;
 #endif
 
-    if(argc!=2 && argc!=5)
+    dynamic_mode = argc==3 && strcmp(argv[1], "--dynamic")==0;
+    if(argc!=2 && argc!=5 && !dynamic_mode)
         return 0;
     m3 = argc==5;
-    path = argv[1];
+    path = dynamic_mode ? argv[2] : argv[1];
     expected = m3 ? Page : ImageBytes;
 #ifdef MAC_PLAN9
     fd = open(path, OREAD);
@@ -380,6 +340,8 @@ run_reference(int argc, char **argv)
         return 0;
     count = readn(fd, image, sizeof image);
     close(fd);
+    if(dynamic_mode)
+        return count>0 && count<=MacImageLimit && load_dynamic(count) && execute();
     if(count!=expected)
         return 0;
     sha2_256(image, expected, digest, nil);
@@ -393,6 +355,8 @@ run_reference(int argc, char **argv)
         return 0;
     }
     fclose(file);
+    if(dynamic_mode)
+        return count>0 && count<=MacImageLimit && load_dynamic(count) && execute();
     if(count!=expected || SHA256(image, expected, digest)==NULL)
         return 0;
 #endif
@@ -408,7 +372,7 @@ run_reference(int argc, char **argv)
             mac_grant_close(guest_file);
         return ok;
     }
-    return load_reference() && execute();
+    return load_dynamic(count) && execute();
 }
 
 #ifdef MAC_PLAN9
@@ -419,7 +383,10 @@ main(int argc, char **argv)
         sysfatal("unsupported Mac reference image or execution fault");
     if(write(1, output, output_size)!=output_size)
         sysfatal("output failed");
-    if(m3)
+    if(dynamic_mode)
+        print("MAC_M4_EXIT %ud STEPS %ud WRITE_CALLS %ud REBASES %ud\n",
+              (uint)regs[Ax], steps+1, calls, dynamic_plan.rebases);
+    else if(m3)
         print("MAC_M3_EXIT %ud STEPS %ud OPEN %ud READ %ud WRITE %ud DENIED %ud\n",
               (uint)regs[Ax], steps+1, opens, reads, writes, denials);
     else

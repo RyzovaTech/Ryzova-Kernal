@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 import hashlib
+import struct
 from pathlib import Path
 import subprocess
 import tempfile
@@ -22,7 +23,8 @@ class ReferenceExecution(unittest.TestCase):
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
                         "-fsanitize=undefined", "-fno-sanitize-recover=all",
                         str(ROOT / "ryzova/compat/macos/m2.c"), "-lcrypto",
-                        str(ROOT / "ryzova/compat/macos/grant.c"), "-o", str(cls.runner)], check=True)
+                        str(ROOT / "ryzova/compat/macos/grant.c"),
+                        str(ROOT / "ryzova/compat/macos/dynamic.c"), "-o", str(cls.runner)], check=True)
 
     def test_reference_matches_macos(self):
         self.assertEqual(hashlib.sha256(FIXTURE.read_bytes()).hexdigest(),
@@ -79,3 +81,38 @@ class ReferenceExecution(unittest.TestCase):
                                      (13, b"", b""))
             self.assertEqual(outside.read_bytes(), b"SAFE")
             self.assertEqual(local.read_bytes(), b"IN!\n")
+
+    def dynamic_image(self):
+        image = bytearray(FIXTURE.read_bytes())
+        # Chain the original _write bind to a rebase in DATA_CONST. The guest
+        # loads the rebased pointer instead of computing its text address.
+        struct.pack_into("<QQ", image, 4096, (1 << 63) | (2 << 51), 0x4b0)
+        image[0x477] = 0x8b
+        struct.pack_into("<i", image, 0x479, 0x1008 - 0x47d)
+        image[0x4b0] = ord("N")
+        return image
+
+    def run_dynamic(self, image):
+        path = Path(self.work.name) / "dynamic.macho"
+        path.write_bytes(image)
+        return subprocess.run([self.runner, "--dynamic", path], capture_output=True, timeout=5)
+
+    def test_m4_executes_a_distinct_image_using_a_rebased_pointer(self):
+        result = self.run_dynamic(self.dynamic_image())
+        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                         (37, b"NLEX_MACOS_M1_REFERENCE\n", b""))
+
+    def test_m4_rejects_unbound_imports_invalid_fixups_and_guest_traps(self):
+        for label, offset, patch in (
+            ("foreign dylib", FIXTURE.read_bytes().index(b"libSystem.B.dylib"), b"X"),
+            ("unknown import", 0x2055, b"X"),
+            ("unmapped rebase", 4104, struct.pack("<Q", 0x3000)),
+            ("overlapping chain", 4096, struct.pack("<Q", (1 << 63) | (1 << 51))),
+            ("out of range fixups table", 8196, struct.pack("<I", 0xffffffff)),
+            ("guest syscall", 0x470, bytes((0x0f, 5))),
+        ):
+            with self.subTest(label=label):
+                image = self.dynamic_image()
+                image[offset:offset+len(patch)] = patch
+                result = self.run_dynamic(image)
+                self.assertEqual((result.returncode, result.stdout), (125, b""))
