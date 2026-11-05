@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Fail-closed W6 native AMD64/QEMU *bounded profile* evidence validator.
 
 A hosted test or a copied historical receipt is not native evidence. The caller

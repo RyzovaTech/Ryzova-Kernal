@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Build source-level AMD64 device/firmware matrix and fail-closed release report.
 
 No runtime driver or hardware is exercised by this script. In particular:
