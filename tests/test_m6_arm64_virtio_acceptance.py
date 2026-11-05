@@ -35,6 +35,7 @@ def fixtures():
         "verified_uimage_sha256": True,
         "guest_shell_reached": True,
         "qemu_virtio_devices_attached": True,
+        "root_disk_copy_on_write": True,
         "http_guest_request_observed": True,
         "host_fixture_requests": 1,
         "guest_network_digest_verified": True,
@@ -81,6 +82,12 @@ class M6VirtioAcceptance(unittest.TestCase):
         boot, io = fixtures()
         io["expected_uimage_sha256"] = "c"*64
         self.assertFalse(gate.evaluate(boot, io, HEAD)["checks"]["m6_2_boots_exact_native_uimage"])
+
+    def test_no_verified_disposable_root_image_blocks_io_acceptance(self):
+        boot, io = fixtures()
+        io["root_disk_copy_on_write"] = False
+        report = gate.evaluate(boot, io, HEAD)
+        self.assertFalse(report["m6_2_virtio_functional_accepted"])
 
     def test_no_guest_shell_or_device_blocks(self):
         for field in ("guest_shell_reached", "qemu_virtio_devices_attached"):
