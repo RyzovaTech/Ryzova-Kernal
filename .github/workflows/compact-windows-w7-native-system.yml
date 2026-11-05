@@ -1,0 +1,74 @@
+name: Compact Windows W7 source-built native ARM64 QEMU system boot
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sys/src/9/arm64/**'
+      - 'sys/src/9/port/**'
+      - 'sys/src/9/boot/**'
+      - 'sys/include/**'
+      - 'arm64/include/**'
+      - 'scripts/compact_windows_w7_native_arm64_system.py'
+      - 'tests/test_compact_windows_w7_native_arm64_system.py'
+      - 'docs/COMPACT-WINDOWS-W7.md'
+      - '.github/workflows/compact-windows-w7-native-system.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  source-and-receipt-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify original tracked ARM64 source and strictly bounded native receipt
+        run: |
+          python3 -m py_compile scripts/compact_windows_w7_native_arm64_system.py
+          python3 -m unittest discover -s tests -p 'test_compact_windows_w7_native_arm64_system.py' -v
+  source-built-arm64-kernel-boot:
+    needs: [source-and-receipt-contract]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install isolated full-system ARM64 QEMU and pinned Plan 9 build VM tooling
+        run: |
+          sudo apt-get -o Acquire::Retries=2 update -qq
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends \
+            qemu-system-x86 qemu-system-arm qemu-utils mtools
+          command -v qemu-system-aarch64
+          command -v qemu-system-x86_64
+          command -v mcopy
+      - name: Verify exact existing W6 9front guest bootstrap bytes
+        run: |
+          curl --fail --location --retry 3 --max-time 900 \
+            https://build.9front.org/release/9front-11952.amd64.qcow2.gz -o 9front.qcow2.gz
+          echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  9front.qcow2.gz' | sha256sum -c -
+          gzip -dc 9front.qcow2.gz > 9front.qcow2
+          qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-w7-a64-build.qcow2
+      - name: Actually build original source ARM64 Ryzova kernel and boot QEMU AArch64
+        run: |
+          python3 scripts/compact_windows_w7_native_arm64_system.py \
+            native-w7-a64-build.qcow2 \
+            --bootstrap-gzip 9front.qcow2.gz \
+            --output artifacts/compact-windows/w7-native-arm64
+      - name: Preserve original serial and source-bound build evidence; no physical claims
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: w7-source-built-native-arm64-system-evidence
+          path: |
+            artifacts/compact-windows/w7-native-arm64/*.json
+            artifacts/compact-windows/w7-native-arm64/*.log
+          if-no-files-found: warn
+          retention-days: 14
