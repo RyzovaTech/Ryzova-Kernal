@@ -2,9 +2,9 @@
   "schema": "compact-windows-w1-audit/v1",
   "scope": "metadata-only characterization; accepted variants are W2 admission blockers",
   "source_sha256": {
-    "ryzova/compat/windows/pe64.c": "2b2c1e4dbb004efc23b767fdc6b797d1d6d6fcefeebbdccce303baf3cf6183e9",
-    "ryzova/compat/windows/pe64.h": "6db3a44e8082632b5f92dcb027823da44f862a7ce8e29764f979ae676e7b1cc5",
-    "ryzova/compat/windows/pe64_probe.c": "08a693abf7c9ba93088bc71672cb49d01344b1cf5f0e91fa8a9933efc7f770b9"
+    "ryzova/compat/windows/pe64.c": "dceb24916ea4c583d3380608376a31dfe1365f5619ed81522272ec9f46e0a1d7",
+    "ryzova/compat/windows/pe64.h": "6fb94a5a3e4c3446aef908ee242482e885166f83344011a23a449a936252754d",
+    "ryzova/compat/windows/pe64_probe.c": "a86ab7a967d63b3d2f531addedf689c9e52a045c221403899b25769c7e0f2c"
   },
   "cases": [
     {
