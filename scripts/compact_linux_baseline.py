@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Repeat the existing compatibility baseline; never declares V1 complete or merges."""
 import argparse
 import hashlib
