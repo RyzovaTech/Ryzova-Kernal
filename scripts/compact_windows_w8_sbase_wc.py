@@ -367,7 +367,7 @@ if __name__ == "__main__":
     app = compile_windows(str(Path(found)/"VC/Auxiliary/Build/vcvars64.bat"),
                           FIXTURE, output)
     plan = json.loads((ROOT/"ryzova/compact/windows-v1-plan.json").read_text())
-    report = run_reference(app, plan, provenance, os.environ.get("GITHUB_SHA", ""),
+    report = run_reference(app, plan, provenance, os.environ.get("RYZOVA_SOURCE_SHA") or os.environ.get("GITHUB_SHA", ""),
                            os.environ.get("ImageVersion", ""))
     mincrt = compile_mincrt_windows(str(Path(found)/"VC/Auxiliary/Build/vcvars64.bat"),
                                    FIXTURE, output)
