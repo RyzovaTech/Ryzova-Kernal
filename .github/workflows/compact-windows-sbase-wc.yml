@@ -38,7 +38,7 @@ jobs:
     env:
       # The default pull_request GITHUB_SHA points at a synthetic merge
       # commit, even when checkout explicitly pins the contributor's head.
-      GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      RYZOVA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Configure approved Windows-safe checkout
         shell: pwsh
