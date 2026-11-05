@@ -46,7 +46,8 @@ def evaluate(cross, boot, sha):
             and all(libs.get(name) == "pass" for name in REQUIRED_LIBRARIES)
         ),
         "target_paqfs_factotum_linked": cross.get("arm64_paqfs_userspace") == "pass"
-            and cross.get("arm64_factotum_userspace") == "pass",
+            and cross.get("arm64_factotum_userspace") == "pass"
+            and cross.get("arm64_rc_userspace") == "pass",
         "arm64_native_kernel_linked": cross.get("arm64_kernel_link") == "pass"
             and boot.get("arm64_kernel_link") == "pass",
         "arm64_uimage_fat_copy_verified": cross.get("arm64_fat_copy_verified") is True,
@@ -60,6 +61,7 @@ def evaluate(cross, boot, sha):
             boot.get("schema") == "ryzova-m5-arm64-native-qemu/v1"
             and boot.get("arm64_qemu_boot_observed") is True
             and boot.get("outcome") == "kernel-boot-observed"
+            and boot.get("arm64_boot_panic_observed") is False
         ),
         "not_a_hardware_release": (
             boot.get("release_status") == "blocked"

@@ -23,6 +23,7 @@ class M5Bootstrap(unittest.TestCase):
                          "mk 9qemu",
                          "M5_ARM64_7C_STATUS_",
                          "M5_ARM64_PCI_7C_STATUS_",
+                         "M5_ARM64_RC_STATUS_",
                          "M5_ARM64_PAQFS_STATUS_",
                          "M5_ARM64_FACTOTUM_STATUS_",
                          "M5_ARM64_MK_STATUS_"):
@@ -40,7 +41,7 @@ class M5Bootstrap(unittest.TestCase):
         exec(compile(ast.Module(body=[branch],type_ignores=[]),
                      "<m5-arm64-stages>","exec"),env)
         built=env["stages"][11:]
-        self.assertEqual(len(built),41)
+        self.assertEqual(len(built),43)
         for ix,(name,command) in enumerate(built,11):
             self.assertLessEqual(len(command),190, name)
             self.assertTrue(command.endswith("; echo PHASE3_END_"+str(ix)),name)
@@ -51,6 +52,8 @@ class M5Bootstrap(unittest.TestCase):
                 "libmemdraw", "libmemlayer", "libauth", "libauthsrv")
         names = {name for name, _ in built}
         self.assertIn("m5-arm64-libdirs", names)
+        self.assertIn("m5-arm64-rc", names)
+        self.assertIn("m5-arm64-rc-check", names)
         for lib in libs:
             self.assertIn("m5-arm64-build-" + lib, names)
             self.assertIn("m5-arm64-verify-" + lib, names)
@@ -76,7 +79,7 @@ class M5Bootstrap(unittest.TestCase):
                      "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"):
             self.assertIn('"' + path + '"', source)
         self.assertIn('arm64_libraries_ok = all(arm64_libraries.values())', source)
-        self.assertIn('arm64_libraries_ok and paqfs_ok and factotum_ok', source)
+        self.assertIn('arm64_libraries_ok and arm64_rc_ok and paqfs_ok', source)
         self.assertIn('"arm64_bootstrap_libraries_complete": arm64_libraries_ok', source)
         self.assertIn('marks.get("m5-arm64-verify-" + lib)', source)
 
@@ -92,6 +95,8 @@ class M5Bootstrap(unittest.TestCase):
         self.assertIn('cp 9qemu.u /n/9fat/9qemu.u && ', s)
         self.assertIn('cmp 9qemu.u /n/9fat/9qemu.u', s)
         self.assertIn('"arm64_fat_copy_verified": bool(arm64_fat_copy_ok)', s)
+        self.assertIn('"arm64_rc_userspace": "pass" if arm64_rc_ok', s)
+        self.assertIn('"sys/src/cmd/rc"', s)
         self.assertIn('"arm64_uimage_guest_sha256": image_hashes[-1]', s)
         self.assertIn('"full_m5_1_complete": False', s)
 

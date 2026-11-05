@@ -143,3 +143,21 @@ M6.1 boot remains independently accepted under its SHA-256 gate.
 M6.2 requires real datapath evidence, which may remain blocked until
 ARM64 userland boot, guest root filesystem and VirtIO enumeration work.
 Neither CI nor this PR relaxes release or physical-hardware certification.
+
+## 2026-11-05 verified ARM64 bootfs panic and native rc repair
+
+Run https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/41951866039
+proved actual ARM64 kernel link and independent uImage SHA-256, but the
+actual AArch64 guest serial also showed `panic: boot process died:
+file does not exist: '/bin/rc'`. The separate VirtIO guest hit the same
+panic. No ARM64 guest shell or network/storage I/O was verified.
+
+Source-built ARM64 `rc` from the exact Git checkout now must be compiled
+and installed into `/arm64/bin/rc` **before** the embedded bootfs is
+repacked. Missing executable, native `mk` failures or standalone
+nonzero completion markers block the ARM64 native linker-evidence gate.
+The M6.1/M6.2 CI acceptance reports explicitly reject an ARM64 QEMU
+boot panic, even when the Plan 9 banner and cpu0 text were printed.
+This repairs prior false-positive boot qualification; kernel proof and
+functional data-plane qualification are still separate. Zero physical
+models are certified.

@@ -26,6 +26,19 @@ class Arm64QemuProbeTest(unittest.TestCase):
         module.OUT,module.CROSS,module.SERIAL=self.orig
         self.t.cleanup()
 
+    def test_kernel_panic_overrides_boot_banner_and_cpu0(self):
+        serial = (b"Plan 9\r\ncpu0: 1000MHz QEMU\r\n"
+                  b"panic: boot process died: file does not exist: '/bin/rc'\r\n")
+        evidence = module.inspect_native_boot_serial(serial)
+        self.assertTrue(evidence["banner"])
+        self.assertTrue(evidence["cpu"])
+        self.assertTrue(evidence["panic"])
+        self.assertFalse(evidence["boot_observed"])
+        safe = module.inspect_native_boot_serial(
+            b"Plan 9\r\ncpu0: 1000MHz QEMU\r\nbootargs is (tcp)[local] ")
+        self.assertFalse(safe["panic"])
+        self.assertTrue(safe["boot_observed"])
+
     def test_nonlinked_image_never_invokes_qemu_or_certifies_hardware(self):
         module.CROSS.write_text(json.dumps({
             "source_sha":"a"*40,

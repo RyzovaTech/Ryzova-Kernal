@@ -22,6 +22,7 @@ def fixture():
         "arm64_bootstrap_libraries": {lib: "pass" for lib in gate.REQUIRED_LIBRARIES},
         "arm64_paqfs_userspace": "pass",
         "arm64_factotum_userspace": "pass",
+        "arm64_rc_userspace": "pass",
         "arm64_kernel_link": "pass",
         "arm64_fat_copy_verified": True,
         "arm64_uimage_guest_sha256": DIGEST,
@@ -33,6 +34,7 @@ def fixture():
         "source_built_kernel_sha256": DIGEST,
         "independent_kernel_sha256_verified": True,
         "arm64_qemu_boot_observed": True,
+        "arm64_boot_panic_observed": False,
         "outcome": "kernel-boot-observed",
         "release_status": "blocked",
         "newly_certified_physical_models": 0,
@@ -59,6 +61,14 @@ class M6NativeBootAcceptance(unittest.TestCase):
             report = gate.evaluate(cross, boot, SHA)
             self.assertFalse(report["checks"]["all_target_libraries_built"], lib)
             self.assertFalse(report["arm64_qemu_boot_accepted"], lib)
+
+    def test_missing_native_rc_and_kernel_panic_block_acceptance(self):
+        cross, boot = fixture()
+        cross["arm64_rc_userspace"] = "blocked"
+        self.assertFalse(gate.evaluate(cross, boot, SHA)["arm64_qemu_boot_accepted"])
+        cross, boot = fixture()
+        boot["arm64_boot_panic_observed"] = True
+        self.assertFalse(gate.evaluate(cross, boot, SHA)["arm64_qemu_boot_accepted"])
 
     def test_wrong_checkout_and_hash_fail(self):
         cross, boot = fixture()

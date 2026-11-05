@@ -22,6 +22,7 @@ def fixtures():
         "source_sha": HEAD,
         "arm64_kernel_link": "pass",
         "arm64_qemu_boot_observed": True,
+        "arm64_boot_panic_observed": False,
         "outcome": "kernel-boot-observed",
         "independent_kernel_sha256_verified": True,
         "source_built_kernel_sha256": SHA,
@@ -74,6 +75,11 @@ class M6VirtioAcceptance(unittest.TestCase):
             boot, io = fixtures()
             boot[field] = invalid
             self.assertFalse(gate.evaluate(boot, io, HEAD)["m6_2_virtio_functional_accepted"], field)
+
+    def test_native_kernel_panic_never_qualifies_virtio_data_plane(self):
+        boot, io = fixtures()
+        boot["arm64_boot_panic_observed"] = True
+        self.assertFalse(gate.evaluate(boot, io, HEAD)["m6_2_virtio_functional_accepted"])
 
     def test_wrong_checkout_or_uimage_rejected(self):
         boot, io = fixtures()

@@ -42,6 +42,7 @@ def evaluate(boot, io, head):
             and boot.get("arm64_kernel_link") == "pass"
             and boot.get("arm64_qemu_boot_observed") is True
             and boot.get("outcome") == "kernel-boot-observed"
+            and boot.get("arm64_boot_panic_observed") is False
             and boot.get("independent_kernel_sha256_verified") is True
             and isinstance(digest, str)
             and SHA64.fullmatch(digest) is not None
