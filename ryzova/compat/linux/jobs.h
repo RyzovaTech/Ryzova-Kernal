@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef RYZ_LINUX_JOBS_H
 #define RYZ_LINUX_JOBS_H
 #include "process.h"

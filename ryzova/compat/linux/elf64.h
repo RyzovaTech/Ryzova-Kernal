@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Ryzova Phase 5.1: bounded Linux AMD64 ELF64 load-plan construction.
  * Portable userspace test library ONLY; no kernel hooks or execution.

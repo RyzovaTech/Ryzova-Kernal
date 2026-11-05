@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Linux-host differential test harness, not native-kernel evidence. */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE

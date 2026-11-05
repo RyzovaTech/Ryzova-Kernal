@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Validated portable snapshots of the bounded guest tree (legacy /tmp or opt-in root). */
 #include "filesystem_tree.h"
 static uint64_t fs_checksum(const unsigned char *bytes,size_t size)
