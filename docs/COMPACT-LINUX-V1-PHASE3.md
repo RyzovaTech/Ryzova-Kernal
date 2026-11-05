@@ -237,7 +237,7 @@ opens three virtual stdio descriptions, transitions are recorded after
 world descriptor updates, and the high-water is snapshotted before teardown.
 `jobs_probe` prints `COMPACT_RESOURCE_FDS description_peak=N`; frozen source-locked
 build profiles record this alongside the real status and instruction counts.
-`nofile` differential regression requires five peak descriptions across
+`nofile` differential regression requires four peak descriptions across
 open, dup and fork with EMFILE denial; `nproc` requires three.
 
 This is a bounded **guest emulator model counter**, not Linux process-wide
