@@ -176,3 +176,13 @@ requires each executable to be installed and verified, and rejects
 missing reports. M6.2 uses the explicit Plan 9 bootargs `!rc` prompt
 only for the research QEMU recovery shell, not for general boot success.
 Real network and scratch disk I/O remain separate mandatory tests.
+
+## M6.2 native userland networking tools
+
+The QEMU ARM64 bootfs extends the original 9front bootfs proto with
+source-built `ip/ipconfig`, `webfs`, `sha1sum`, and an exact-checkout
+`/rc/bin/hget` script. These tools are built and installed through
+actual ARM64 native 7c/7l and fail-closed provenance gates before the
+embedded QEMU bootfs is linked. This is an experimental QEMU research
+configuration, not hardware release qualification. Negative synthetic
+contract tests must not be confused with actual HTTP and disk I/O.

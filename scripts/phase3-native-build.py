@@ -60,7 +60,7 @@ ARCHIVE = OUT / "kernel-source.tar.gz"
 GUEST_IMAGE = Path(sys.argv[1]).resolve()
 SOURCE_SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
-subprocess.run(["tar", "--format=ustar", "--transform=s,^ryzova/compat/linux,sys/src/cmd/compact-linux,", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/cmd/rc", "sys/src/cmd/mkfile", "sys/src/cmd/bind.c", "sys/src/cmd/cat.c", "sys/src/cmd/chmod.c", "sys/src/cmd/dd.c", "sys/src/cmd/echo.c", "sys/src/cmd/ls.c", "sys/src/cmd/mkdir.c", "sys/src/cmd/mount.c", "sys/src/cmd/mv.c", "sys/src/cmd/rm.c", "sys/src/cmd/sed.c", "sys/src/cmd/sleep.c", "sys/src/cmd/srv.c", "sys/src/cmd/test.c", "sys/src/cmd/unmount.c", "sys/src/libc", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
+subprocess.run(["tar", "--format=ustar", "--transform=s,^ryzova/compat/linux,sys/src/cmd/compact-linux,", "-czf", str(ARCHIVE), "-C", str(ROOT), "sys/src/9", "sys/include", "amd64/include", "arm64/include", "sys/src/cmd/nusb", "ryzova/compat/linux", "sys/src/cmd/paqfs", "sys/src/cmd/auth/factotum", "sys/src/cmd/rc", "sys/src/cmd/mkfile", "sys/src/cmd/sha1sum.c", "sys/src/cmd/webfs", "sys/src/cmd/ip", "rc/bin/hget", "sys/src/cmd/bind.c", "sys/src/cmd/cat.c", "sys/src/cmd/chmod.c", "sys/src/cmd/dd.c", "sys/src/cmd/echo.c", "sys/src/cmd/ls.c", "sys/src/cmd/mkdir.c", "sys/src/cmd/mount.c", "sys/src/cmd/mv.c", "sys/src/cmd/rm.c", "sys/src/cmd/sed.c", "sys/src/cmd/sleep.c", "sys/src/cmd/srv.c", "sys/src/cmd/test.c", "sys/src/cmd/unmount.c", "sys/src/libc", "sys/src/libbio", "sys/src/libflate", "sys/src/libString", "sys/src/libthread", "sys/src/lib9p", "sys/src/libmp", "sys/src/libsec", "sys/src/libip", "sys/src/libndb", "sys/src/libdraw", "sys/src/libmemdraw", "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"], check=True)
 archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).split()[0]
 (OUT / "source-provenance.txt").write_text(
     f"Ryzova source commit: {SOURCE_SHA}\nKernel and nusb source archive sha256: {archive_hash}\n"
@@ -229,6 +229,26 @@ if m5_arm64_native:
                 "cd /sys/src/cmd; test -s 7." + name +
                 " && cp 7." + name + " /arm64/bin/" + name +
                 "; echo M6_ARM64_CORE_" + name.upper() + "_ARTIFACT_$status")
+
+    # M6.2 QEMU guest native networking and integrity tooling. All are
+    # checked-out source, embedded in the ARM64-specific research bootfs.
+    armstage("m6-arm64-sha-compile",
+        "cd /sys/src/cmd; 7c sha1sum.c > /tmp/m6-sha-cc.log >[2=1]; "
+        "echo M6_SHA_CC_$status; tail -n 4 /tmp/m6-sha-cc.log")
+    armstage("m6-arm64-sha-link",
+        "cd /sys/src/cmd; 7l -o /arm64/bin/sha1sum sha1sum.7 "
+        "/arm64/lib/libsec.a /arm64/lib/libmp.a /arm64/lib/libc.a "
+        "> /tmp/m6-sha-ld.log >[2=1]; echo M6_SHA_LD_$status")
+    armstage("m6-arm64-ipconfig",
+        "cd /sys/src/cmd/ip/ipconfig; objtype=arm64 mk install > /tmp/m6-ipconfig.log >[2=1]; "
+        "echo M6_IPCONFIG_STATUS_$status; tail -n 5 /tmp/m6-ipconfig.log")
+    armstage("m6-arm64-webfs",
+        "cd /sys/src/cmd/webfs; objtype=arm64 mk install > /tmp/m6-webfs.log >[2=1]; "
+        "echo M6_WEBFS_STATUS_$status; tail -n 5 /tmp/m6-webfs.log")
+    armstage("m6-arm64-io-tools-verify",
+        "test -s /arm64/bin/ip/ipconfig && test -s /arm64/bin/webfs && "
+        "test -s /arm64/bin/sha1sum && test -s /rc/bin/hget; "
+        "echo M6_ARM64_IO_TOOLS_STATUS_$status")
 
     armstage("m5-arm64-rc",
         "cd /sys/src/cmd/rc; objtype=arm64 mk install > /tmp/m5-arm64-rc.log >[2=1]; "
@@ -435,6 +455,16 @@ if m5_arm64_native:
         ) for i,name in enumerate(arm64_core_cmds)
     }
     arm64_core_ok = all(arm64_core_binaries.values())
+    arm64_io_tools_ok = bool(
+        all(marks.get(label) for label in (
+            "m6-arm64-sha-compile", "m6-arm64-sha-link",
+            "m6-arm64-ipconfig", "m6-arm64-webfs",
+            "m6-arm64-io-tools-verify"))
+        and all(re.search(r"(?:^|\r?\n)" + marker + r"\s*(?:\r?\n)", text)
+                for marker in ("M6_SHA_CC_", "M6_SHA_LD_",
+                               "M6_IPCONFIG_STATUS_", "M6_WEBFS_STATUS_",
+                               "M6_ARM64_IO_TOOLS_STATUS_"))
+    )
     paqfs_ok = bool(marks.get("m5-arm64-paqfs") and marks.get("m5-arm64-paqfs-install")
         and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_STATUS_\s*(?:\r?\n)", text)
         and re.search(r"(?:^|\r?\n)M5_ARM64_PAQFS_INSTALL_\s*(?:\r?\n)", text)
@@ -442,7 +472,7 @@ if m5_arm64_native:
     factotum_ok = bool(marks.get("m5-arm64-factotum") and marks.get("m5-arm64-factotum-install")
         and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_STATUS_\s*(?:\r?\n)", text)
         and re.search(r"(?:^|\r?\n)M5_ARM64_FACTOTUM_INSTALL_\s*(?:\r?\n)", text))
-    arm64_link_ok = bool(arm64_libraries_ok and arm64_rc_ok and arm64_core_ok and paqfs_ok and factotum_ok
+    arm64_link_ok = bool(arm64_libraries_ok and arm64_rc_ok and arm64_core_ok and arm64_io_tools_ok and paqfs_ok and factotum_ok
         and marks.get("m5-arm64-full-link") and marks.get("m5-arm64-link-check") and re.search(
         r"(?:^|\r?\n)M5_ARM64_MK_STATUS_\s*(?:\r?\n)", text
     ) and not re.search(r"(?:^|\r?\n)ls:.*9qemu", text))
@@ -463,6 +493,7 @@ if m5_arm64_native:
         "arm64_rc_userspace": "pass" if arm64_rc_ok else "blocked",
         "arm64_bootfs_core_binaries": {name: "pass" if ok else "blocked" for name,ok in arm64_core_binaries.items()},
         "arm64_bootfs_core_complete": arm64_core_ok,
+        "arm64_bootfs_io_tools_complete": arm64_io_tools_ok,
         "arm64_paqfs_userspace": "pass" if paqfs_ok else "blocked",
         "arm64_factotum_userspace": "pass" if factotum_ok else "blocked",
         "arm64_kernel_link": "pass" if arm64_link_ok else "blocked",

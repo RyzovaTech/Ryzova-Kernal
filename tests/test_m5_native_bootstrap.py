@@ -41,7 +41,7 @@ class M5Bootstrap(unittest.TestCase):
         exec(compile(ast.Module(body=[branch],type_ignores=[]),
                      "<m5-arm64-stages>","exec"),env)
         built=env["stages"][11:]
-        self.assertEqual(len(built),66)
+        self.assertEqual(len(built),71)
         for ix,(name,command) in enumerate(built,11):
             self.assertLessEqual(len(command),190, name)
             self.assertTrue(command.endswith("; echo PHASE3_END_"+str(ix)),name)
@@ -64,6 +64,13 @@ class M5Bootstrap(unittest.TestCase):
                                 for _, c in built))
             self.assertTrue(any("M5_ARM64_" + lib.upper() + "_ARTIFACT_" in c
                                 for _, c in built))
+
+    def test_qemu_bootfs_is_self_contained_for_research_userland_io(self):
+        proto=(ROOT/"sys/src/9/arm64/qemu.bootfs.proto").read_text()
+        for tool in ("sha1sum", "webfs", "hget"):
+            self.assertIn(tool, proto)
+        self.assertIn("hget 555 sys sys /rc/bin/hget",proto)
+        self.assertIn("mnt\\n\\tweb",proto)
 
     def test_arm64_native_library_tcq_time_budget_is_bounded(self):
         source=(ROOT/"scripts/phase3-native-build.py").read_text()
@@ -103,7 +110,10 @@ class M5Bootstrap(unittest.TestCase):
         for cmd in ("echo", "test", "sed", "bind", "cat", "ls", "dd"):
             self.assertIn('"sys/src/cmd/' + cmd + '.c"', s)
         self.assertIn('"arm64_bootfs_core_complete": arm64_core_ok', s)
-        self.assertIn('arm64_rc_ok and arm64_core_ok', s)
+        self.assertIn('"arm64_bootfs_io_tools_complete": arm64_io_tools_ok', s)
+        for x in ("sys/src/cmd/sha1sum.c", "sys/src/cmd/webfs", "sys/src/cmd/ip", "rc/bin/hget"):
+            self.assertIn('"' + x + '"', s)
+        self.assertIn('arm64_rc_ok and arm64_core_ok and arm64_io_tools_ok', s)
         self.assertIn('"arm64_uimage_guest_sha256": image_hashes[-1]', s)
         self.assertIn('"full_m5_1_complete": False', s)
 
