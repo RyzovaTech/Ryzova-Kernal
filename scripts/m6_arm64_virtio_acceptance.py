@@ -54,6 +54,7 @@ def evaluate(boot, io, head):
         "virtio_guest_shell_observed": (
             io.get("guest_shell_reached") is True
             and io.get("qemu_virtio_devices_attached") is True
+            and io.get("root_disk_copy_on_write") is True
         ),
         "host_http_and_guest_network_sha256": (
             io.get("http_guest_request_observed") is True
