@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Linux-host reference adapter. Native production uses network_plan9.h. */
 #include <sys/socket.h>
 #include <netinet/in.h>

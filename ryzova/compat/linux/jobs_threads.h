@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Cooperative shared-mm threads. No native clone/futex/thread forwarding. */
 static void robust_one(Jobs *jobs,Task *task,uint64_t node,int64_t offset)
 {

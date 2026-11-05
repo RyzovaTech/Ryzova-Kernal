@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Invocation-local logical time: one microsecond per guest instruction, and
  * deterministic advancement to the next deadline when every task blocks. */
 static int timer_duration(RyzCpu *c,uint64_t at,int timeval,uint64_t *out)

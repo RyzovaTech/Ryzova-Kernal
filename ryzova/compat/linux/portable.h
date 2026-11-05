@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef RYZ_COMPACT_PORTABLE_H
 #define RYZ_COMPACT_PORTABLE_H
 #ifdef RYZ_PLAN9
