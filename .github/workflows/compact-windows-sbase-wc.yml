@@ -24,6 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -34,6 +35,10 @@ jobs:
   genuine-windows-compiler-reference:
     runs-on: windows-2022
     timeout-minutes: 18
+    env:
+      # The default pull_request GITHUB_SHA points at a synthetic merge
+      # commit, even when checkout explicitly pins the contributor's head.
+      GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Configure approved Windows-safe checkout
         shell: pwsh
