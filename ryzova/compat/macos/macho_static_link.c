@@ -145,8 +145,8 @@ static int parse(const unsigned char *image,size_t size,Object *o) {
     }
     if(pos!=32U+cmdbytes || seen_seg!=1 || seen_sym!=1 ||
        symoff<pos || stroff<pos ||
-       (uint64_t)symoff+(uint64_t)o->nsyms*16U>stroff &&
-       (uint64_t)stroff+(uint64_t)strbytes>symoff)
+       ((uint64_t)symoff+(uint64_t)o->nsyms*16U>stroff &&
+        (uint64_t)stroff+(uint64_t)strbytes>symoff))
         return 1;
     for(uint32_t i=0;i<o->nsyms;i++) {
         const unsigned char *sym=image+(size_t)symoff+(size_t)i*16U;
