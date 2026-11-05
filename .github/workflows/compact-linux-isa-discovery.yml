@@ -63,3 +63,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_phase9_andpd_differential.py' -v
       - name: Differential SSE2 ANDNPD complement-destination, alignment, aliases and flags
         run: python -m unittest discover -s tests -p 'test_phase9_andnpd_differential.py' -v
+      - name: Differential scalar SSE2 CMPSD predicates, NaNs, m64 and EFLAGS against Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_cmpsd_differential.py' -v

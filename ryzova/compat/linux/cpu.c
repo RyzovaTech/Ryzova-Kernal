@@ -311,6 +311,28 @@ static uint64_t min_binary64(uint64_t destination,uint64_t source)
     unsigned int cf=compare_binary64_eflags(destination,source);
     return (cf&CF) && !(cf&(PF|ZF))?destination:source;
 }
+/* Scalar SSE2 F2 0F C2 /r ib CMPSD predicate 0..7.
+ * Compare IEEE-754 binary64 using existing raw-bit comparator; never use
+ * the host FPU. Unordered NaNs set a true result for predicates 3-6,
+ * but MXCSR exception flags/traps are intentionally not implemented. */
+static int cmpsd_binary64_truth(uint64_t left,uint64_t right,unsigned int predicate)
+{
+    unsigned int cmp=compare_binary64_eflags(left,right);
+    int unordered=(cmp&PF)!=0;
+    int equal=!unordered && (cmp&ZF)!=0;
+    int less=!unordered && (cmp&CF)!=0;
+    switch(predicate){
+    case 0:return equal;                 /* EQ */
+    case 1:return less;                  /* LT */
+    case 2:return less||equal;           /* LE */
+    case 3:return unordered;             /* UNORD */
+    case 4:return unordered||!equal;     /* NEQ */
+    case 5:return unordered||!less;      /* NLT */
+    case 6:return unordered||!(less||equal); /* NLE */
+    case 7:return !unordered;            /* ORD */
+    default:return 0;                    /* caller rejects reserved bits */
+    }
+}
 /* F2 0F 2C /r CVTTSD2SI: truncation toward zero for both 32- and
  * 64-bit GPR destinations. Negative-indefinite for NaN/out of range;
  * the integer min value is also the correctly truncated boundary.
@@ -947,6 +969,29 @@ static int step(Cpu *c)
             }
             c->flags=(c->flags&~(uint64_t)(CF|PF|AF|ZF|SF|OF))|
                      compare_binary64_eflags(left,right);
+        }
+        else if(op2==0xc2 && c->repeat==0xf2 && !c->operand16){
+            /* F2 0F C2 /r ib: CMPSD xmm,xmm/m64,imm8. Low 64 result
+             * is all 1s or zero; preserve destination high 64 and EFLAGS.
+             * Decode/fetch immediate BEFORE RIP-relative memory address.
+             * Only SSE2 predicate encodings 0..7 (high bits reserved).
+             * No untrusted host FP or memory, no MXCSR exception state. */
+            uint64_t left=0,right;unsigned int i,pred,yes;
+            rm=decode(c,&reg,&group,8);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            pred=(unsigned int)fetch(c,1);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(pred>7U)return RYZ_VM_OPCODE_UNSUPPORTED;
+            for(i=0;i<8;i++)left|=(uint64_t)c->xmm[reg][i]<<(8U*i);
+            if(rm.reg>=0){
+                right=0;
+                for(i=0;i<8;i++)right|=(uint64_t)c->xmm[rm.reg][i]<<(8U*i);
+            }else{
+                right=get(c,rm,8);
+                if(c->fault)return RYZ_VM_MAP_ERROR;
+            }
+            yes=(unsigned int)cmpsd_binary64_truth(left,right,pred);
+            for(i=0;i<8;i++)c->xmm[reg][i]=yes?0xff:0;
         }
         else if(op2==0x2c && c->repeat==0xf2 && !c->operand16){
             /* F2 [REX.W] 0F 2C /r CVTTSD2SI r32/r64,xmm/m64.

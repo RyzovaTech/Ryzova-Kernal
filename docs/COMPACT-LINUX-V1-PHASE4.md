@@ -546,3 +546,28 @@ all **88 output bytes** plus separate native/guest failure cases.
 No ELF/resource/step budgets were increased. Nondefault MXCSR,
 full AMD64 ABI, Python stdlib workloads and native application V1
 acceptance remain open and require independent fresh-head evidence.
+
+## 4T — Native Linux scalar CMPSD predicate qualification
+
+At prior exact head `80496582`, pinned CPython 3.12.10's original
+`-c` guest probe reached **9,144,214 instructions** and returned
+`VM status 3`, `RIP=62a2ae`, SHA-attributed main ELF bytes
+`F2 0F C2 D8 06`, a **scalar-double CMPSD imm8=6** comparison.
+The sampled instruction is a *candidate* and does not by itself prove
+an ABI root cause.
+
+The bounded interpreter adds only legacy `F2 0F C2 /r ib` for eight
+SSE2 scalar-double predicates 0..7: EQ/LT/LE/UNORD/NEQ/NLT/NLE/ORD.
+It compares raw IEEE-754 binary64 representations, preserving the
+high XMM 64 bits and EFLAGS and writing low all-ones or all-zero
+masks. Unaligned m64 loads, XMM8+, register aliases, NaN and signed
+zero comparisons are differential-tested. Immediate/displacement
+order accounts for RIP-relative addressing. Non-F2 variants and
+reserved immediate high bits fail closed instead of being guessed.
+
+One source-built static ELF is run on native Linux and the Ryzova
+interpreter with exact **232-byte** output, plus unmapped memory and
+unsupported-variant negative tests. qNaN exception status, unmasked
+MXCSR traps, DAZ/FTZ and nondefault rounding remain unmodeled.
+This does NOT close `AMD64-ABI`, CPython stdlib workflow,
+`RESOURCE`, `MEM-PROC` or any Linux V1 acceptance gate.
