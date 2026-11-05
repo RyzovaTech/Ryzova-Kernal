@@ -6,6 +6,7 @@ original Ryzova linker, then executed by the host-only Ryzova interpreter.
 No dyld, libSystem, native Ryzova guest or Apple linked app is involved.
 """
 import os
+import random
 from pathlib import Path
 import struct
 import subprocess
@@ -205,6 +206,42 @@ _ryz_other:
         result=subprocess.run([str(self.runner),str(oversize),str(self.obj2)],
                               capture_output=True,text=True,timeout=8)
         self.assertEqual(result.returncode,65,result.stdout+result.stderr)
+
+    def test_seeded_corrupt_cross_object_metadata_never_crashes_host(self):
+        rng=random.Random(0x4d41433343)
+        original1=self.obj1.read_bytes()
+        original2=self.obj2.read_bytes()
+        for iteration in range(128):
+            first=bytearray(original1)
+            second=bytearray(original2)
+            target=first if iteration%2==0 else second
+            for _ in range(1+rng.randrange(5)):
+                index=rng.randrange(len(target))
+                target[index]=rng.randrange(256)
+            with self.subTest(case=iteration):
+                output=self.launch(first,second)
+                self.assertIn(output.returncode,(0,2),output.stdout+output.stderr)
+                self.assertIn("MAC3C_LINK status=",output.stdout)
+                self.assertIn("native_guest=0 dyld=0 libsystem=0",output.stdout)
+
+    def test_duplicate_definition_is_rejected_even_when_one_is_unused(self):
+        # No ambiguous global _ryz_helper definition is allowed across the
+        # two objects, even though one object owns the test entrypoint.
+        entry=r"""
+.text
+.globl _ryz_entry
+.globl _ryz_helper
+_ryz_entry:
+    call _ryz_helper
+    ret
+_ryz_helper:
+    movl $1, %eax
+    ret
+"""
+        p=self.folder/"duplicate.s"
+        obj=self.folder/"duplicate.o"
+        self.build_clang(entry,p,obj)
+        self.denied(obj.read_bytes(),self.obj2.read_bytes())
 
     def test_linker_does_not_forward_syscall_or_load_dylib(self):
         first=r"""
