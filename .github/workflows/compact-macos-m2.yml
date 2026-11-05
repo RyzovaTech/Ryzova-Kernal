@@ -1,0 +1,47 @@
+name: Compact macOS M2 execution proof
+on:
+  pull_request:
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'tests/fixtures/macos_m1_reference.macho'
+      - 'tests/test_compact_macos_m2.py'
+      - 'scripts/compact_macos_m2_native.py'
+      - '.github/workflows/compact-macos-m2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tests -p test_compact_macos_m2.py -v
+  native:
+    runs-on: ubuntu-24.04
+    needs: reference
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils mtools
+      - run: |
+          bash scripts/verify-foundation.sh
+          curl --fail --location --retry 3 --max-time 600 https://build.9front.org/release/9front-11952.amd64.qcow2.gz -o bootstrap.qcow2.gz
+          echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  bootstrap.qcow2.gz' | sha256sum -c -
+          gzip -dc bootstrap.qcow2.gz > bootstrap.qcow2
+          qemu-img create -f qcow2 -F qcow2 -b bootstrap.qcow2 mac-m2.qcow2
+      - run: python3 scripts/compact_macos_m2_native.py mac-m2.qcow2 bootstrap.qcow2.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compact-macos-m2-native-evidence
+          path: |
+            artifacts/compact-macos-m2/*.json
+            artifacts/compact-macos-m2/*.log
