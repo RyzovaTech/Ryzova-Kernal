@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Bounded streams with opt-in, caller-owned native resource adapters. */
 int ryz_network_budget(RyzLinuxWorld *w)
 {

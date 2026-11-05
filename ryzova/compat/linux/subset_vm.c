@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Linux x86_64 static-ELF proof, not a native Ryzova kernel executable loader. */
 #include "subset_vm.h"
 #include "elf64.h"

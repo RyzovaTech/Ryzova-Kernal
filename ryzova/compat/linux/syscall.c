@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Virtual Linux syscalls through caller-owned bounded resources. */
 #include "syscall.h"
 

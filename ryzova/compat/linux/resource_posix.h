@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Linux-host reference backend. Every traversal is rooted in an open dirfd;
  * intermediate/final host symlinks and special files fail closed. */
 #include <dirent.h>
