@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * M1 reusable USB class transport boundary checks.
  * No device IDs or automatic binding rules are introduced.
