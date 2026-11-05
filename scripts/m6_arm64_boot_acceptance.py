@@ -48,6 +48,7 @@ def evaluate(cross, boot, sha):
         "target_paqfs_factotum_linked": cross.get("arm64_paqfs_userspace") == "pass"
             and cross.get("arm64_factotum_userspace") == "pass"
             and cross.get("arm64_rc_userspace") == "pass"
+            and cross.get("arm64_bootfs_mount_namespace_complete") is True
             and cross.get("arm64_bootfs_io_tools_complete") is True
             and cross.get("arm64_bootfs_core_complete") is True
             and isinstance(cross.get("arm64_bootfs_core_binaries"), dict)

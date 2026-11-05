@@ -53,3 +53,7 @@ lib
 
 mnt
 	web
+	broot
+	exportfs
+n
+net

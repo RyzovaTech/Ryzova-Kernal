@@ -41,7 +41,7 @@ class M5Bootstrap(unittest.TestCase):
         exec(compile(ast.Module(body=[branch],type_ignores=[]),
                      "<m5-arm64-stages>","exec"),env)
         built=env["stages"][11:]
-        self.assertEqual(len(built),73)
+        self.assertEqual(len(built),76)
         for ix,(name,command) in enumerate(built,11):
             self.assertLessEqual(len(command),190, name)
             self.assertTrue(command.endswith("; echo PHASE3_END_"+str(ix)),name)
@@ -54,6 +54,8 @@ class M5Bootstrap(unittest.TestCase):
         self.assertIn("m5-arm64-libdirs", names)
         self.assertIn("m5-arm64-rc", names)
         self.assertIn("m5-arm64-rc-check", names)
+        for label in ("m6-arm64-mntgen-compile", "m6-arm64-mntgen-link", "m6-arm64-mntgen-verify"):
+            self.assertIn(label, names)
         for name in ("bind","cat","chmod","dd","echo","ls","mkdir","mount",
                      "mv","rm","sed","sleep","srv","test","unmount"):
             self.assertIn("m6-arm64-core-install-" + name, names)
@@ -71,6 +73,8 @@ class M5Bootstrap(unittest.TestCase):
             self.assertIn(tool, proto)
         self.assertIn("hget 555 sys sys /rc/bin/hget",proto)
         self.assertIn("mnt" + chr(10) + chr(9) + "web", proto)
+        self.assertIn("broot", proto)
+        self.assertIn("exportfs", proto)
 
     def test_arm64_native_library_tcq_time_budget_is_bounded(self):
         source=(ROOT/"scripts/phase3-native-build.py").read_text()
@@ -89,7 +93,7 @@ class M5Bootstrap(unittest.TestCase):
                      "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"):
             self.assertIn('"' + path + '"', source)
         self.assertIn('arm64_libraries_ok = all(arm64_libraries.values())', source)
-        self.assertIn('arm64_libraries_ok and arm64_rc_ok and arm64_core_ok and arm64_io_tools_ok and paqfs_ok', source)
+        self.assertIn('arm64_libraries_ok and arm64_rc_ok and arm64_core_ok and arm64_io_tools_ok and arm64_mount_bootstrap_ok and paqfs_ok', source)
         self.assertIn('"arm64_bootstrap_libraries_complete": arm64_libraries_ok', source)
         self.assertIn('marks.get("m5-arm64-verify-" + lib)', source)
 
@@ -111,6 +115,8 @@ class M5Bootstrap(unittest.TestCase):
             self.assertIn('"sys/src/cmd/' + cmd + '.c"', s)
         self.assertIn('"arm64_bootfs_core_complete": arm64_core_ok', s)
         self.assertIn('"arm64_bootfs_io_tools_complete": arm64_io_tools_ok', s)
+        self.assertIn('"arm64_bootfs_mount_namespace_complete": arm64_mount_bootstrap_ok',s)
+        self.assertIn('"sys/src/cmd/mntgen.c"', s)
         for x in ("sys/src/cmd/sha1sum.c", "sys/src/cmd/webfs", "sys/src/cmd/ip", "rc/bin/hget"):
             self.assertIn('"' + x + '"', s)
         self.assertIn('arm64_rc_ok and arm64_core_ok and arm64_io_tools_ok', s)

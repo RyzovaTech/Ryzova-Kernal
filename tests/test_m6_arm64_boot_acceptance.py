@@ -25,6 +25,7 @@ def fixture():
         "arm64_rc_userspace": "pass",
         "arm64_bootfs_core_complete": True,
         "arm64_bootfs_io_tools_complete": True,
+        "arm64_bootfs_mount_namespace_complete": True,
         "arm64_bootfs_core_binaries": {name: "pass" for name in ("bind","cat","chmod","dd","echo","ls","mkdir","mount","mv","rm","sed","sleep","srv","test","unmount")},
         "arm64_kernel_link": "pass",
         "arm64_fat_copy_verified": True,
@@ -64,6 +65,11 @@ class M6NativeBootAcceptance(unittest.TestCase):
             report = gate.evaluate(cross, boot, SHA)
             self.assertFalse(report["checks"]["all_target_libraries_built"], lib)
             self.assertFalse(report["arm64_qemu_boot_accepted"], lib)
+
+    def test_missing_arm64_mount_bootstrap_must_fail_closed(self):
+        cross, boot = fixture()
+        cross["arm64_bootfs_mount_namespace_complete"] = False
+        self.assertFalse(gate.evaluate(cross, boot, SHA)["arm64_qemu_boot_accepted"])
 
     def test_missing_native_io_tools_block_qualified_embedded_bootfs(self):
         cross, boot = fixture()
