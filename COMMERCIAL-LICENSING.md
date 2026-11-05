@@ -1,26 +1,32 @@
-# Ryzova Kernel — commercial licensing policy
+# Ryzova Kernel — optional commercial licensing
 
-Ryzova intends to make **certain Ryzova-controlled contributions** available under a **choice** of:
+**Ryzova Kernel remains open source. Commercial use is allowed under applicable public licenses.**
 
-1. GNU AGPLv3 (`AGPL-3.0-only`) for software expressly identified as such; **or**
-2. A separately negotiated written commercial license **for the same code only where the licensor controls all rights needed to grant it**.
+For **specific original code in which Ryzova controls sufficient rights**, users may choose either:
 
-This is an **outbound dual-licensing proposal**, not a requirement to pay for every commercial use of Ryzova Kernel. **AGPLv3 permits commercial use**, subject to its license obligations.
+1. **GNU GPLv3 only (`GPL-3.0-only`)** when the file explicitly bears that license, with no fee required to exercise its GPLv3 rights; **or**
+2. A **separately negotiated, signed commercial agreement** offering different terms for the **identified code** only where the licensor has the rights to do so.
 
-## What a commercial alternative may cover
+The optional commercial agreement may be relevant to organizations wanting alternative terms for a proprietary redistribution or integration. It is **not** an obligation imposed on companies merely because they use Ryzova Kernel commercially. GPLv3 permits compliant commercial use and distribution.
 
-- Specified Ryzova-owned code and the grant of rights expressly negotiated for that code.
-- Optional paid support or custom integration **only** if offered under a separate agreement.
-- Proprietary distribution or use terms for the covered Ryzova code, where legally authorized.
+## Scope that may be offered
 
-## What it does not automatically cover
+- Identified Ryzova-owned code and only the rights actually held by the licensor.
+- Alternative obligations, warranty, indemnity, support, engineering services and commercial conditions **only if expressly provided by a signed contract**.
+- A commercial arrangement for contributions by others **only if** a separate grant allows the necessary relicensing.
 
-- Code, drivers, libraries, fonts, or other material inherited from 9front or third parties.
-- Permission to evade upstream MIT, GPL, AFPL, font, or other license conditions.
-- The right to use the Ryzova name/logo or imply official endorsement.
-- Patents, warranties, security commitments, indemnities, or service levels unless explicitly agreed in writing.
-- Contributions for which the project does not hold sufficient relicensing rights.
+## Rights never implied by this policy
 
-There is **no published pricing or signed standard commercial contract yet**. Until a valid written license is agreed for specific code, users only have the rights granted by its applicable public/third-party licenses.
+- Original Plan 9 / 9front MIT code, independently licensed drivers, fonts, firmware, libraries, Ghostscript components or other third-party works;
+- a right to ignore original copyright and license notices, including redistributability restrictions;
+- contributor copyright assignment or proprietary relicensing permission arising merely from a GPLv3 pull request;
+- a grant to use Ryzova names/logos or imply upstream endorsement;
+- patent grants, uptime guarantees or legal clearance beyond written terms.
 
-See [`LICENSE.md`](LICENSE.md), [`TRADEMARKS.md`](TRADEMARKS.md) and [`docs/CONTRIBUTOR-LICENSING.md`](docs/CONTRIBUTOR-LICENSING.md). Legal counsel should review any actual commercial contract prior to publication.
+The repository has **no published standard commercial pricing or signed blanket contract**. An inquiry is not a license; commercial terms require a separate written agreement.
+
+## Historical AGPLv3 versions
+
+Earlier Ryzova code explicitly marked `AGPL-3.0-only` was offered under the AGPLv3 license on those versions. The existing grants remain valid; a GPLv3 revision does not retroactively cancel them. The bundled AGPL text remains for historical legal clarity.
+
+See [`LICENSE.md`](LICENSE.md), [`docs/CONTRIBUTOR-LICENSING.md`](docs/CONTRIBUTOR-LICENSING.md), [`lib/legal/NOTICE`](lib/legal/NOTICE) and [`TRADEMARKS.md`](TRADEMARKS.md). An actual commercial contract and third-party rights clearance require qualified legal review.

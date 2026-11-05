@@ -1,23 +1,35 @@
 # Ryzova Kernel — license map
 
-**This repository contains code and assets with multiple licenses. There is no single license grant for the whole source tree.**
+**Ryzova Kernel is an open-source, multi-licensed source tree. There is no single license grant for the entire repository.** Always follow the applicable license and copyright notices for each file.
 
-## Inherited 9front / Plan 9 sources
+## Ryzova-owned original code
 
-The original 9front tree is preserved with its complete Git history. Read [`lib/legal/NOTICE`](lib/legal/NOTICE), [`lib/legal/mit`](lib/legal/mit), and all file-level `COPYING`, `COPYRIGHT` and `LICENSE` files **before** redistributing or making derivative works. Original Plan 9 and 9front changes are generally MIT-licensed **unless otherwise indicated**. Some included fonts and programs have different or restrictive license terms. No Ryzova proprietary license can replace those upstream conditions.
+Newly authored source files for which Ryzova holds **all necessary relicensing rights** and which are expressly marked:
 
-## Newly authored Ryzova code
+```
+SPDX-License-Identifier: GPL-3.0-only
+```
 
-Ryzova-origin source files expressly marked **`SPDX-License-Identifier: AGPL-3.0-only`** are offered under GNU Affero General Public License v3.0 only. Its verbatim text is in [`LICENSES/AGPL-3.0-only.txt`](LICENSES/AGPL-3.0-only.txt).
+are offered under the **GNU General Public License version 3 only (GPLv3)**. A verbatim copy is at [`LICENSES/GPL-3.0-only.txt`](LICENSES/GPL-3.0-only.txt).
 
-An **alternative commercial license** may be offered **only by holders of sufficient rights** in the particular Ryzova-authored code. Contributors' rights must be confirmed before offering a commercial alternative. This statement does not grant a commercial alternative; see [`COMMERCIAL-LICENSING.md`](COMMERCIAL-LICENSING.md).
+**GPLv3 permits commercial use** in compliance with its terms. Ordinary GPL-compliant commercial use does **not** require a separate paid license.
 
-Unmarked legacy files are **not** automatically relicensed under AGPLv3 by this document, regardless of where they appear in the repository. New files should carry clear copyright provenance and SPDX identifiers, but these labels do not supersede third-party rights.
+This change supersedes the project's *future Ryzova-owned licensing policy*, not copyright rights held by someone else. Any original Ryzova files previously offered under `AGPL-3.0-only` retain that earlier valid grant for recipients of those versions. The historical full AGPLv3 text remains at [`LICENSES/AGPL-3.0-only.txt`](LICENSES/AGPL-3.0-only.txt). A historical copy marked AGPLv3 is still governed by the original grant; a new explicitly GPLv3-marked version is offered under its stated terms. This does not automatically relicense third-party contributions.
 
-**AGPLv3 allows commercial use.** A business may use AGPLv3 code commercially in compliance with its terms; the alternative paid license is for parties seeking separately negotiated terms for code available under both offers.
+## Original Plan 9 / 9front source
 
-## Compliance
+The inherited 9front source tree retains its complete Git history and copyright/license notices. Original Plan 9 and 9front work is generally MIT-licensed **unless otherwise indicated**. Read [`lib/legal/NOTICE`](lib/legal/NOTICE), [`lib/legal/mit`](lib/legal/mit), and any file-level `LICENSE`, `COPYING`, `COPYRIGHT` and other legal notices.
 
-See [`docs/LICENSE-REVIEW.md`](docs/LICENSE-REVIEW.md), [`docs/PHASE2-REPORT.md`](docs/PHASE2-REPORT.md) and [`docs/CONTRIBUTOR-LICENSING.md`](docs/CONTRIBUTOR-LICENSING.md). No statement in this repository overrides an applicable third-party copyright notice. Trademarks are handled separately under [`TRADEMARKS.md`](TRADEMARKS.md).
+Important exceptions include restricted fonts and independently licensed software. No GPLv3 badge, Ryzova policy document, or paid Ryzova license can overwrite original third-party rights. Files in a Ryzova-named directory are not automatically Ryzova-owned; imported material retains its original terms.
 
-*This notice describes project policy, not legal advice or certification of redistributability.*
+## Optional, separately negotiated commercial licensing
+
+Where Ryzova holds sufficient rights in **specified Ryzova-controlled additions**, Ryzova may separately offer a paid commercial agreement with alternative terms. This is **optional**, not a condition for normal GPLv3-compliant commercial use. No commercial offer is automatically granted by this notice.
+
+Commercial alternatives cannot silently include 9front or other independently owned third-party material, patents, trademarks or outside contributions. See [`COMMERCIAL-LICENSING.md`](COMMERCIAL-LICENSING.md).
+
+## Contributors and downstream recipients
+
+Contributors retain their copyright unless explicitly agreed otherwise; a pull request, DCO, or GPLv3 contribution does **not** automatically give Ryzova proprietary relicensing rights. Additional written permission is necessary for an optional commercial alternative that covers a contributor's work. See [`docs/CONTRIBUTOR-LICENSING.md`](docs/CONTRIBUTOR-LICENSING.md).
+
+This map is not a legal review or certification of every redistributed artifact. Before binary releases, review upstream exceptions and third-party distribution obligations in [`docs/LICENSE-REVIEW.md`](docs/LICENSE-REVIEW.md). Ryzova marks are handled separately in [`TRADEMARKS.md`](TRADEMARKS.md).
