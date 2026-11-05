@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef RYZ_COMPACT_PROCESS_H
 #define RYZ_COMPACT_PROCESS_H
 #include "subset_vm.h"

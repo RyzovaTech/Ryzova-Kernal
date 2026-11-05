@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef RYZ_RESOURCE_FS_H
 #define RYZ_RESOURCE_FS_H
 /* Trusted, bounded directory capabilities. Paths are relative, canonical and

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Host reference harness; not a native execution claim. */
 #include "process.h"
 #include <stdio.h>
