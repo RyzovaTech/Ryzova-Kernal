@@ -71,7 +71,7 @@ def main() -> int:
     gpl_file = ROOT / "LICENSES/GPL-3.0-only.txt"
     if gpl_file.is_file():
         content = gpl_file.read_text(encoding="utf-8", errors="replace")
-        if not content.startswith("GNU GENERAL PUBLIC LICENSE\\nVersion 3, 29 June 2007"):
+        if not content.startswith("GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007"):
             errors.append("Bundled GPLv3 text does not match expected SPDX license opening")
 
     copyright_markers = [p for p in paths if MARKER.search(p)]
