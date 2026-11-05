@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Frozen compiler/CRT workloads and per-executable Windows/Flex comparisons."""
 import argparse
 import hashlib

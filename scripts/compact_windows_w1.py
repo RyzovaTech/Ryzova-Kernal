@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Reproduce the PE metadata baseline and W2 admission gaps; never execute PE."""
 import argparse
 import hashlib
