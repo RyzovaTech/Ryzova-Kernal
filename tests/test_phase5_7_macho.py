@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Mach-O x86_64 synthetic metadata checks; never execute input."""
 import os
 from pathlib import Path

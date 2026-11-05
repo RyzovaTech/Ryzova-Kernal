@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 import unittest
 from ryzova.remote.compute import (
     PureTaskServer,PureTaskClient,TaskRejected,IncorrectRemoteResult,evaluate,canonical)
