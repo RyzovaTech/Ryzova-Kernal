@@ -1,26 +1,27 @@
-# Ryzova Kernel — commercial licensing policy
+# Ryzova Kernel — optional commercial licensing policy
 
-Ryzova intends to make **certain Ryzova-controlled contributions** available under a **choice** of:
+Ryzova Technologies' selected model is **GPLv3 open source for eligible Ryzova-controlled code, plus an optional negotiated commercial alternative**. This does **not** turn Ryzova Kernel into commercial-use-restricted or source-available-only software.
 
-1. GNU AGPLv3 (`AGPL-3.0-only`) for software expressly identified as such; **or**
-2. A separately negotiated written commercial license **for the same code only where the licensor controls all rights needed to grant it**.
+## Public GPLv3 rights
 
-This is an **outbound dual-licensing proposal**, not a requirement to pay for every commercial use of Ryzova Kernel. **AGPLv3 permits commercial use**, subject to its license obligations.
+Newly authored, rights-controlled Ryzova files explicitly marked `SPDX-License-Identifier: GPL-3.0-only` may be used, studied, modified, redistributed and used **commercially** when the GPLv3 obligations are met. Commercial companies do not need a paid license simply to run the software or distribute compliant GPLv3 versions.
 
-## What a commercial alternative may cover
+The new GPLv3 offer does not revoke valid historical AGPLv3 grants for earlier copies. Files not yet validly relicensed remain under their applicable terms.
 
-- Specified Ryzova-owned code and the grant of rights expressly negotiated for that code.
-- Optional paid support or custom integration **only** if offered under a separate agreement.
-- Proprietary distribution or use terms for the covered Ryzova code, where legally authorized.
+## Optional separate agreement
 
-## What it does not automatically cover
+An organization may request **different terms** for *specifically identified* Ryzova code, such as a negotiated proprietary distribution arrangement. Such terms may be offered **only by those who possess all required rights** for that code, including any necessary written contributor permissions. There is no automatic commercial license to the kernel as a whole and no announced fee schedule or signed standard agreement.
 
-- Code, drivers, libraries, fonts, or other material inherited from 9front or third parties.
-- Permission to evade upstream MIT, GPL, AFPL, font, or other license conditions.
-- The right to use the Ryzova name/logo or imply official endorsement.
-- Patents, warranties, security commitments, indemnities, or service levels unless explicitly agreed in writing.
-- Contributions for which the project does not hold sufficient relicensing rights.
+Paid engineering support, custom development, integration and service contracts are separate possible business arrangements, not preconditions for using GPLv3 code.
 
-There is **no published pricing or signed standard commercial contract yet**. Until a valid written license is agreed for specific code, users only have the rights granted by its applicable public/third-party licenses.
+## Exclusions and limitations
 
-See [`LICENSE.md`](LICENSE.md), [`TRADEMARKS.md`](TRADEMARKS.md) and [`docs/CONTRIBUTOR-LICENSING.md`](docs/CONTRIBUTOR-LICENSING.md). Legal counsel should review any actual commercial contract prior to publication.
+No separately negotiated Ryzova agreement automatically grants:
+
+- Rights in original Plan 9/9front material, third-party drivers, fonts, libraries or restricted assets;
+- Commercial relicensing of outside contributions without sufficient written permissions;
+- Exemptions from independent MIT, GPL, AFPL, OFL or other source terms;
+- Ryzova trademarks, patents, warranties, indemnities or service-level guarantees unless expressly covered;
+- Permission to misrepresent an experimental feature as certified production software.
+
+All commercial negotiations require rights review and a signed written agreement. Review the applicable file headers, [LICENSE.md](LICENSE.md), [TRADEMARKS.md](TRADEMARKS.md) and [docs/CONTRIBUTOR-LICENSING.md](docs/CONTRIBUTOR-LICENSING.md).
