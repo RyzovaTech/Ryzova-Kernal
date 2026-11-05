@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 typedef unsigned long U;
 static unsigned char stack[16384] __attribute__((aligned(16)));
 static volatile int tid,word;

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 typedef unsigned long U;
 static unsigned char big[4096];
 static __attribute__((always_inline)) inline long call(long nr,long a,long b,long c,long d,long e,long f)
