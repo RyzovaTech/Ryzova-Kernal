@@ -16,6 +16,7 @@ typedef unsigned char uchar;
 #include "grant.h"
 #include "dynamic.h"
 #include "arm64.h"
+#include "workload.h"
 
 enum { ImageBytes = 8472, Page = MacPage, MaxSteps = 64, OutputLimit = 256 };
 enum { Base = MacBase, Stack = 0x400000, WriteThunk = MacWriteThunk, ReturnThunk = 0x10008 };
@@ -30,7 +31,8 @@ static const uchar m3_digest[32] = {
 };
 static MacDynamic dynamic_plan;
 static MacArmResult arm_result;
-static int arm_mode, dynamic_mode, m3, carry, guest_file = -1;
+static MacFiles workload;
+static int m6, arm_mode, dynamic_mode, m3, carry, guest_file = -1;
 static unsigned long file_offset;
 static uint opens, reads, writes, denials;
 static uchar image[MacImageLimit+1], text[Page], data[Page], stack[Page];
@@ -96,8 +98,15 @@ relative(uvlong next, uint displacement)
 static int
 load_dynamic(unsigned int length)
 {
-    if(!mac_dynamic_load(image, length, text, data, &dynamic_plan, 0))
+    if(!mac_dynamic_load(image, length, text, data, &dynamic_plan, 0, m6))
         return 0;
+    if(m6){
+        if(!mac_work_args(&workload, stack))
+            return 0;
+        regs[Di] = 2;
+        regs[Si] = Stack+WorkArgv;
+        regs[Dx] = Stack+WorkEnvp;
+    }
     ip = Base+dynamic_plan.entry;
     regs[Sp] = Stack+Page;
     return push(ReturnThunk);
@@ -207,6 +216,7 @@ execute(void)
     const uchar *p;
     uvlong next, slot, value, count;
     uchar op;
+    unsigned int id;
 
     for(steps=0; steps<MaxSteps; steps++){
         if(!within(ip, Base, Page, 1))
@@ -237,39 +247,46 @@ execute(void)
                 return 0;
             regs[Si] = read64(data+slot-Data);
             ip += 7;
-        }else if(m3 && op==0x48 && within(ip,Base,Page,4) &&
+        }else if((m3 || m6) && op==0x48 && within(ip,Base,Page,4) &&
                  p[1]==0x8b && p[2]==0x7e && p[3]==8){
-            if(!within(regs[Si],Data,Page,16))
+            if(!within(regs[Si],m6 ? Stack : Data,Page,16))
                 return 0;
-            regs[Di] = read64(data+regs[Si]-Data+8);
+            regs[Di] = read64(m6 ? stack+regs[Si]-Stack+8 : data+regs[Si]-Data+8);
             ip += 4;
-        }else if(m3 && op==0x48 && within(ip,Base,Page,3) &&
+        }else if((m3 || m6) && op==0x48 && within(ip,Base,Page,3) &&
                  p[1]==0x8b && p[2]==0x2a){
-            if(!within(regs[Dx],Data,Page,8))
+            if(!within(regs[Dx],m6 ? Stack : Data,Page,8))
                 return 0;
-            regs[Bp] = read64(data+regs[Dx]-Data);
+            regs[Bp] = read64(m6 ? stack+regs[Dx]-Stack : data+regs[Dx]-Data);
             ip += 3;
-        }else if(m3 && op==0x48 && within(ip,Base,Page,3) &&
+        }else if((m3 || m6) && op==0x48 && within(ip,Base,Page,3) &&
                  p[1]==0x89 && p[2]==0xee){
             regs[Si] = regs[Bp];
             ip += 3;
-        }else if(m3 && op==0x89 && within(ip,Base,Page,2) &&
-                 (p[1]==0xc3 || p[1]==0xdf)){
+        }else if((m3 || m6) && op==0x89 && within(ip,Base,Page,2) &&
+                 (p[1]==0xc3 || p[1]==0xdf || (m6 && p[1]==0xc7))){
             if(p[1]==0xc3)
                 regs[Bx] = (uint)regs[Ax];
             else
-                regs[Di] = (uint)regs[Bx];
+                regs[Di] = (uint)regs[p[1]==0xc7 ? Ax : Bx];
             ip += 2;
         }else if(m3 && op==0x0f && within(ip,Base,Page,2) && p[1]==5){
             if(!file_trap())
                 return 0;
             ip += 2;
-        }else if(m3 && (op==0x72 || op==0x75) && within(ip,Base,Page,2)){
+        }else if(m6 && op==0x48 && within(ip,Base,Page,3) &&
+                 p[1]==0x89 && p[2]==0xe6){
+            regs[Si] = regs[Sp];
+            ip += 3;
+        }else if(m6 && op==0x83 && within(ip,Base,Page,3) && p[1]==0xf8 && p[2]==0xff){
+            equal = (uint)regs[Ax]==0xffffffffU;
+            ip += 3;
+        }else if((m3 || m6) && (op==0x72 || op==0x75 || (m6 && (op==0x74 || op==0xeb))) && within(ip,Base,Page,2)){
             value = p[1];
             if(value>=128)
                 value |= 0xffffff00U;
             next = ip+2;
-            ip = (op==0x72 ? carry : !equal) ? relative(next, value) : next;
+            ip = (op==0xeb || (op==0x72 ? carry : op==0x74 ? equal : !equal)) ? relative(next, value) : next;
         }else if(op==0xe8 && within(ip,Base,Page,5)){
             next = ip+5;
             if(!push(next))
@@ -277,17 +294,28 @@ execute(void)
             ip = relative(next, read32(p+1));
         }else if(op==0xff && within(ip,Base,Page,6) && p[1]==0x25){
             slot = relative(ip+6, read32(p+2));
-            if(m3 || slot!=Data+dynamic_plan.write_slot ||
-               read64(data+dynamic_plan.write_slot)!=WriteThunk ||
-               (regs[Sp]&15)!=8 || regs[Di]!=1 || calls!=0)
+            if((regs[Sp]&15)!=8 || m3)
                 return 0;
-            count = regs[Dx];
-            if(count>OutputLimit || !within(regs[Si],Base,Page,count))
-                return 0;
-            memmove(output, text+regs[Si]-Base, count);
-            output_size = count;
-            regs[Ax] = count;
-            calls++;
+            if(m6){
+                for(id=0; id<MacImports; id++)
+                    if(slot==Data+dynamic_plan.slots[id])
+                        break;
+                if(id==MacImports)
+                    return 0;
+                regs[Ax] = mac_work_call(&workload, id, regs[Di], regs[Si], regs[Dx], stack);
+            }else{
+                if(slot!=Data+dynamic_plan.write_slot ||
+                   read64(data+dynamic_plan.write_slot)!=WriteThunk ||
+                   regs[Di]!=1 || calls!=0)
+                    return 0;
+                count = regs[Dx];
+                if(count>OutputLimit || !within(regs[Si],Base,Page,count))
+                    return 0;
+                memmove(output, text+regs[Si]-Base, count);
+                output_size = count;
+                regs[Ax] = count;
+                calls++;
+            }
             if(!pop(&ip))
                 return 0;
         }else if(op==0x48 && within(ip,Base,Page,4) && p[1]==0x83 && p[2]==0xf8){
@@ -309,7 +337,7 @@ execute(void)
             if(!pop(&ip))
                 return 0;
             if(ip==ReturnThunk)
-                return regs[Sp]==Stack+Page && (m3 || calls==1);
+                return regs[Sp]==Stack+Page && (m3 || m6 || calls==1);
         }else
             return 0;
     }
@@ -330,8 +358,18 @@ run_reference(int argc, char **argv)
     FILE *file;
 #endif
 
+    m6 = argc==6 && (strcmp(argv[1], "--files-x86")==0 || strcmp(argv[1], "--files-arm64")==0);
     dynamic_mode = argc==3 && strcmp(argv[1], "--dynamic")==0;
     arm_mode = argc==3 && strcmp(argv[1], "--arm64")==0;
+    if(m6){
+        arm_mode = strcmp(argv[1], "--files-arm64")==0;
+        dynamic_mode = !arm_mode;
+        workload.name = argv[4];
+        workload.note = argv[5];
+        workload.fd = -1;
+        if(strcmp(argv[3], "-")!=0 && !mac_grant_init(argv[3]))
+            return 0;
+    }
     if(argc!=2 && argc!=5 && !dynamic_mode && !arm_mode)
         return 0;
     m3 = argc==5;
@@ -343,10 +381,17 @@ run_reference(int argc, char **argv)
         return 0;
     count = readn(fd, image, sizeof image);
     close(fd);
-    if(arm_mode)
-        return count>0 && count<=MacImageLimit && mac_arm64_run(image, count, &arm_result);
-    if(dynamic_mode)
-        return count>0 && count<=3*MacPage && load_dynamic(count) && execute();
+    if(arm_mode || dynamic_mode){
+        if(count<=0 || count>(arm_mode ? MacImageLimit : 3*MacPage))
+            return 0;
+        if(arm_mode)
+            ok = mac_arm64_run(image, count, &arm_result, m6 ? &workload : 0);
+        else
+            ok = load_dynamic(count) && execute();
+        if(m6)
+            mac_work_finish(&workload);
+        return ok;
+    }
     if(count!=expected)
         return 0;
     sha2_256(image, expected, digest, nil);
@@ -360,10 +405,17 @@ run_reference(int argc, char **argv)
         return 0;
     }
     fclose(file);
-    if(arm_mode)
-        return count>0 && count<=MacImageLimit && mac_arm64_run(image, count, &arm_result);
-    if(dynamic_mode)
-        return count>0 && count<=3*MacPage && load_dynamic(count) && execute();
+    if(arm_mode || dynamic_mode){
+        if(count<=0 || count>(arm_mode ? MacImageLimit : 3*MacPage))
+            return 0;
+        if(arm_mode)
+            ok = mac_arm64_run(image, count, &arm_result, m6 ? &workload : 0);
+        else
+            ok = load_dynamic(count) && execute();
+        if(m6)
+            mac_work_finish(&workload);
+        return ok;
+    }
     if(count!=expected || SHA256(image, expected, digest)==NULL)
         return 0;
 #endif
@@ -388,6 +440,14 @@ main(int argc, char **argv)
 {
     if(!run_reference(argc, argv))
         sysfatal("unsupported Mac reference image or execution fault");
+    if(m6){
+        if(write(1, workload.output, workload.size)!=workload.size)
+            sysfatal("output failed");
+        print("MAC_M6_EXIT %ud STEPS %ud OPEN %ud READ %ud WRITE %ud CLOSE %ud DENIED %ud\n",
+              arm_mode ? arm_result.status : (uint)regs[Ax], arm_mode ? arm_result.steps : steps+1,
+              workload.opens, workload.reads, workload.writes, workload.closes, workload.denied);
+        exits(nil);
+    }
     if(arm_mode){
         if(write(1, arm_result.output, arm_result.size)!=arm_result.size)
             sysfatal("output failed");
@@ -414,6 +474,11 @@ main(int argc, char **argv)
     if(!run_reference(argc, argv)){
         fputs("unsupported Mac reference image or execution fault\n", stderr);
         return 125;
+    }
+    if(m6){
+        if(fwrite(workload.output, 1, workload.size, stdout)!=workload.size || fflush(stdout)!=0)
+            return 125;
+        return (arm_mode ? arm_result.status : (uint)regs[Ax])&255;
     }
     if(arm_mode){
         if(fwrite(arm_result.output, 1, arm_result.size, stdout)!=arm_result.size || fflush(stdout)!=0)
