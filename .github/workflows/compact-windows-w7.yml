@@ -8,6 +8,7 @@ on:
       - 'scripts/compact_windows_w7_arm64_qemu_user.py'
       - 'scripts/compact_windows_w7_windows_arm64_reference.ps1'
       - 'scripts/compact_windows_w7_native_host_triplet.py'
+      - 'tests/test_compact_windows_w7_native_host_receipt.py'
       - 'tests/test_compact_windows_w7_qemu_user_receipt.py'
       - 'tests/fixtures/windows_w7_arm64_reference.c'
       - 'tests/fixtures/windows_w7_arm64_call_reference.c'
@@ -142,6 +143,7 @@ jobs:
         env:
           CW_W7_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
+          python3 -m unittest discover -s tests -p 'test_compact_windows_w7_native_host_receipt.py' -v
           python3 -m py_compile scripts/compact_windows_w7_native_host_triplet.py
           python3 scripts/compact_windows_w7_native_host_triplet.py \
             --windows-host-dir artifacts/windows/w7-arm64-host-fixtures \
