@@ -73,6 +73,28 @@ Windows `ReadFile` semantics and source-built native QEMU runtime must be
 implemented and independently verified. Never connect the interpreter to
 an untrusted host descriptor or bypass per-application API authorization.
 
+## W8 observed original MSVC instruction gap: scalar SSE2 MOVSD
+
+The actual source-built Ryzova AMD64/QEMU execution of the exact MIT
+sbase `wc.exe` failed at guest address `0x140001549` after five
+instructions with `status=7` unsupported-opcode. The byte-verified
+Windows PE `0x140001549` bytes start `F2 0F 10 05 E7 0B 00 00`:
+the legacy SSE2 `MOVSD xmm0,m64` scalar move. The independent Windows
+reference code-window record was bound to binary SHA-256
+`f0eae5bba801d18b51793b1fe446404b5a52389bc7ade7903bd7684c30590a69`
+in CI run 41952118387.
+
+The original Ryzova Windows AMD64 CPU interpreter now implements only
+`F2 0F 10 /r` and `F2 0F 11 /r` as *bit-accurate 64-bit transfers*:
+memory load zeroes XMM high half, register copy preserves XMM high half,
+memory store writes eight bytes, no arithmetic or EFLAGS changes.
+Both forms require the same already-enforced read/write access rights.
+Tests use source-generated PE32+ fixtures and verify memory/register
+cases, REX extension, unsupported FP arithmetic rejection and W^X.
+This does NOT imply general SSE2, IEEE-754 or Win32 runtime support.
+Only a subsequent **exact-head source-built native QEMU run of this
+exact PE** can close the first named W8 guest application gate.
+
 ## Bounded guest stdin capability (W8 integration increment)
 
 The existing Windows service layer previously returned no handle for

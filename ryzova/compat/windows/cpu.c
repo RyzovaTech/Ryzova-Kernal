@@ -178,7 +178,7 @@ static int tick(CwMachine *m) {
     uint64_t a,b,v,target=0;int jump=0;
     memset(&d,0,sizeof(d));d.m=m;d.start=d.cur=m->ip;
     op=(unsigned int)fetch(&d,1);
-    while((op>=0x40 && op<=0x4f) || op==0x66 || op==0xf3) {
+    while((op>=0x40 && op<=0x4f) || op==0x66 || op==0xf3 || op==0xf2) {
         if(++prefixes>2){d.error=CW_OPCODE;break;}
         if(op>=0x40 && op<=0x4f){if(d.rex){d.error=CW_OPCODE;break;}d.rex=op;}
         else {if(d.prefix || d.rex){d.error=CW_OPCODE;break;}d.prefix=op;}
@@ -186,7 +186,7 @@ static int tick(CwMachine *m) {
     }
     n=(d.rex&8)?8:(d.prefix==0x66?2:4);
     if(d.error)return d.error;
-    if(d.prefix==0xf3 && op!=0x0f)return CW_OPCODE;
+    if((d.prefix==0xf3 || d.prefix==0xf2) && op!=0x0f)return CW_OPCODE;
     if(op>=0xb8 && op<=0xbf){v=fetch(&d,n);put(&d,regop(&d,(op-0xb8)+((d.rex&1)?8:0),n),n,v);}
     else if(op>=0xb0 && op<=0xb7){v=fetch(&d,1);put(&d,regop(&d,(op-0xb0)+((d.rex&1)?8:0),1),1,v);}
     else if(op>=0x50 && op<=0x57){if(d.prefix)return CW_OPCODE;push(&d,m->r[(op-0x50)+((d.rex&1)?8:0)]);}
@@ -245,13 +245,31 @@ static int tick(CwMachine *m) {
     else if(op==0xff){o=operand(&d,&reg,&group,n);if(group==2 || group==4 || group==6){if(d.prefix)return CW_OPCODE;v=get(&d,o,8);if(group==6)push(&d,v);else {if(group==2)push(&d,d.cur);jump=1;target=v;}}else if(group<2){a=m->flags&CF;v=alu(&d,group?5:0,get(&d,o,n),1,n);m->flags=(m->flags&~(uint64_t)CF)|a;put(&d,o,n,v);}else return CW_OPCODE;}
     else if(op==0x0f){
         unsigned int second=(unsigned int)fetch(&d,1);
-        if(d.prefix==0xf3 && second!=0x6f && second!=0x7f)return CW_OPCODE;
+        if((d.prefix==0xf3 && second!=0x6f && second!=0x7f) ||
+            (d.prefix==0xf2 && second!=0x10 && second!=0x11))return CW_OPCODE;
         if(second>=0x80 && second<=0x8f){if(d.prefix || d.rex)return CW_OPCODE;b=(uint64_t)(int64_t)(int32_t)fetch(&d,4);if(condition(m,second&15)){jump=1;target=d.cur+b;}}
         else if(second==0xaf){uint64_t high;o=operand(&d,&reg,&group,n);product(get(&d,regop(&d,reg,n),n),get(&d,o,n),n,1,&v,&high);multiply_flags(&d,v,high,n,1);put(&d,regop(&d,reg,n),n,v);}
         else if(second==0xbe || second==0xbf){unsigned int small=second==0xbe?1:2;o=operand(&d,&reg,&group,small);put(&d,regop(&d,reg,n),n,sign_extend(get(&d,o,small),small));}
         else if(second==0xb6 || second==0xb7){unsigned int small=second==0xb6?1:2;o=operand(&d,&reg,&group,small);put(&d,regop(&d,reg,n),n,get(&d,o,small));}
         else if(second>=0x90 && second<=0x9f){o=operand(&d,&reg,&group,1);put(&d,o,1,(uint64_t)condition(m,second&15));}
         else if(second>=0x40 && second<=0x4f){o=operand(&d,&reg,&group,n);v=get(&d,o,n);if(condition(m,second&15))put(&d,regop(&d,reg,n),n,v);}
+        else if((second==0x10 || second==0x11) && d.prefix==0xf2){
+            /* Original SSE2 legacy MOVSD scalar *bit transport*, not FP
+             * arithmetic. Intel F2 0F 10/11: reg source preserves high
+             * destination quadword; m64 load clears destination high
+             * quadword; m64 store writes exactly the low eight bytes.
+             * Flags unchanged; all guest memory rights remain enforced. */
+            unsigned char lane[8];
+            o=operand(&d,&reg,&group,8);
+            if(!d.error && second==0x10){
+                if(o.reg>=0)memcpy(m->xmm[reg],m->xmm[o.reg],8);
+                else if(cw_read(m,address(&d,o),lane,8,CW_R))d.error=CW_MEMORY;
+                else {memcpy(m->xmm[reg],lane,8);memset(m->xmm[reg]+8,0,8);}
+            }else if(!d.error){
+                if(o.reg>=0)memcpy(m->xmm[o.reg],m->xmm[reg],8);
+                else if(cw_write(m,address(&d,o),m->xmm[reg],8))d.error=CW_MEMORY;
+            }
+        }
         else if((second==0x6f || second==0x7f) && d.prefix==0xf3){o=operand(&d,&reg,&group,8);if(!d.error)vector(&d,o,reg,second==0x7f);}
         else if(second==0xef && d.prefix==0x66){unsigned int k;o=operand(&d,&reg,&group,8);if(o.reg<0)return CW_OPCODE;for(k=0;k<16;k++)m->xmm[reg][k]^=m->xmm[o.reg][k];}
         else if(second==0x1f){o=operand(&d,&reg,&group,n);if(group)return CW_OPCODE;}
