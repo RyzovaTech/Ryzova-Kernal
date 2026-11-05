@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """M1 host-regression checks; NOT a USB compatibility certification."""
 import sys
 import unittest

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Synthetic M0.2-M0.5 regression; observations are NOT real device support."""
 import copy
 import sys
