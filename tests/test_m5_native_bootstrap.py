@@ -70,7 +70,7 @@ class M5Bootstrap(unittest.TestCase):
         for tool in ("sha1sum", "webfs", "hget"):
             self.assertIn(tool, proto)
         self.assertIn("hget 555 sys sys /rc/bin/hget",proto)
-        self.assertIn("mnt\\n\\tweb",proto)
+        self.assertIn("mnt" + chr(10) + chr(9) + "web", proto)
 
     def test_arm64_native_library_tcq_time_budget_is_bounded(self):
         source=(ROOT/"scripts/phase3-native-build.py").read_text()
@@ -89,7 +89,7 @@ class M5Bootstrap(unittest.TestCase):
                      "sys/src/libmemlayer", "sys/src/libauth", "sys/src/libauthsrv"):
             self.assertIn('"' + path + '"', source)
         self.assertIn('arm64_libraries_ok = all(arm64_libraries.values())', source)
-        self.assertIn('arm64_libraries_ok and arm64_rc_ok and arm64_core_ok and paqfs_ok', source)
+        self.assertIn('arm64_libraries_ok and arm64_rc_ok and arm64_core_ok and arm64_io_tools_ok and paqfs_ok', source)
         self.assertIn('"arm64_bootstrap_libraries_complete": arm64_libraries_ok', source)
         self.assertIn('marks.get("m5-arm64-verify-" + lib)', source)
 
