@@ -38,8 +38,8 @@ reserved argument. They execute through the same interpreter, import
 policy and instruction budget as the entry point. A balanced synthetic
 return advances to the next callback, then to the application entry.
 Callback faults or budget exhaustion stop startup. Detach callbacks,
-additional threads, dynamic TLS allocation and DLL loading are not yet
-implemented. This is an initial-thread startup profile, not full TLS.
+additional threads and DLL loading are not yet implemented. Dynamic TLS APIs described below
+operate on the same initial thread. This is not a multithreaded profile.
 
 The reproducible TLS fixture checks callback arguments/order and accesses
 static TLS through GS. CI runs identical executable bytes on Windows and
@@ -58,7 +58,8 @@ descriptor. The loader bounds the complete directory to 65536 file-backed
 bytes and the descriptor scan to 16 modules plus a terminator. It checks
 every lookup/IAT span, disallows descriptor/thunk overlap, rejects duplicate
 modules and API bindings, and protects the aggregate IAT after binding.
-The existing 32-import and 28-API limits remain in effect.
+The import ceiling is now 256. There are 35 implemented APIs; the remaining
+IDs are reserved and cannot be granted or dispatched.
 
 Only exact DLL contracts and their selected exports are recognized:
 
@@ -71,8 +72,8 @@ Only exact DLL contracts and their selected exports are recognized:
 | `api-ms-win-crt-string-l1-1-0.dll` | `memset`, `strlen`, `strcmp`, `strncmp`, `wcslen` |
 | `api-ms-win-crt-runtime-l1-1-0.dll` | `_errno` |
 
-These aliases resolve to the same existing canonical API IDs and require
-the same explicit grants. No API is newly authorized, no arbitrary API-set
+These aliases resolve to the same canonical API IDs and require
+the same explicit grants. No arbitrary API-set
 prefix is accepted, and no host DLL is loaded. Unimplemented exports and
 wrong-module bindings fail admission before any guest instruction.
 
@@ -82,6 +83,46 @@ private errno state and last-error state. Its expected exit is 37 with no
 output. CI compares identical bytes on Windows and the hosted interpreter;
 unit tests execute it at three load bases. The native job also runs these
 bytes and verifies exact API call counts alongside the TLS gates.
+
+## Extended grants and startup state
+
+The native runtime's internal C layout is version 2 and must be rebuilt.
+The low mask keeps all previous API IDs and grants; seven additional
+32-bit words provide storage for up to 256 IDs. All grant words are checked
+against the implemented registry, and dispatch checks both the declared
+import and the launch grant using its full ID. Unknown bits fail closed.
+The original JSON contract profiles are unchanged; this native C/CLI
+extension does not silently extend their advertised export lists.
+
+The native CLI still grants only the original 28 APIs by default. `-a`
+sets the low word and `-A` explicitly supplies word one. Higher reserved
+words remain zero. New APIs, including those at IDs 31/32, cannot acquire
+permission through truncation or a legacy launch mask.
+
+Seven new kernel32 exports have stateful implementations:
+
+| Exports | Behavior |
+| --- | --- |
+| `AreFileApisANSI`, `SetFileApisToANSI`, `SetFileApisToOEM` | Per-environment mode, initially ANSI; wide file APIs are unaffected. Narrow file-path conversion is not implemented. |
+| `TlsAlloc`, `TlsFree` | A bounded 64-slot index pool for the initial thread; zero on allocation/reuse; free releases the index and never frees the stored pointer. |
+| `TlsGetValue`, `TlsSetValue` | Opaque 64-bit values isolated per environment; valid base-range reads clear last-error, including zero values. Out-of-profile indices fail with error 87. |
+
+Pool exhaustion returns `TLS_OUT_OF_INDEXES` with error 8. Slots are not
+shared with the image's static TLS template/vector, and no additional
+threads or direct dynamic-TLS TEB layout are claimed. The file mode is
+guest state and never changes the host's file API mode.
+
+A new identical-bytes Windows/hosted/native fixture checks mode changes,
+multiple TLS values, zero retrieval versus error, and index release/reuse;
+its expected exit is 41. Hosted and native launch tests require explicit
+low and high grants and reject missing words before guest allocation or
+execution. Native receipts also verify exact API call counts.
+
+Semantics are based on Microsoft's [TLS allocation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-tlsalloc),
+[TLS reads](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-tlsgetvalue),
+[TLS release](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-tlsfree),
+and [file API mode](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-arefileapisansi)
+documentation. Capacity and single-thread restrictions are Ryzova profile limits.
 
 The pinned jq binary now passes resource/TLS validation and its import
 directory's descriptor layout; it is rejected for unimplemented imports.

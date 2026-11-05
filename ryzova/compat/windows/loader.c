@@ -167,8 +167,8 @@ static int import_table(const unsigned char *f,CwPlan *p,uint32_t rva,uint32_t b
             value=u64(lookup);if(!value)break;
             if(total==CW_MAX_IMPORTS || value>UINT32_MAX-2 || !backed(f,p,(uint32_t)value,2) || !ascii_name(f,p,(uint32_t)value+2,name,sizeof(name)))return CW_UNSUPPORTED;
             api=cw_api_id(name);
-            if(api<0 || !cw_api_module_matches((unsigned int)api,module) || (p->api_mask&(1U<<api)))return CW_UNSUPPORTED;
-            p->imports[total].iat=ft+n*8;p->imports[total].api=(uint32_t)api;p->api_mask|=1U<<api;total++;
+            if(api<0 || !cw_api_module_matches((unsigned int)api,module) || cw_plan_has_api(p,(unsigned int)api))return CW_UNSUPPORTED;
+            p->imports[total].iat=ft+n*8;p->imports[total].api=(uint32_t)api;cw_plan_add_api(p,(unsigned int)api);total++;
         }
         if(!n)return CW_HEADER;
         lookup_rva[mi]=oft;iat_rva[mi]=ft;iat_bytes[mi]=(n+1)*8;

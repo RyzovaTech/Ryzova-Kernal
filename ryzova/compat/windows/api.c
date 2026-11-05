@@ -11,12 +11,35 @@
 #define ERR_ENVIRONMENT 203U
 #define ERR_ADDRESS 487U
 #define ERR_NOACCESS 998U
-static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno"};
+static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno","AreFileApisANSI","SetFileApisToANSI","SetFileApisToOEM","TlsAlloc","TlsFree","TlsGetValue","TlsSetValue"};
 int cw_api_id(const char *name) {
     unsigned int i;for(i=0;i<CW_API_COUNT;i++)if(!strcmp(name,names[i]))return (int)i;
     return -1;
 }
-const char *cw_api_module(unsigned int id) { return id<CW_MEMCPY?"kernel32.dll":(id<CW_API_COUNT?"ucrtbase.dll":NULL); }
+const char *cw_api_module(unsigned int id) { return id>=CW_API_COUNT?NULL:((id>=CW_MEMCPY && id<=CW_ERRNO)?"ucrtbase.dll":"kernel32.dll"); }
+uint32_t cw_api_word_mask(unsigned int word) {
+    unsigned int remaining;
+    if(word>=CW_API_WORDS || word*32>=CW_API_COUNT)return 0;
+    remaining=CW_API_COUNT-word*32;
+    return remaining>=32?UINT32_MAX:(1U<<remaining)-1U;
+}
+int cw_plan_has_api(const CwPlan *p,unsigned int id) {
+    uint32_t word;
+    if(id>=CW_API_COUNT)return 0;
+    word=id<32?p->api_mask:p->api_mask_high[id/32-1];return !!(word&(1U<<(id%32)));
+}
+void cw_plan_add_api(CwPlan *p,unsigned int id) {
+    if(id>=CW_API_COUNT)return;
+    if(id<32)p->api_mask|=1U<<id;
+    else p->api_mask_high[id/32-1]|=1U<<(id%32);
+}
+int cw_launch_allows_plan(const CwLaunch *launch,const CwPlan *p) {
+    unsigned int i;
+    if((launch->api_mask&~cw_api_word_mask(0)) || (p->api_mask&~launch->api_mask))return 0;
+    for(i=1;i<CW_API_WORDS;i++)if((launch->api_mask_high[i-1]&~cw_api_word_mask(i)) ||
+        (p->api_mask_high[i-1]&~launch->api_mask_high[i-1]))return 0;
+    return 1;
+}
 int cw_api_module_id(const char *name) {
     static const char *const modules[]={"kernel32.dll","ucrtbase.dll",
         "api-ms-win-crt-heap-l1-1-0.dll","api-ms-win-crt-private-l1-1-0.dll",
@@ -63,7 +86,7 @@ static int overlap(const void *a,size_t an,const void *b,size_t bn) {
 int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigned char *heap,size_t heap_bytes) {
     unsigned int i,j;int length;CwLaunch copy;
     if(!m || !m->image || !s || !launch || s->bound_machine || m->services || m->instructions || m->exited)return CW_API;
-    if((launch->api_mask&~CW_ALL_APIS) || (m->plan.api_mask&~launch->api_mask) ||
+    if(!cw_launch_allows_plan(launch,&m->plan) ||
        (launch->console_mask&~3U) || launch->environment_count>CW_ENV_COUNT ||
        heap_bytes>CW_HEAP_LIMIT || heap_bytes%4096 || (heap_bytes && !heap) ||
        (size_t)m->plan.image_bytes+CW_STACK+4096+heap_bytes>CW_MAX_MEMORY)return CW_API;
@@ -81,7 +104,7 @@ int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigne
            overlap(heap,heap_bytes,s,sizeof(*s)) || overlap(heap,heap_bytes,launch,sizeof(*launch)))return CW_API;
     }
     copy=*launch;
-    memset(s,0,sizeof(*s));s->launch=copy;s->heap=heap;s->heap_bytes=heap_bytes;
+    memset(s,0,sizeof(*s));s->launch=copy;s->heap=heap;s->heap_bytes=heap_bytes;s->file_apis_ansi=1;
     s->command_base=(m->stack_base+CW_STACK+4096+65535)&~UINT64_C(65535);
     s->heap_base=s->command_base+65536;
     for(i=0;i<=(unsigned int)length;i++){s->command_bytes[2*i]=(unsigned char)copy.command_line[i];s->command_bytes[2*i+1]=(unsigned char)(copy.command_line[i]>>8);}
@@ -217,7 +240,8 @@ int cw_api_dispatch(CwMachine *m) {
     CwServices *s=m->services;
     if(token<CW_THUNK_BASE || token-CW_THUNK_BASE>=16U*CW_API_COUNT || (token-CW_THUNK_BASE)%16)return CW_MEMORY;
     id=(unsigned int)((token-CW_THUNK_BASE)/16);
-    if(!s || s->bound_machine!=m || !(m->plan.api_mask&(1U<<id)) || !(s->launch.api_mask&(1U<<id)))return CW_API;
+    if(!s || s->bound_machine!=m || !cw_plan_has_api(&m->plan,id) ||
+       !((id<32?s->launch.api_mask:s->launch.api_mask_high[id/32-1])&(1U<<(id%32))))return CW_API;
     if((m->r[4]&15)!=8 || m->r[4]<m->stack_base || m->r[4]-m->stack_base>CW_STACK-40 || !(stack=cw_memory(m,m->r[4],40,CW_R)))return CW_ABI;
     if(!cw_memory(m,m->r[4]+8,32,CW_W))return CW_ABI;
     a[0]=m->r[1];a[1]=m->r[2];a[2]=m->r[8];a[3]=m->r[9];a[4]=a[5]=a[6]=0;
@@ -239,6 +263,24 @@ int cw_api_dispatch(CwMachine *m) {
     case CW_EXIT_PROCESS:cw_files_close_all(m);m->exit_code=(uint32_t)a[0];m->exited=1;m->exit_kind=1;return CW_OK;
     case CW_GET_LAST_ERROR:result=s->last_error;break;
     case CW_SET_LAST_ERROR:s->last_error=(uint32_t)a[0];break;
+    case CW_FILE_APIS_ANSI:result=s->file_apis_ansi;break;
+    case CW_FILE_APIS_SET_ANSI:s->file_apis_ansi=1;break;
+    case CW_FILE_APIS_SET_OEM:s->file_apis_ansi=0;break;
+    case CW_TLS_ALLOC:{
+        unsigned int i;
+        for(i=0;i<CW_DYNAMIC_TLS_SLOTS;i++)if(!(s->tls_used[i/32]&(1U<<(i%32))))break;
+        if(i==CW_DYNAMIC_TLS_SLOTS){s->last_error=ERR_MEMORY;result=UINT32_MAX;}
+        else {s->tls_used[i/32]|=1U<<(i%32);s->tls_values[i]=0;result=i;}
+        break;
+    }
+    case CW_TLS_FREE:case CW_TLS_GET:case CW_TLS_SET:{
+        uint32_t index=(uint32_t)a[0];
+        if(index>=CW_DYNAMIC_TLS_SLOTS || (id==CW_TLS_FREE && !(s->tls_used[index/32]&(1U<<(index%32)))))result=fail(s,ERR_PARAMETER);
+        else if(id==CW_TLS_FREE){s->tls_used[index/32]&=~(1U<<(index%32));s->tls_values[index]=0;result=1;}
+        else if(id==CW_TLS_SET){s->tls_values[index]=a[1];result=1;}
+        else {result=s->tls_values[index];s->last_error=0;}
+        break;
+    }
     case CW_GET_COMMAND_LINE:result=s->command_base;break;
     case CW_GET_ENVIRONMENT_VARIABLE:result=environment(m,a);break;
     case CW_VIRTUAL_ALLOC:result=a[0] && cw_crt_owned(m,a[0])?fail(s,ERR_ADDRESS):virtual_alloc(m,a);break;
@@ -247,7 +289,7 @@ int cw_api_dispatch(CwMachine *m) {
     case CW_SET_FILE_POINTER:case CW_GET_FILE_SIZE:case CW_FLUSH_FILE_BUFFERS:
         result=cw_file_call(m,id,a);break;
     default:
-        if(id>=CW_MEMCPY){int status=cw_crt_call(m,id,a,&result);if(status)return status;}
+        if(id>=CW_MEMCPY && id<=CW_ERRNO){int status=cw_crt_call(m,id,a,&result);if(status)return status;}
         else return CW_API;
     }
     m->r[0]=result;m->r[4]+=8;

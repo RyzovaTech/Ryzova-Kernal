@@ -6,7 +6,9 @@
 #define CW_MAX_MEMORY (64U*1024U*1024U)
 #define CW_STACK 65536U
 #define CW_MAX_SECTIONS 16U
-#define CW_MAX_IMPORTS 32U
+#define CW_MAX_IMPORTS 256U
+#define CW_API_WORDS 8U
+#define CW_RUNTIME_ABI_VERSION 2U
 #define CW_MAX_STEPS 262144U
 #define CW_TLS_LIMIT 4096U
 #define CW_TLS_CALLBACKS 8U
@@ -35,6 +37,7 @@ typedef struct CwPlan {
     CwImport imports[CW_MAX_IMPORTS];
     uint32_t tls_present, tls_rva, tls_bytes, tls_zero, tls_index, tls_count;
     uint32_t tls_callbacks[CW_TLS_CALLBACKS];
+    uint32_t api_mask_high[CW_API_WORDS-1];
 } CwPlan;
 enum CwStatus { CW_OK, CW_HEADER, CW_UNSUPPORTED, CW_BOUNDS, CW_MAPPING,
     CW_RELOCATION, CW_MEMORY, CW_OPCODE, CW_BUDGET, CW_ABI, CW_API, CW_DIVIDE, CW_CRT };

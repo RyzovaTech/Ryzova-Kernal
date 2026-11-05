@@ -37,15 +37,17 @@ int main(int argc,char **argv) {
 #ifdef CW_FILES_PROBE
     CwFileNamespace *ns=NULL;CwFileHost *host=NULL;
 #endif
-    if(argc<2 || argc>9 || argc==4)return 64;
+    if(argc<2 || argc>10 || argc==4)return 64;
     memset(&launch,0,sizeof(launch));
     if(!utf16(argc>2?argv[2]:"flex.exe",launch.command_line,CW_COMMAND_UNITS))return 64;
     if(argc>4){if(!utf16(argv[3],launch.environment[0].name,64) || !utf16(argv[4],launch.environment[0].value,256))return 64;launch.environment_count=1;}
     if(argc>5 && !number(argv[5],3,&launch.console_mask))return 64;
-    if(argc>6 && !number(argv[6],CW_ALL_APIS,&launch.api_mask))return 64;
+    if(argc>6 && !number(argv[6],CW_LOW_API_MASK,&launch.api_mask))return 64;
     if(argc>7 && !number(argv[7],CW_MAX_STEPS,&budget))return 64;
 #ifndef CW_FILES_PROBE
-    if(argc>8)return 64;
+    if(argc>9 || (argc==9 && !number(argv[8],cw_api_word_mask(1),&launch.api_mask_high[0])))return 64;
+#else
+    if(argc==10 && !number(argv[9],cw_api_word_mask(1),&launch.api_mask_high[0]))return 64;
 #endif
     file=fopen(argv[1],"rb");if(!file)return 65;
     if(fseek(file,0,SEEK_END) || (length=ftell(file))<0 || length>CW_MAX_FILE || fseek(file,0,SEEK_SET)){fclose(file);return 65;}
@@ -53,7 +55,7 @@ int main(int argc,char **argv) {
     if(fread(input,1,(size_t)length,file)!=(size_t)length){free(input);fclose(file);return 65;}fclose(file);
     status=cw_plan(input,(size_t)length,0,&plan);
     if(status){printf("{\"status\":%d,\"executed\":false,\"allocation_bytes\":0}\n",status);free(input);return 1;}
-    if(plan.api_mask&~launch.api_mask){printf("{\"status\":10,\"executed\":false,\"allocation_bytes\":0}\n");free(input);return 1;}
+    if(!cw_launch_allows_plan(&launch,&plan)){printf("{\"status\":10,\"executed\":false,\"allocation_bytes\":0}\n");free(input);return 1;}
     if((size_t)plan.image_bytes+CW_STACK+4096+CW_HEAP_LIMIT>CW_MAX_MEMORY){free(input);return 66;}
     arena=(unsigned char *)malloc((size_t)plan.image_bytes+CW_STACK);
     heap=(unsigned char *)malloc(CW_HEAP_LIMIT);s=(CwServices *)calloc(1,sizeof(*s));
@@ -61,7 +63,7 @@ int main(int argc,char **argv) {
     status=cw_load(input,(size_t)length,0,arena,(size_t)plan.image_bytes+CW_STACK,&m);
     if(!status)status=cw_attach_services(&m,s,&launch,heap,CW_HEAP_LIMIT);
 #ifdef CW_FILES_PROBE
-    if(!status && argc==9) {
+    if(!status && argc>=9) {
         CwDirectoryGrant grant;int root;
         memset(&grant,0,sizeof(grant));strcpy(grant.ref,"work");grant.drive='C';grant.rights=31;
         ns=(CwFileNamespace *)calloc(1,sizeof(*ns));host=cw_file_host_new();
