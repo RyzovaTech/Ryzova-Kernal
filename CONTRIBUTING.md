@@ -1,25 +1,33 @@
 # Contributing to Ryzova Kernel
 
-Ryzova Kernel is a 9front-derived source project. Please preserve upstream history and observe all third-party notices. Read [`LICENSE.md`](LICENSE.md), [`docs/CONTRIBUTOR-LICENSING.md`](docs/CONTRIBUTOR-LICENSING.md) and [`docs/BUILD-STANDARDS.md`](docs/BUILD-STANDARDS.md) before submitting changes.
+Ryzova Kernel is an experimental **9front-derived** project. We welcome thoughtful, independently testable changes that improve reliability, hardware support, documentation and research quality. Preserve upstream history, contributor credit and all third-party notices.
 
-## Contribution workflow
+**First-time contributors:** [community quickstart](docs/COMMUNITY-QUICKSTART.md) · [current status](docs/PROJECT-STATUS.md) · [build standards](docs/BUILD-STANDARDS.md) · [license map](LICENSE.md).
 
-1. Open an issue or discussion describing the change and its motivation.
-2. Work on a topic branch; target `main` through a pull request.
-3. **Do not modify `upstream/front`.** It is an exact tracked upstream branch.
-4. Label modifications clearly: `Upstream import`, `Ryzova-owned`, or `Third-party`, with source origin and license details.
-5. Use an SPDX identifier for newly authored source; retain upstream copyright statements.
-6. Include build and runtime test evidence where feasible; identify anything not tested. Do not claim CI source checks prove a kernel can boot.
-7. Document architecture-specific effects, ABI changes, and security implications.
+## Before opening a pull request
 
-## Contributor rights
+1. Check [existing issues](https://github.com/RyzovaTech/Ryzova-Kernal/issues) and [open PRs](https://github.com/RyzovaTech/Ryzova-Kernal/pulls) for overlapping work. Discuss a major design change in an issue (or GitHub Discussions once it is enabled).
+2. Work from `main` on a topic branch. **Do not modify `upstream/front`**; that branch preserves historical source provenance, not an automatic sync channel.
+3. State whether your changes are `Upstream import`, `Ryzova-owned` or `Third-party`. Name every material external source; maintain original copyright notices.
+4. Use accurate file-level SPDX identifiers for newly authored files. Consult [LICENSE.md](LICENSE.md) and [docs/CONTRIBUTOR-LICENSING.md](docs/CONTRIBUTOR-LICENSING.md). A GPLv3 transition has been proposed for eligible Ryzova-controlled code, **but the existing file-level AGPL and third-party terms still apply until individually and lawfully updated**. See [the migration checklist](docs/LICENSING-TRANSITION.md).
+5. Explain architecture and ABI effects, threat boundaries, hardware assumptions and regressions. Include exact commit SHA and test commands/logs. If only host-side parser tests pass, do **not** claim the native kernel feature works.
+6. For AMD64 kernel or driver changes, preserve or extend the source-built QEMU build and boot checks. For ARM64 and hardware support, distinguish virtual/source checks from physical-device verification.
+7. Open a PR with a short scope, evidence, limitations and risk analysis. A passing CI run does not authorize a binary release or prove production readiness.
 
-A code contribution must be yours to submit (or properly authorized) and accurately credited. **No assignment or commercial relicensing is silently assumed.** For new AGPL-marked contributions, the inbound license is AGPLv3 unless a separate, explicit agreement is signed. To incorporate a contribution into a separately commercially licensed component, a legally adequate additional grant is required before accepting it for that component. See [contributor licensing policy](docs/CONTRIBUTOR-LICENSING.md).
+## Useful contribution categories
 
-The upstream 9front project has its **own** [contribution conditions](lib/legal/contributing), including a restriction on computer-generated code submitted **to 9front**. Ryzova submissions are not automatically upstream submissions. Check and comply with upstream policy independently if proposing work upstream.
+- Better documented QEMU steps that a new contributor can actually reproduce;
+- Small bug fixes with a regression test and proof of affected paths;
+- Host-side parser and safety hardening without expanding compatibility claims;
+- Native AMD64 test evidence, legacy PC preservation, independent hardware trials;
+- Provenance, licensing, attribution and security documentation.
+
+## Rights, AI-assisted work and attribution
+
+Contributions must be yours to submit or supported by authorization from the relevant rights holders. **Contributing does not automatically assign copyright or grant Ryzova proprietary/commercial relicensing rights.** A separate, adequate written agreement is required when those additional rights are necessary. See [contributor licensing](docs/CONTRIBUTOR-LICENSING.md).
+
+All submitted code, including code produced with assistive tools, must be reviewed, accurately attributed, tested and legally permissible to submit. The upstream 9front project maintains its own [contribution terms](lib/legal/contributing), including a restriction on computer-generated code **submitted to 9front**. Ryzova contributions are not automatically upstream submissions; verify upstream rules separately.
 
 ## Security and conduct
 
-Do not publish exploitable security issues in public PRs before private disclosure. Consult [`SECURITY.md`](SECURITY.md). Participate constructively and respectfully.
-
-Maintainers may defer a change if provenance, legal compatibility, tests, or rights needed for its intended distribution have not been established.
+Use [SECURITY.md](SECURITY.md) for suspected vulnerabilities; do not post sensitive exploit details publicly. Be constructive and specific in technical discussion. Maintainers may decline changes whose test evidence, provenance or required license rights cannot be established.
