@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Adversarial source, 9P and kernel provenance cross-checks."""
 import copy
 import hashlib
