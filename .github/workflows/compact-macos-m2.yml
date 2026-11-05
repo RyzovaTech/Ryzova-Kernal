@@ -1,10 +1,12 @@
-name: Compact macOS M2 execution proof
+name: Compact macOS M2 and M3 execution proof
 on:
   pull_request:
     paths:
       - 'ryzova/compat/macos/**'
       - 'tests/fixtures/macos_m1_reference.macho'
       - 'tests/test_compact_macos_m2.py'
+      - 'tests/fixtures/macos_m3_guest.S'
+      - 'scripts/compact_macos_m3_fixture.py'
       - 'scripts/compact_macos_m2_native.py'
       - '.github/workflows/compact-macos-m2.yml'
   workflow_dispatch:
@@ -37,7 +39,7 @@ jobs:
           echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  bootstrap.qcow2.gz' | sha256sum -c -
           gzip -dc bootstrap.qcow2.gz > bootstrap.qcow2
           qemu-img create -f qcow2 -F qcow2 -b bootstrap.qcow2 mac-m2.qcow2
-      - run: python3 scripts/compact_macos_m2_native.py mac-m2.qcow2 bootstrap.qcow2.gz
+      - run: python3 scripts/compact_macos_m2_native.py mac-m2.qcow2 bootstrap.qcow2.gz --m3
       - uses: actions/upload-artifact@v4
         if: always()
         with:
