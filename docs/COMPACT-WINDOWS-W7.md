@@ -45,6 +45,32 @@ Ryzova QEMU guest with independent receipt, and finally physical board
 qualification with device IDs and firmware inventory. Every milestone
 requires independent tests and a distinct acceptance decision.
 
+## W7.3: Linux AArch64 userspace — independent real-PE ISA differential
+
+A dedicated W7 CI job now cross-compiles the original bounded Windows ARM64
+PE interpreter into **Linux AArch64 ELF64** with the GNU AArch64 compiler.
+The ELF machine must be 183 (EM_AARCH64) and the program runs with
+`qemu-aarch64` on an AMD64 Linux runner. The same unmodified interpreter
+sources also compile into an independent Linux AMD64 host executable.
+
+Both binaries execute **the same real Clang/LLD Windows ARM64 PE32+**
+files at O0/O2 from the existing integer and non-inlined call fixtures.
+Exact exit status 37, executed instruction counts, final instruction
+and last RVA must match across both interpreter ISAs. The source SHA-256,
+both interpreter ELF SHA-256 and all Windows PE SHA-256 values are retained.
+
+Five real-PE mutations are required to fail identically on both targets:
+ARM64EC machine mismatch, SVC syscall, illegal opcode, 4096-step infinite
+loop, and unapproved import directory. These are fail-closed portability
+and bounded ISA tests, not a claim of Windows API or syscall coverage.
+
+**This is QEMU userspace emulation, NOT a source-built Ryzova ARM64 kernel**.
+No ARM64 kernel is booted by this job, no actual Windows ARM64 host
+reference runs, and no physical ARM64 board is tested. All corresponding
+release and hardware acceptance fields remain false. The stronger
+next requirement is a source-built ARM64 **Ryzova QEMU-system guest**
+running a source-identical Windows ARM64 PE with independent guest serial
+and resource-permission evidence.
 ## W7B: Real hardware power cut
 
 `scripts/compact_windows_physical_powercut.py` and
