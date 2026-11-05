@@ -109,7 +109,7 @@ def probe(overlay):
             # if actual guest userland cannot yet reach a shell or I/O path.
             try:
                 from m6_arm64_virtio_probe import run_probe as m6_probe
-                virtio = m6_probe(kernel, source, digest, OUT)
+                virtio = m6_probe(kernel, source, digest, OUT, root_overlay=overlay)
             except Exception as exc:
                 virtio = {
                     "schema": "ryzova-m6-arm64-virtio-functional/v1",
