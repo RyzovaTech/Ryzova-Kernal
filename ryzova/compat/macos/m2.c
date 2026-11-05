@@ -13,6 +13,8 @@ typedef uint32_t uint;
 typedef unsigned char uchar;
 #endif
 
+#include "grant.h"
+
 enum { ImageBytes = 8472, Page = 4096, MaxSteps = 64, OutputLimit = 256 };
 enum { Base = 0x200000, Stack = 0x400000, WriteThunk = 0x10000, ReturnThunk = 0x10008 };
 enum { Ax, Cx, Dx, Bx, Sp, Bp, Si, Di };
@@ -20,6 +22,13 @@ static const uchar reference_digest[32] = {
     0x47,0x84,0x99,0xee,0xfd,0x52,0x28,0xf5,0x6f,0xfa,0xed,0x4d,0xaf,0xc0,0x74,0x36,
     0xb0,0x1a,0xe1,0x31,0x9f,0x1c,0xc9,0x59,0x98,0xae,0xcb,0x92,0xe4,0x6a,0xfc,0x1f
 };
+static const uchar m3_digest[32] = {
+    0x4b,0x2f,0xdd,0x6c,0x3f,0xbe,0x8c,0x4c,0x98,0x41,0xf6,0xbe,0x0b,0x3b,0x97,0x2e,
+    0x1d,0x73,0xc1,0xac,0xa3,0x41,0xfa,0x1f,0xea,0x9f,0x47,0x16,0xf9,0x0b,0xf4,0x90
+};
+static int m3, carry, guest_file = -1;
+static unsigned long file_offset;
+static uint opens, reads, writes, denials;
 static uchar image[ImageBytes+1], text[Page], data[Page], linkedit[Page], stack[Page];
 static uchar output[OutputLimit];
 static uvlong regs[8], ip;
@@ -141,6 +150,104 @@ load_reference(void)
     return push(ReturnThunk);
 }
 
+enum { Data = Base+Page, Scratch = 256, Argv = 256, Envp = 280 };
+enum { ArgZero = 512, ArgName = 576, EnvNote = 640, GuestHandle = 3 };
+enum { TrapRead = 0x2000003, TrapWrite, TrapOpen, TrapClose };
+
+static int
+load_m3(const char *name, const char *note)
+{
+    unsigned int i;
+    uint entry = read32(image+184);
+
+    if(strlen(name)>63 || strlen(note)!=4 || entry>=Page)
+        return 0;
+    for(i=0; i<4; i++)
+        if(note[i]<' ' || note[i]>'~')
+            return 0;
+    memmove(text, image, Page);
+    strcpy((char *)data+ArgZero, "m3");
+    strcpy((char *)data+ArgName, name);
+    strcpy((char *)data+EnvNote, "FLEX_NOTE=");
+    memmove(data+EnvNote+10, note, 4);
+    write64(data+Argv, Data+ArgZero);
+    write64(data+Argv+8, Data+ArgName);
+    write64(data+Envp, Data+EnvNote);
+    regs[Di] = 2;
+    regs[Si] = Data+Argv;
+    regs[Dx] = Data+Envp;
+    regs[Sp] = Stack+Page;
+    ip = Base+entry;
+    return push(ReturnThunk);
+}
+
+static int
+file_trap(void)
+{
+    long result = -1;
+    uvlong address = regs[Si];
+    uvlong size = regs[Dx];
+    uvlong handle = regs[Di];
+    uchar *bytes;
+
+    switch(regs[Ax]){
+    case TrapOpen:
+        if(guest_file<0 && regs[Si]==2 && within(handle, Data, Page, 64)){
+            bytes = data+handle-Data;
+            if(memchr(bytes, 0, 64)!=NULL){
+                guest_file = mac_grant_open((const char *)bytes);
+                if(guest_file>=0){
+                    file_offset = 0;
+                    opens++;
+                    result = GuestHandle;
+                }
+            }
+        }
+        break;
+    case TrapRead:
+        if(handle==GuestHandle && guest_file>=0 && size<=Scratch &&
+           within(address, Data, Scratch, size)){
+            result = mac_grant_read(guest_file, data+address-Data, size, file_offset);
+            if(result>=0){
+                file_offset += result;
+                reads++;
+            }
+        }
+        break;
+    case TrapWrite:
+        if(size>Scratch || !within(address, Data, Page, size))
+            break;
+        bytes = data+address-Data;
+        if(handle==1 && size<=OutputLimit-output_size){
+            memmove(output+output_size, bytes, size);
+            output_size += size;
+            calls++;
+            result = size;
+        }else if(handle==GuestHandle && guest_file>=0){
+            result = mac_grant_write(guest_file, bytes, size, file_offset);
+            if(result>=0){
+                file_offset += result;
+                writes++;
+            }
+        }
+        break;
+    case TrapClose:
+        if(handle==GuestHandle && guest_file>=0){
+            mac_grant_close(guest_file);
+            guest_file = -1;
+            result = 0;
+        }
+        break;
+    default:
+        return 0;
+    }
+    carry = result<0;
+    if(carry)
+        denials++;
+    regs[Ax] = carry ? 13 : result;
+    return 1;
+}
+
 static int
 execute(void)
 {
@@ -170,6 +277,39 @@ execute(void)
         }else if(op==0x48 && within(ip,Base,Page,7) && p[1]==0x8d && p[2]==0x35){
             regs[Si] = relative(ip+7, read32(p+3));
             ip += 7;
+        }else if(m3 && op==0x48 && within(ip,Base,Page,4) &&
+                 p[1]==0x8b && p[2]==0x7e && p[3]==8){
+            if(!within(regs[Si],Data,Page,16))
+                return 0;
+            regs[Di] = read64(data+regs[Si]-Data+8);
+            ip += 4;
+        }else if(m3 && op==0x48 && within(ip,Base,Page,3) &&
+                 p[1]==0x8b && p[2]==0x2a){
+            if(!within(regs[Dx],Data,Page,8))
+                return 0;
+            regs[Bp] = read64(data+regs[Dx]-Data);
+            ip += 3;
+        }else if(m3 && op==0x48 && within(ip,Base,Page,3) &&
+                 p[1]==0x89 && p[2]==0xee){
+            regs[Si] = regs[Bp];
+            ip += 3;
+        }else if(m3 && op==0x89 && within(ip,Base,Page,2) &&
+                 (p[1]==0xc3 || p[1]==0xdf)){
+            if(p[1]==0xc3)
+                regs[Bx] = (uint)regs[Ax];
+            else
+                regs[Di] = (uint)regs[Bx];
+            ip += 2;
+        }else if(m3 && op==0x0f && within(ip,Base,Page,2) && p[1]==5){
+            if(!file_trap())
+                return 0;
+            ip += 2;
+        }else if(m3 && (op==0x72 || op==0x75) && within(ip,Base,Page,2)){
+            value = p[1];
+            if(value>=128)
+                value |= 0xffffff00U;
+            next = ip+2;
+            ip = (op==0x72 ? carry : !equal) ? relative(next, value) : next;
         }else if(op==0xe8 && within(ip,Base,Page,5)){
             next = ip+5;
             if(!push(next))
@@ -208,7 +348,7 @@ execute(void)
             if(!pop(&ip))
                 return 0;
             if(ip==ReturnThunk)
-                return regs[Sp]==Stack+Page && calls==1;
+                return regs[Sp]==Stack+Page && (m3 || calls==1);
         }else
             return 0;
     }
@@ -216,24 +356,34 @@ execute(void)
 }
 
 static int
-run_reference(const char *path)
+run_reference(int argc, char **argv)
 {
     uchar digest[32];
+    char *path;
+    unsigned int expected;
+    int ok;
     long count;
 #ifdef MAC_PLAN9
     int fd;
+#else
+    FILE *file;
+#endif
 
+    if(argc!=2 && argc!=5)
+        return 0;
+    m3 = argc==5;
+    path = argv[1];
+    expected = m3 ? Page : ImageBytes;
+#ifdef MAC_PLAN9
     fd = open(path, OREAD);
     if(fd<0)
         return 0;
     count = readn(fd, image, sizeof image);
     close(fd);
-    if(count!=ImageBytes)
+    if(count!=expected)
         return 0;
-    sha2_256(image, ImageBytes, digest, nil);
+    sha2_256(image, expected, digest, nil);
 #else
-    FILE *file;
-
     file = fopen(path, "rb");
     if(file==NULL)
         return 0;
@@ -243,11 +393,21 @@ run_reference(const char *path)
         return 0;
     }
     fclose(file);
-    if(count!=ImageBytes || SHA256(image, ImageBytes, digest)==NULL)
+    if(count!=expected || SHA256(image, expected, digest)==NULL)
         return 0;
 #endif
-    if(memcmp(digest, reference_digest, sizeof digest)!=0)
+    if(memcmp(digest, m3 ? m3_digest : reference_digest, sizeof digest)!=0)
         return 0;
+    if(m3){
+        if(!load_m3(argv[3], argv[4]))
+            return 0;
+        if(strcmp(argv[2], "-")!=0 && !mac_grant_init(argv[2]))
+            return 0;
+        ok = execute();
+        if(guest_file>=0)
+            mac_grant_close(guest_file);
+        return ok;
+    }
     return load_reference() && execute();
 }
 
@@ -255,19 +415,23 @@ run_reference(const char *path)
 void
 main(int argc, char **argv)
 {
-    if(argc!=2 || !run_reference(argv[1]))
-        sysfatal("unsupported M2 reference image or execution fault");
+    if(!run_reference(argc, argv))
+        sysfatal("unsupported Mac reference image or execution fault");
     if(write(1, output, output_size)!=output_size)
         sysfatal("output failed");
-    print("MAC_M2_EXIT %ud STEPS %ud WRITE_CALLS %ud\n", (uint)regs[Ax], steps+1, calls);
+    if(m3)
+        print("MAC_M3_EXIT %ud STEPS %ud OPEN %ud READ %ud WRITE %ud DENIED %ud\n",
+              (uint)regs[Ax], steps+1, opens, reads, writes, denials);
+    else
+        print("MAC_M2_EXIT %ud STEPS %ud WRITE_CALLS %ud\n", (uint)regs[Ax], steps+1, calls);
     exits(nil);
 }
 #else
 int
 main(int argc, char **argv)
 {
-    if(argc!=2 || !run_reference(argv[1])){
-        fputs("unsupported M2 reference image or execution fault\n", stderr);
+    if(!run_reference(argc, argv)){
+        fputs("unsupported Mac reference image or execution fault\n", stderr);
         return 125;
     }
     if(fwrite(output, 1, output_size, stdout)!=output_size || fflush(stdout)!=0)
