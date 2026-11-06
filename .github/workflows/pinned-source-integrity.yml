@@ -1,0 +1,49 @@
+name: CI pinned source integrity (offline)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/pinned_source.py'
+      - 'scripts/phase9_compiler.py'
+      - 'scripts/phase9_dynamic.py'
+      - 'tests/test_pinned_source.py'
+      - '.github/workflows/phase9-linux-runtime.yml'
+      - '.github/workflows/phase3-native-build.yml'
+      - '.github/workflows/pinned-source-integrity.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/pinned_source.py'
+      - 'scripts/phase9_compiler.py'
+      - 'scripts/phase9_dynamic.py'
+      - 'tests/test_pinned_source.py'
+      - '.github/workflows/phase9-linux-runtime.yml'
+      - '.github/workflows/phase3-native-build.yml'
+      - '.github/workflows/pinned-source-integrity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  offline-integrity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate pinned source tests without network access
+        run: python -m unittest discover -s tests -p 'test_pinned_source.py' -v
+      - name: Parse modified helper and fixture compilers
+        run: |
+          python -m py_compile scripts/pinned_source.py scripts/phase9_compiler.py scripts/phase9_dynamic.py
+          python scripts/phase9_compiler.py --help
