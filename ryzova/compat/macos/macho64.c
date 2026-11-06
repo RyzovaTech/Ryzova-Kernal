@@ -3,6 +3,7 @@
 #include <string.h>
 #define MAGIC 0xfeedfacfU
 #define X86_64 0x01000007U
+#define X86_64_ALL 3U
 #define EXECUTE 2U
 #define PIE 0x200000U
 #define SEGMENT_64 0x19U
@@ -14,6 +15,8 @@
 #define VM_WRITE 2U
 #define MAX_SIZE (64U*1024U*1024U)
 #define PAGE 4096U
+#define USER_TOP UINT64_C(0x0000800000000000)
+#define PLATFORM_MACOS 1U
 static uint32_t u32(const unsigned char *p) {
     return (uint32_t)p[0] | (uint32_t)p[1]<<8 |
            (uint32_t)p[2]<<16 | (uint32_t)p[3]<<24;
@@ -31,13 +34,14 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
     RyzMachoPlan plan;
     uint32_t ncmd,commands,flags,index,count=0;
     uint64_t offset=32,entry_offset=0;
-    int has_main=0,entry_found=0;
+    int has_main=0,entry_found=0,has_uuid=0,has_version=0;
     if (out != NULL) memset(out,0,sizeof(*out));
     if (image==NULL || out==NULL || !span(length,0,32))
         return 1;
     if (u32(image)!=MAGIC)
         return 1;
-    if (u32(image+4)!=X86_64 || u32(image+12)!=EXECUTE)
+    if (u32(image+4)!=X86_64 || u32(image+8)!=X86_64_ALL ||
+        u32(image+12)!=EXECUTE)
         return 2;
     flags=u32(image+24);
     if ((flags & PIE)!=0 || u32(image+28)!=0)
@@ -66,7 +70,7 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
             if (cmdsize<72 || count==RYZ_MACHO_MAX_SEGMENTS)
                 return 3;
             sections=u32(image+(size_t)offset+64);
-            if (sections>16 || (uint64_t)sections*80U>cmdsize-72U)
+            if (sections>16 || (uint64_t)sections*80U!=cmdsize-72U)
                 return 2;
             va=u64(image+(size_t)offset+24);
             vsize=u64(image+(size_t)offset+32);
@@ -74,14 +78,34 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
             fs=u64(image+(size_t)offset+48);
             maxprot=u32(image+(size_t)offset+56);
             initprot=u32(image+(size_t)offset+60);
+            /* Keep all proposed mappings strictly in lower canonical user VA.
+             * Overflow/upper-half claims are not an execution authorization. */
             if (vsize==0 || vsize>MAX_SIZE || va<0x10000 ||
-                va>UINT64_MAX-vsize || fs>vsize ||
+                va>=USER_TOP || vsize>USER_TOP-va || fs>vsize ||
                 (maxprot & ~7U)!=0 || (initprot & ~7U)!=0 ||
                 (initprot & ~maxprot)!=0 ||
                 ((maxprot|initprot)&(VM_EXECUTE|VM_WRITE))==(VM_EXECUTE|VM_WRITE))
                 return 4;
             if (!span(length,fo,fs) || (va%PAGE)!=(fo%PAGE))
                 return 3;
+            /* section_64 is 80 bytes. Reject claims outside its enclosing
+             * segment or unbounded relocation data. No relocations are
+             * interpreted in this deliberately static metadata profile. */
+            for(j=0;j<sections;++j) {
+                const unsigned char *sec=image+(size_t)offset+72U+80U*j;
+                uint64_t sa=u64(sec+32),ss=u64(sec+40);
+                uint32_t so=u32(sec+48),align=u32(sec+52);
+                uint32_t nreloc=u32(sec+60),stype=u32(sec+64)&0xffU;
+                int zerofill=(stype==1U || stype==12U || stype==18U);
+                if (memcmp(sec+16,image+(size_t)offset+8,16)!=0 ||
+                    sa<va || sa-va>vsize || ss>vsize-(sa-va) ||
+                    align>31U || nreloc!=0U)
+                    return 4;
+                if (!zerofill &&
+                    ((uint64_t)so<fo || (uint64_t)so-fo>fs ||
+                     ss>fs-((uint64_t)so-fo)))
+                    return 4;
+            }
             for(j=0;j<count;++j)
                 if (overlap(va,vsize,plan.segments[j].virtual_address,
                             plan.segments[j].virtual_bytes))
@@ -94,8 +118,27 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
                 return 2;
             entry_offset=u64(image+(size_t)offset+8);
             has_main=1;
-        } else if (cmd!=LC_UUID && cmd!=LC_BUILD_VERSION &&
-                   cmd!=LC_VERSION_MIN_MACOSX) {
+        } else if (cmd==LC_UUID) {
+            /* uuid_command = 8-byte header + 16-byte identifier. */
+            if (has_uuid || cmdsize!=24)
+                return 2;
+            has_uuid=1;
+        } else if (cmd==LC_BUILD_VERSION) {
+            /* build_version_command (24 bytes) followed by ntools*8.
+             * This bounded research profile accepts macOS, not iOS/tvOS. */
+            uint32_t ntools;
+            if (has_version || cmdsize<24)
+                return 2;
+            ntools=u32(image+(size_t)offset+20);
+            if (u32(image+(size_t)offset+8)!=PLATFORM_MACOS ||
+                ntools>16 || cmdsize!=24U+8U*ntools)
+                return 2;
+            has_version=1;
+        } else if (cmd==LC_VERSION_MIN_MACOSX) {
+            if (has_version || cmdsize!=16)
+                return 2;
+            has_version=1;
+        } else {
             return 2; /* Explicitly reject dylibs, dyld, codesign, threads. */
         }
         offset+=cmdsize;
@@ -106,6 +149,7 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
         const RyzMachoSegment *s=&plan.segments[index];
         if ((s->protection&VM_EXECUTE) && entry_offset>=s->file_offset &&
             entry_offset-s->file_offset<s->file_bytes) {
+            if (entry_found) return 4; /* Ambiguous entry file backing. */
             plan.entry=s->virtual_address+(entry_offset-s->file_offset);
             entry_found=1;
         }

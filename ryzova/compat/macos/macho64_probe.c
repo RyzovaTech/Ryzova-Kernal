@@ -11,7 +11,8 @@ int main(int argc,char **argv) {
     int result;
     if (argc!=2) return 64;
     f=fopen(argv[1],"rb");
-    if (f==NULL || fseek(f,0,SEEK_END)!=0) return 65;
+    if (f==NULL) return 65;
+    if (fseek(f,0,SEEK_END)!=0) {fclose(f);return 65;}
     n=ftell(f);
     if (n<0 || n>LIMIT || fseek(f,0,SEEK_SET)!=0) {fclose(f);return 65;}
     bytes=(unsigned char*)malloc(n>0?(size_t)n:1);

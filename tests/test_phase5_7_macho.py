@@ -19,6 +19,16 @@ def fixture():
     b[0x200:0x204]=b"\x90\x90\xc3\x90"
     return b
 
+def append_command(image, command):
+    """Add one bounded load command without changing the synthetic entry data."""
+    x=bytearray(image)
+    start=32+96
+    assert start+len(command)<0x200 and len(command)%8==0
+    x[start:start+len(command)]=command
+    struct.pack_into("<I",x,16,3)
+    struct.pack_into("<I",x,20,96+len(command))
+    return x
+
 class MachoTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -71,6 +81,108 @@ class MachoTests(unittest.TestCase):
         x=fixture();struct.pack_into("<I",x,104,0x1b);self.invalid(x)
     def test_main_outside_file_backed_exec(self):
         x=fixture();struct.pack_into("<Q",x,112,0x4000);self.invalid(x)
+    def test_subtype_must_be_x86_64_all(self):
+        for subtype in (0, 8, 0x80000003, 0xffffffff):
+            with self.subTest(subtype=subtype):
+                x=fixture()
+                struct.pack_into("<I",x,8,subtype)
+                self.invalid(x)
+
+    def test_segment_must_stay_in_lower_canonical_user_half(self):
+        for va,span in ((0x0000800000000000,4096),
+                        (0xffff000000000000,4096),
+                        (0x00007ffffffff000,8192)):
+            with self.subTest(address=hex(va)):
+                x=fixture()
+                struct.pack_into("<Q",x,56,va)
+                struct.pack_into("<Q",x,64,span)
+                self.invalid(x)
+
+    def test_exact_uuid_and_duplicate_metadata_commands(self):
+        valid=append_command(fixture(),struct.pack("<II16s",0x1b,24,b"\x35"*16))
+        self.assertEqual(self.probe(valid).returncode,0)
+        self.invalid(append_command(fixture(),struct.pack("<II",0x1b,8)))
+        self.invalid(append_command(fixture(),struct.pack("<IIQ",0x1b,16,0)))
+        self.invalid(append_command(fixture(),struct.pack("<IIQ",0x80000028,24,0)+b"\x00"*8))
+
+    def test_build_version_requires_macos_and_exact_tool_array(self):
+        build=struct.pack("<6I",0x32,24,1,0x000c0000,0x000d0000,0)
+        self.assertEqual(self.probe(append_command(fixture(),build)).returncode,0)
+        with_tool=struct.pack("<6I2I",0x32,32,1,0x000c0000,0x000d0000,1,1,42)
+        self.assertEqual(self.probe(append_command(fixture(),with_tool)).returncode,0)
+        mismatched=struct.pack("<6I",0x32,24,1,0x000c0000,0x000d0000,1)
+        self.invalid(append_command(fixture(),mismatched))
+        wrong_platform=struct.pack("<6I",0x32,24,2,0x000c0000,0x000d0000,0)
+        self.invalid(append_command(fixture(),wrong_platform))
+        invalid_short=struct.pack("<IIQ",0x32,16,0)
+        self.invalid(append_command(fixture(),invalid_short))
+
+    def test_min_macos_version_exact_struct_size(self):
+        v=struct.pack("<4I",0x24,16,0x000c0000,0x000d0000)
+        self.assertEqual(self.probe(append_command(fixture(),v)).returncode,0)
+        self.invalid(append_command(fixture(),struct.pack("<II",0x24,8)))
+        self.invalid(append_command(fixture(),struct.pack("<4IQ",0x24,24,0,0,0)))
+
+    def test_segment_command_size_exact_section_geometry(self):
+        x=fixture()
+        # Move LC_MAIN eight bytes forward and lengthen a sectionless segment.
+        x[112:136]=x[104:128]
+        struct.pack_into("<I",x,36,80)
+        struct.pack_into("<I",x,20,104)
+        self.invalid(x)
+
+    def test_reject_ambiguous_executable_file_offset_alias(self):
+        x=fixture()
+        # Two adjacent executable virtual segments map the same file offsets.
+        x[176:200]=x[104:128]
+        x[104:176]=x[32:104]
+        struct.pack_into("<Q",x,104+24,0x100001000)
+        struct.pack_into("<I",x,16,3)
+        struct.pack_into("<I",x,20,168)
+        self.invalid(x)
+
+    def test_section64_metadata_must_fit_its_segment(self):
+        x=fixture()
+        # One 80-byte section64 after segment_command_64, before LC_MAIN.
+        x[184:208]=x[104:128]
+        struct.pack_into("<I",x,36,152)
+        struct.pack_into("<I",x,96,1)
+        struct.pack_into("<I",x,20,176)
+        struct.pack_into("<16s16sQQIIIIIIII",x,104,
+                         b"__text".ljust(16,bytes(1)),
+                         b"__TEXT".ljust(16,bytes(1)),
+                         0x100000200,4,0x200,0,0,0,0,0,0,0)
+        self.assertEqual(self.probe(x).returncode,0)
+        bad=bytearray(x)
+        struct.pack_into("<Q",bad,144,0x3000)  # section size out of segment
+        self.invalid(bad)
+        bad=bytearray(x)
+        struct.pack_into("<I",bad,152,0x2000)  # section file offset out of segment
+        self.invalid(bad)
+        bad=bytearray(x)
+        struct.pack_into("<I",bad,164,1)  # relocations unsupported
+        self.invalid(bad)
+        bad=bytearray(x)
+        struct.pack_into("<I",bad,156,32)  # alignment exponent overflow
+        self.invalid(bad)
+        bad=bytearray(x)
+        bad[120]=ord("Z")  # section segname mismatch
+        self.invalid(bad)
+
+    def test_deterministic_mutation_corpus_does_not_crash(self):
+        import random
+        rng=random.Random(0x4d414330)
+        original=fixture()
+        for index in range(160):
+            x=bytearray(original)
+            for _ in range(1+rng.randrange(5)):
+                pos=rng.randrange(0,200)
+                x[pos]=rng.randrange(256)
+            with self.subTest(case=index):
+                r=self.probe(x)
+                self.assertIn(r.returncode,(0,2),r.stdout+r.stderr)
+                self.assertIn("MACHO64 status=",r.stdout)
+
     def test_reject_too_many_sections(self):
         x=fixture();struct.pack_into("<I",x,96,17);self.invalid(x)
 if __name__=="__main__":unittest.main()

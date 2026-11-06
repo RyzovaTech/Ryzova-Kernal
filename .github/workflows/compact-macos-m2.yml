@@ -1,0 +1,81 @@
+name: Compact macOS MAC-2A Captured Darwin Services
+on:
+  push:
+    branches:
+      - 'feature/compact-macos-*'
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'tests/test_compact_macos_m2.py'
+      - 'scripts/compact_macos_m2_demo.py'
+      - 'docs/COMPACT-MACOS-M2.md'
+      - '.github/workflows/compact-macos-m2.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'tests/test_compact_macos_m2.py'
+      - 'scripts/compact_macos_m2_demo.py'
+      - 'docs/COMPACT-MACOS-M2.md'
+      - '.github/workflows/compact-macos-m2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  mac2a-macos-host-bounded-syscalls:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Bounded Darwin syscall simulation on available macOS host
+        env:
+          PHASE5_CC: clang
+          PHASE5_SANITIZE: '1'
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m1.py' -v
+          mkdir -p artifacts/mac2
+          python3 scripts/compact_macos_m2_demo.py | tee artifacts/mac2/host-demo.json
+          clang -std=c11 -Wall -Wextra -Werror -pedantic -O2 \
+            ryzova/compat/macos/macho64.c \
+            ryzova/compat/macos/macho_vm.c \
+            ryzova/compat/macos/macho_darwin_probe.c \
+            -o /tmp/ryzova-mac2-host-research
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac2a-captured-darwin-macos-host
+          path: artifacts/mac2/host-demo.json
+          if-no-files-found: ignore
+          retention-days: 14
+  mac2a-linux-host-denial-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Correct Darwin syscall numbers, deny host forwarding
+        env:
+          PHASE5_CC: ${{ matrix.compiler }}
+          PHASE5_SANITIZE: '1'
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m2.py' -v
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m1.py' -v
+          mkdir -p artifacts/mac2
+          python3 scripts/compact_macos_m2_demo.py | tee artifacts/mac2/host-demo.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac2a-captured-darwin-linux-${{ matrix.compiler }}
+          path: artifacts/mac2/host-demo.json
+          if-no-files-found: ignore
+          retention-days: 14

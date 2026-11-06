@@ -1,0 +1,87 @@
+name: Compact macOS MAC-0 Static Foundation
+on:
+  push:
+    branches:
+      - 'feature/compact-macos-*'
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'scripts/compact_macos_m0_audit.py'
+      - 'tests/test_compact_macos_m0.py'
+      - 'tests/test_phase5_7_macho.py'
+      - 'docs/COMPACT-MACOS-M0.md'
+      - '.github/workflows/compact-macos-m0.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'scripts/compact_macos_m0_audit.py'
+      - 'tests/test_compact_macos_m0.py'
+      - 'tests/test_phase5_7_macho.py'
+      - 'docs/COMPACT-MACOS-M0.md'
+      - '.github/workflows/compact-macos-m0.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  mac0-host-static-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Mach-O format parser, malformed fixtures and deterministic mutations
+        env:
+          PHASE5_CC: ${{ matrix.compiler }}
+          PHASE5_SANITIZE: '1'
+        run: python3 -m unittest discover -s tests -p 'test_phase5_7_macho.py' -v
+      - name: MAC-0 fail-closed scope and SHA256 provenance
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m0.py' -v
+          python3 scripts/compact_macos_m0_audit.py --output artifacts/mac0/m0-audit.json
+          python3 -m py_compile scripts/compact_macos_m0_audit.py
+      - name: Freestanding Mach-O validator compilation
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          "$CC" -std=c11 -ffreestanding -fno-builtin -O2 \
+            -Wall -Wextra -Werror -pedantic -c \
+            ryzova/compat/macos/macho64.c -o /tmp/ryzova-mac0-macho.o
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac0-source-audit-${{ matrix.compiler }}-py${{ matrix.python }}
+          path: artifacts/mac0/m0-audit.json
+          if-no-files-found: ignore
+          retention-days: 14
+  mac0-macos-host-reference:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: macOS Clang UBSan validates Mach-O metadata and static authority
+        env:
+          PHASE5_CC: clang
+          PHASE5_SANITIZE: '1'
+        run: |
+          python3 -m unittest discover -s tests -p 'test_phase5_7_macho.py' -v
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m0.py' -v
+          python3 scripts/compact_macos_m0_audit.py --output artifacts/mac0/m0-audit.json
+          clang -std=c11 -ffreestanding -fno-builtin -O2 -Wall -Wextra -Werror -pedantic -c ryzova/compat/macos/macho64.c -o /tmp/ryzova-mac0-macho.o
+          python3 -m py_compile scripts/compact_macos_m0_audit.py
+      - name: Record no native Ryzova macOS app execution claim
+        run: |
+          python3 -c 'import json; r=json.load(open("artifacts/mac0/m0-audit.json")); assert r["application_execution_verified"] is False and r["production_release_allowed"] is False'

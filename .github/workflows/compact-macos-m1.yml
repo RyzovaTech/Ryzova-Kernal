@@ -1,0 +1,70 @@
+name: Compact macOS MAC-1 Bounded Mach-O Host Execution
+on:
+  push:
+    branches:
+      - 'feature/compact-macos-*'
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'tests/test_compact_macos_m1.py'
+      - 'docs/COMPACT-MACOS-M1.md'
+      - '.github/workflows/compact-macos-m1.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'tests/test_compact_macos_m1.py'
+      - 'docs/COMPACT-MACOS-M1.md'
+      - '.github/workflows/compact-macos-m1.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  mac1-bounded-host-interpreter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Validate finite AMD64 instruction interpretation and denial cases
+        env:
+          PHASE5_CC: ${{ matrix.compiler }}
+          PHASE5_SANITIZE: '1'
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m1.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase5_7_macho.py' -v
+      - name: Verify source-only ABI and no privileged dynamic-loader linkage
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          "$CC" -std=c11 -Wall -Wextra -Werror -pedantic -O2 \
+            ryzova/compat/macos/macho64.c \
+            ryzova/compat/macos/macho_vm.c \
+            ryzova/compat/macos/macho_vm_probe.c \
+            -o /tmp/mac1-restricted-host-probe
+  mac1-macos-host-portability:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Portable MAC-1 AMD64 byte interpreter, UBSan, and compiler-output tests
+        env:
+          PHASE5_CC: clang
+          PHASE5_SANITIZE: '1'
+        run: |
+          python3 -m unittest discover -s tests -p 'test_compact_macos_m1.py' -v
+          python3 -m unittest discover -s tests -p 'test_phase5_7_macho.py' -v
+          clang -std=c11 -Wall -Wextra -Werror -pedantic -O2 ryzova/compat/macos/macho64.c ryzova/compat/macos/macho_vm.c ryzova/compat/macos/macho_vm_probe.c -o /tmp/mac1-host-only-probe

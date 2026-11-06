@@ -1,0 +1,30 @@
+{
+  "schema": "ryzova-compact-macos-m2a/v1",
+  "phase": "MAC-2A",
+  "profile": "research-capture-only-darwin-x86_64",
+  "default_mac1_syscalls_denied": true,
+  "enabled_only_with_explicit_api": "ryz_mac2_run",
+  "bsd_class_hex": "0x02000000",
+  "simulated_syscalls": [
+    {
+      "number_hex": "0x02000001",
+      "name": "exit",
+      "side_effect": "result-only, host process continues"
+    },
+    {
+      "number_hex": "0x02000004",
+      "name": "write",
+      "side_effect": "private captured bytes only, fd=1"
+    }
+  ],
+  "captured_output_max_bytes": 256,
+  "maximum_guest_steps": 4096,
+  "native_ryzova_guest_verified": false,
+  "real_macos_application_executed": false,
+  "dyld_libsystem_implemented": false,
+  "full_mach_ipc_implemented": false,
+  "host_syscall_forwarding": false,
+  "host_filesystem_network_access": false,
+  "mac2_phase_complete": false,
+  "production_release_allowed": false
+}
