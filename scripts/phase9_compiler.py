@@ -6,8 +6,8 @@ import re
 import shutil
 import subprocess
 import tarfile
-import urllib.request
-from phase9_dynamic import build as build_musl
+from pinned_source import fetch_pinned
+from phase9_dynamic import build as build_musl, VERSION as MUSL_VERSION, SOURCE_SHA256 as MUSL_SHA256
 SHA256='de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c'
 
 def source(commit):
@@ -18,11 +18,29 @@ def source(commit):
         'void _start(void){__asm__ volatile("syscall"::"a"(1),"D"(1),"S"(message),"d"(sizeof(message)-1):"rcx","r11","memory");'
         '__asm__ volatile("syscall"::"a"(60),"D"(0):"rcx","r11","memory");}\n').encode()
 
+def prefetch(directory):
+    """Fetch exact musl and TinyCC source tarballs for CI cache priming."""
+    directory = Path(directory).resolve()
+    directory.mkdir(parents=True, exist_ok=True)
+    musl = directory / ('musl-' + MUSL_VERSION + '.tar.gz')
+    fetch_pinned(musl, (
+        'https://musl.libc.org/releases/' + musl.name,
+        'https://distfiles.alpinelinux.org/distfiles/edge/' + musl.name,
+        'https://sources.buildroot.net/musl/' + musl.name,
+    ), MUSL_SHA256, max_bytes=10*1024*1024)
+    tcc = directory / 'tcc-0.9.27.tar.bz2'
+    fetch_pinned(tcc, (
+        'https://download.savannah.gnu.org/releases/tinycc/' + tcc.name,
+        'https://download-mirror.savannah.gnu.org/releases/tinycc/' + tcc.name,
+        'https://mirror.ossplanet.net/mirror/nongnu/tinycc/' + tcc.name,
+    ), SHA256, max_bytes=4*1024*1024)
+    return musl, tcc
+
+
 def build(directory):
-    directory=Path(directory).resolve();build_musl(directory)
-    archive=directory/'tcc-0.9.27.tar.bz2'
-    if not archive.exists():archive.write_bytes(urllib.request.urlopen('https://download.savannah.gnu.org/releases/tinycc/'+archive.name,timeout=60).read())
-    if hashlib.sha256(archive.read_bytes()).hexdigest()!=SHA256:raise ValueError('TinyCC source SHA256 mismatch')
+    directory=Path(directory).resolve()
+    _, archive = prefetch(directory)
+    build_musl(directory)
     tree=directory/'tcc-0.9.27'
     if not tree.exists():
         with tarfile.open(archive) as tar:tar.extractall(directory,filter='data')
@@ -35,4 +53,13 @@ def build(directory):
 
 if __name__=='__main__':
     import argparse
-    parser=argparse.ArgumentParser();parser.add_argument('--build',required=True);args=parser.parse_args();print(build(args.build))
+    parser=argparse.ArgumentParser()
+    choice=parser.add_mutually_exclusive_group(required=True)
+    choice.add_argument('--build')
+    choice.add_argument('--prefetch')
+    args=parser.parse_args()
+    if args.prefetch:
+        for archive in prefetch(args.prefetch):
+            print('SHA256 pinned source:', archive)
+    else:
+        print(build(args.build))
