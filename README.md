@@ -1,71 +1,115 @@
 # Ryzova Kernel
 
-[![Ryzova-owned code: AGPLv3](https://img.shields.io/badge/Ryzova--owned%20code-AGPLv3-blue)](LICENSES/AGPL-3.0-only.txt) [![9front: MIT + exceptions](https://img.shields.io/badge/9front-MIT%20%2B%20exceptions-orange)](lib/legal/NOTICE) [![Commercial alternative: Ryzova rights only](https://img.shields.io/badge/commercial%20alternative-Ryzova%20rights%20only-lightgrey)](COMMERCIAL-LICENSING.md)
+[![Status: experimental](https://img.shields.io/badge/status-experimental-orange)](docs/RELEASE-NOTES-DRAFT.md) [![9front-derived](https://img.shields.io/badge/base-9front%20%2F%20Plan%209-blue)](https://9front.org/) [![File-level licensing](https://img.shields.io/badge/licenses-file--level%20MIT%20%2F%20GPLv3%20%2F%20AGPLv3-informational)](LICENSE.md) [![Public kernel binary: not released](https://img.shields.io/badge/kernel%20binary-not%20released-lightgrey)](ryzova/release/amd64-preview-candidate.json)
 
 **A New Life for a Forgotten Vision**
 
-Ryzova Kernel is a **9front-derived general-purpose kernel project**. The plan is to retain and extend the strengths of Plan 9/9front—namespaces, 9P and network-oriented resource interfaces—while developing Ryzova-specific capabilities. RyzovaOS and third-party OS variants are future consumers of this kernel.
+Ryzova Kernel is an **experimental 9front/Plan 9-derived kernel and systems-software research project**. It builds on namespaces, 9P, and Plan 9's resource-oriented design, while exploring native kernel interfaces, constrained application-compatibility environments, and authenticated remote resource services.
 
-> **Status: Phase 3 native AMD64 development build is verified in QEMU, including a Ryzova-specific read-only identity device and basic userspace/namespace smoke tests.** Experimental only; no stable ABI, real-hardware compatibility certification, or cleared public binary release.
+**Ryzova Kernel is not a finished RyzovaOS desktop distribution.** Its Linux, Windows, and macOS application environments are separate, bounded **software runtimes** developed alongside the 9front-derived kernel. They are not a claim that arbitrary applications from those operating systems run, nor that those operating systems have been reimplemented.
 
-## Branches and source
+> **Current status (6 November 2026):** Native AMD64 kernel source builds and QEMU boots are demonstrated. Selected Linux ELF, Windows PE/Win32, and Intel/ARM64 macOS Mach-O workloads have experimental interpreter/runtime and native-guest evidence. Broader app compatibility, physical-hardware qualification, production security, release authorization, and an official public kernel binary remain **incomplete**.
+>
+> This summary was reviewed against `main` at [`e6e17d7`](https://github.com/RyzovaTech/Ryzova-Kernal/commit/e6e17d7feefb7b29df11f9dd07d4fa7f2e1aa596). Historical documents and CI receipts can refer to earlier commits or superseded stages; they are not blanket certification of current or future revisions.
 
-- **`main`**: 9front full source tree and original Git ancestry, plus Ryzova documentation, CI and reviewed integrations.
-- **`upstream/front`**: retained historical 9front upstream snapshot for source provenance. **No automated fetch, branch update or merge is configured.**
-- **`integration/*`**: reviewed changes and future upstream merges prior to integrating into `main`.
+## Project status at a glance
 
-Upstream: [9front GitHub mirror](https://github.com/9front/9front) (`front` branch). Original project: [9front.org](https://9front.org/); source: [git.9front.org](https://git.9front.org/).
+| Area | Demonstrated / implemented | Not established |
+| --- | --- | --- |
+| **Native kernel (AMD64)** | Fresh 9front-toolchain `mk` build, source-built kernel boot in QEMU, native `rc`, read-only Ryzova `#Z/version` identity, 9P/ramfs, namespace and selected storage/network smoke tests | Production stability, arbitrary hardware, a stable ABI, a public binary release |
+| **Compact Linux** | Native Plan 9 user-space AMD64 ELF interpreter/runtime, selected musl/BusyBox workloads, bounded process, memory, filesystem, threading and network features; source-built QEMU evidence | Full Linux V1 acceptance, arbitrary Linux binaries, complete Python/Git/GCC workflows, general POSIX or desktop compatibility |
+| **Compact Windows** | Bounded AMD64 PE32+ loader/interpreter, selected Win32/CRT APIs and console/file fixtures, native AMD64 QEMU qualification of scoped W1–W6 profiles; further workload research | Complete Windows runtime, general third-party Windows applications, GUI/DirectX/.NET, physical-disk durability certification |
+| **Compact macOS** | Bounded Intel and ARM64 Mach-O interpretation on the **AMD64 Ryzova QEMU guest**, including pinned upstream jq 1.8.1 workloads and selected SQLite 3.54.1 CLI/in-memory SQL tests | macOS itself, general app/Framework compatibility, native ARM64 Ryzova kernel boot, persistent SQLite/GUI workloads |
+| **9P and remote resources** | Research services, guarded read-only 9P, native guest TLS test paths, authenticated gateway/peer experiments and isolated Linux-network-namespace transport tests | Production end-to-end identity/PKI, remote physical RAM expansion, additional local CPU cores, general distributed process migration |
+| **Drivers and hardware** | AMD64 source inventory, selected QEMU driver checks, safety gates and ARM64 server/cross-build research | Certified physical devices, operational ARM64 kernel boot/I/O/SMP, production driver qualification |
+| **Release** | Source code and CI evidence | Signed/cleared public kernel image, independent hardware/security/legal approval |
 
-Initial integrated upstream revision: `a0806493926c04ce90d4e4a46961dec30a1054dd`, imported through [Pull Request #1](https://github.com/RyzovaTech/Ryzova-Kernal/pull/1) with full original history.
+**Important distinction:** A compatible executable can run through a constrained interpreter in a Ryzova/9front user-space process without becoming a native Linux/Windows/macOS kernel process. The scope of each verified workload is defined by its own evidence and capability limits.
 
-**9front upstream synchronization is disabled.** The previous scheduled/manual sync workflow was removed. Ryzova maintains its own kernel and drivers independently; no automatic 9front source or driver updates are imported. The original upstream history and copyright notices remain intact.
+## Architecture and source layout
 
-## Verification and build
+| Path | Role |
+| --- | --- |
+| [`sys/src/9/pc64/`](sys/src/9/pc64/) | Native AMD64 kernel build sources |
+| [`sys/src/9/port/devryzova.c`](sys/src/9/port/devryzova.c) | Ryzova-specific read-only kernel identity device |
+| [`ryzova/compat/linux/`](ryzova/compat/linux/) | Compact Linux ELF loader, instruction/runtime, syscall and native user-space integration |
+| [`ryzova/compat/windows/`](ryzova/compat/windows/) | Compact Windows PE loader, bounded AMD64 runtime, Win32 services and native launcher |
+| [`ryzova/compat/macos/`](ryzova/compat/macos/) | Mach-O loaders/interpreters and bounded native launcher |
+| [`ryzova/compact/`](ryzova/compact/) | Declarative Compact environment contracts and finite acceptance plans |
+| [`ryzova/remote/`](ryzova/remote/) | Experimental 9P, TLS, trust, cache, computation and multi-node services |
+| [`ryzova/drivers/`](ryzova/drivers/) | Driver inventories, qualification matrices and research policy |
+| [`scripts/`](scripts/) · [`tests/`](tests/) | Native QEMU harnesses, host-side checks, fault tests and evidence tooling |
+| [`.github/workflows/`](.github/workflows/) | Build, compatibility, security, driver and release-gate CI |
 
-- Source-history, layout and license-notice checks: [GitHub Actions](https://github.com/RyzovaTech/Ryzova-Kernal/actions).
-- AMD64 kernel source: `sys/src/9/pc64/`.
-- Native AMD64 build, freshly built kernel boot, identity, and denied-write checks: [successful CI run](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38703531423) and [docs/BUILD.md](docs/BUILD.md).
-- Ryzova identity: `cat '#Z/version'` → `Ryzova Kernel 0.1.0-dev`, plus [native device API documentation](docs/kernel-api/RYZOVA-DEVICE.md).
-- Source-built QEMU kernel runs native `rc` and passed read-only `#Z`, `/proc`, `/net`, process namespace bind, a real 9P `ramfs` read/write, 9fat boot-filesystem access and VirtIO HTTP GET tests. Physical hardware, exhaustive regression and legal clearance remain pending.
-- Experimental [AMD64 build profile](ryzova/config/amd64.default.json), [version metadata](ryzova/metadata/kernel-version.json) and [Phase 3 evidence report](docs/PHASE3.md).
-- Pre-Phase 3 boot checks and the difference between an upstream release VM and a kernel built from this repository: [docs/PRE-PHASE3-BOOT.md](docs/PRE-PHASE3-BOOT.md).
-- Preliminary licensing findings: [docs/LICENSE-REVIEW.md](docs/LICENSE-REVIEW.md).
-- Phase 3.5 verified QEMU test and independent Guest/Host SHA-256 equality: [CI run #38708363099](https://github.com/RyzovaTech/Ryzova-Kernal/actions/runs/38708363099); [preview release gates](docs/PHASE3-5-RELEASE-GATES.md). **No public kernel binary release authorized.**
+This repository preserves the upstream 9front source tree and its original history, rather than replacing the system with a Linux-based kernel or a virtual machine distribution.
 
+## Compatibility environments: what actually runs?
 
-## Phase 4.0: frozen AMD64 development baseline and recovery
+### Compact Linux
 
-The **known-good experimental AMD64 QEMU source baseline** is pinned to commit `d6b1f3d8e78470f5ae9caf42d85deb983239e752`, with historical ref `baseline/amd64-phase4-0`. Four kernel-related Git tree IDs are recorded in [ryzova/baselines/amd64-phase4.0.json](ryzova/baselines/amd64-phase4.0.json).
+The Linux environment runs as an **AMD64 Plan 9/Ryzova user-space application** that interprets selected Linux ELF binaries and translates a bounded set of guest behavior. Research now extends beyond the original Phase 5 parser: selected static/dynamic musl paths, BusyBox tasks, process/threads, file grants and network operations have source and native-guest test coverage.
 
-[Phase 4.0 recovery and validation protocol](docs/PHASE4-0.md) includes a reproducible baseline audit, source regression detection, and a non-destructive local recovery branch drill. [Phase 4 CI](.github/workflows/phase4-baseline.yml) checks the pinned source and absence of 9front automatic sync. New kernel/driver changes continue to trigger the separate native-build QEMU test.
+**Full Compact Linux V1 remains incomplete.** CLX-01 and CLX-02 are recorded as complete for their declared scopes; CLX-03 and the remaining named-target/budget acceptance gates are unfinished. Do not infer general Linux compatibility from passing test counts.
 
-**This is a stable development reference, not a production-certified kernel or public binary release.** Physical hardware qualification, release authorization and administrator-enforced GitHub branch protection remain separate gates.
+Read [Compact Linux status](docs/COMPACT-LINUX-STATUS.md), the [V1 acceptance plan](docs/COMPACT-LINUX-V1-PLAN.md), and [native subset documentation](docs/PHASE9-2-COMPACT-NATIVE.md).
 
-## Phase 4.1 — bounded kernel stability regression
+### Compact Windows
 
-The [Phase 4.1 test plan](docs/PHASE4-1.md) adds live, bounded QEMU checks for `/dev/swap` memory statistics, 512 KiB ramfs allocation, process creation/wait, two-child scheduler progress, `ps` enumeration, and existing read-only `#Z` security behavior. These execute on the **freshly compiled** AMD64 kernel with machine-readable JSON results; they are not long-duration stress or real-hardware security certification.
+The Windows environment is a **bounded AMD64 PE32+/Win64 interpreter and selected Win32/CRT service layer**, not Windows or Wine. Source-built AMD64 QEMU tests cover specified compiler-generated fixtures and native filesystem/resource operations; W6 records scoped qualification and explicit remaining hardware/release gates. Additional W7 workload research does not automatically broaden that guarantee.
 
-## License, community and project policy (Phase 2)
+Read [Windows V1 integration](docs/COMPACT-WINDOWS-V1-INTEGRATION.md), [W6 native qualification](docs/COMPACT-WINDOWS-W6.md), [W7 workload research](docs/COMPACT-WINDOWS-W7.md), and the [Windows V1 plan](docs/COMPACT-WINDOWS-V1-PLAN.md).
 
-**This repository is multi-licensed at the file/asset level.** Most inherited 9front code is MIT-licensed as described in `lib/legal/NOTICE`, with significant exceptions; it is **not** globally relicensed AGPLv3. Newly authored Ryzova files expressly marked `AGPL-3.0-only` use the bundled AGPLv3 text. A commercial alternative may be offered for specific code when rights are fully controlled, but **AGPL allows commercial use**.
+### Compact macOS
 
-- [License map](LICENSE.md) · [AGPL text](LICENSES/AGPL-3.0-only.txt) · [License review](docs/LICENSE-REVIEW.md)
-- [Commercial licensing scope](COMMERCIAL-LICENSING.md) · [Contributor rights](docs/CONTRIBUTOR-LICENSING.md)
-- [Contribution guide](CONTRIBUTING.md) · [Trademark and naming policy](TRADEMARKS.md)
-- [Build standards](docs/BUILD-STANDARDS.md) · [Branding](docs/BRANDING.md)
-- [Phase 2 report](docs/PHASE2-REPORT.md) · [license inventory CI](.github/workflows/license-audit.yml)
+The macOS environment is a **bounded Mach-O interpreter/runtime**, with Intel x86_64 and Apple Silicon ARM64 **application binaries** executed by a Plan 9 user-space launcher in the source-built **AMD64** Ryzova QEMU guest. This is not an ARM64 Ryzova kernel boot or an Apple operating-system environment.
 
-The generated inventory is **not** a complete clearance for third-party redistribution or a substitute for legal counsel. Do not claim an official Ryzova kernel binary release until verified build/boot tests and release/legal requirements pass.
+The selected, pinned reference workloads include upstream jq 1.8.1 and SQLite 3.54.1 CLI operations. SQLite qualification is limited to the documented version/short in-memory SQL cases; persistent files, extensions, general Darwin APIs and arbitrary applications are not certified.
 
-## Roadmap
+Read [M8 jq qualification](docs/COMPACT-MACOS-M8.md), [M9 launcher](docs/COMPACT-MACOS-M9.md), and [M9.3 SQLite execution](docs/COMPACT-MACOS-M93.md).
 
-1. **Phase 1:** history-preserving 9front source import completed. The previously configured automatic upstream tracking was retired; kernel source build and boot verification were subsequently completed in Phase 3.0.
-2. **Phase 2:** repository-wide rights map and source licensing inventory, contributor and commercial policies, marks, build conventions and license CI. Human legal approval for third-party redistribution and contracts is still required.
-3. **Phase 3:** native AMD64 build + fresh boot verified; Ryzova read-only `#Z` version interface and profile/CI checks implemented. Real hardware and cleared developer preview remain pending.
-4. **Later:** native APIs, scoped binary compatibility, optional external resources and community SDK.
+## Native kernel and remote-resource research
 
-## License and attribution
+The AMD64 development build uses Plan 9/9front tools and boots the kernel **compiled from this checkout**, rather than treating an unmodified upstream VM boot as proof of Ryzova code. Native QEMU checks include the `#Z/version` read-only device, userspace smoke tests, filesystem/network paths and source/kernel hash evidence. The development identity is `Ryzova Kernel 0.1.0-dev`.
 
-The imported 9front code retains its upstream notices, including `lib/legal/NOTICE` and its listed exceptions. **This repository is not globally relicensed AGPLv3**, nor is third-party code offered under a Ryzova proprietary license. The policy for **Ryzova-owned additions** is AGPL-3.0-only where expressly marked, with optional, separately negotiated commercial alternatives only when sufficient rights exist; no commercial license contract has yet been executed. AGPLv3 does not prohibit compliant commercial use.
+Remote-resource work uses 9P-oriented read-only access, explicit grants, bounded pure jobs, TLS and fail-closed test fixtures. A tested guest-facing TLS 1.2 session and a separate gateway-to-peer TLS 1.3 session **must not be confused with production end-to-end mTLS**. Some later experiments authenticate a disposable guest client certificate to the ingress, but do not provide production credentials or per-user ACLs. Linux network-namespace experiments are **not independent physical machines**. No claim is made that remote hardware becomes shared local RAM or CPU.
 
-See [upstream integration policy](docs/UPSTREAM.md).
+Read [build evidence](docs/BUILD.md), [native 9P/TLS security limits](docs/PHASE7-NATIVE-TLS-SECURITY-STATUS.md), [guest identity research](docs/NATIVE-GUEST-IDENTITY.md), [Phase 8 multi-node tests](docs/PHASE8-2-MULTINODE-EXECUTION.md), and [ARM64 driver/hardware status](docs/drivers/M5-ARM64-SERVER-FOUNDATION.md).
+
+## Building and testing
+
+**Host-side checks and native kernel verification are different evidence types.** A successful Python/C test, parser audit or host-side interpreter run alone does not prove a feature works in the booted Ryzova kernel.
+
+- **Source/layout sanity:** `sh scripts/verify-foundation.sh`.
+- **Native AMD64 build:** on a supported 9front environment with the required native toolchain, follow [`docs/BUILD.md`](docs/BUILD.md) and `sys/src/9/pc64/mkfile`; the native build uses `mk`, **not GNU Make**.
+- **Reproducible QEMU evidence:** inspect [`.github/workflows/phase3-native-build.yml`](.github/workflows/phase3-native-build.yml) and [`scripts/phase3-native-build.py`](scripts/phase3-native-build.py). Additional selected Windows/macOS and Linux checks use their own workflows and test harnesses.
+- **Compatibility acceptance:** start with the environment-specific docs, exact pinned reference binaries, native logs, negative tests and recorded PR-head workflow results; do not substitute a local host success for native evidence.
+- **CI:** [GitHub Actions](https://github.com/RyzovaTech/Ryzova-Kernal/actions). At the source snapshot cited above, 28 push-triggered workflow runs for that exact `main` SHA reported success. This is **CI evidence for those jobs**, not physical-hardware or public-release certification.
+
+## Source provenance and branches
+
+- **`main`** contains the imported 9front tree, retained original ancestry, reviewed Ryzova additions and validation infrastructure.
+- **`upstream/front`** retains a historical 9front source reference. **Automatic upstream synchronization is disabled**; no automatic upstream source or driver merge is configured.
+- **`integration/*`** branches may be used for reviewed integrations and independent upstream evaluations.
+
+The original 9front history was imported at `a0806493926c04ce90d4e4a46961dec30a1054dd` through [PR #1](https://github.com/RyzovaTech/Ryzova-Kernal/pull/1). Upstream: [9front.org](https://9front.org/) · [9front source](https://git.9front.org/) · [GitHub mirror](https://github.com/9front/9front).
+
+For the frozen earlier AMD64 development reference and recovery protocol, see [Phase 4.0 baseline](docs/PHASE4-0.md) and [`ryzova/baselines/amd64-phase4.0.json`](ryzova/baselines/amd64-phase4.0.json). Historical phase documents remain useful for reproducing *their own* snapshots; the old Phase 4.1 status is no longer the project's complete roadmap.
+
+## Licensing and commercial use
+
+**Licensing is determined per file or asset, not by one repository-wide license.**
+
+- **Inherited 9front/Plan 9 content:** generally MIT-licensed **with important file/asset exceptions** and retained upstream notices. See [`lib/legal/NOTICE`](lib/legal/NOTICE) and [`LICENSE.md`](LICENSE.md).
+- **Ryzova-origin code expressly marked `GPL-3.0-only`:** distributed under GPLv3 only, including compliant commercial use; see [GPLv3 text](LICENSES/GPL-3.0-only.txt).
+- **Historical or remaining Ryzova-origin files marked `AGPL-3.0-only`:** remain subject to their applicable AGPLv3 terms. Previously granted AGPL rights are not revoked by a later GPL offer; see [AGPLv3 text](LICENSES/AGPL-3.0-only.txt).
+- **Optional commercial alternative:** only for specific Ryzova-controlled code where the rights holder has sufficient authority; not a blanket license to third-party 9front material. A paid license is **not required for GPL/AGPL-compliant commercial use**. See [commercial licensing policy](COMMERCIAL-LICENSING.md) and [contributor licensing](docs/CONTRIBUTOR-LICENSING.md).
+
+Review the actual file headers and provenance before redistribution. See [license review](docs/LICENSE-REVIEW.md), [contributing](CONTRIBUTING.md), [trademarks](TRADEMARKS.md), and [security policy](SECURITY.md). This summary is not legal clearance for a binary distribution.
+
+## Release gates and next work
+
+An **official public Ryzova Kernel binary has not been authorized or published**. The [release candidate manifest](ryzova/release/amd64-preview-candidate.json) explicitly keeps `published: false` and approval fields unset. The [release notes](docs/RELEASE-NOTES-DRAFT.md) are a draft, **not** a release announcement.
+
+Key remaining work includes completing finite named-application acceptance, broader adversarial/security and long-duration tests, physical AMD64 qualification, operational ARM64 build/boot/I/O evidence, documented driver/device coverage, independent reproducibility, complete artifact-scoped redistribution review, and explicit maintainer release approval.
+
+**Experimental progress is real; general cross-platform compatibility and production readiness are not yet established.** Contributions and independently reproducible test reports are welcome under the project's [contribution rules](CONTRIBUTING.md).
