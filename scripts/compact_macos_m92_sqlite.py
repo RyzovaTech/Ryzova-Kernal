@@ -275,11 +275,11 @@ def audit(lib, references, output):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    commands = parser.add_subparsers(dest='command', required=True)
-    ref = commands.add_parser('reference')
+    subcommands = parser.add_subparsers(dest='command', required=True)
+    ref = subcommands.add_parser('reference')
     ref.add_argument('arch', choices=TARGETS)
     ref.add_argument('out', type=Path)
-    gate = commands.add_parser('audit')
+    gate = subcommands.add_parser('audit')
     for arg in ('loader', 'references', 'output'):
         gate.add_argument(arg, type=Path)
     args = parser.parse_args()
