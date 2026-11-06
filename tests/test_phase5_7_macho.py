@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """Mach-O x86_64 synthetic metadata checks; never execute input."""
 import os
 from pathlib import Path
@@ -73,4 +73,48 @@ class MachoTests(unittest.TestCase):
         x=fixture();struct.pack_into("<Q",x,112,0x4000);self.invalid(x)
     def test_reject_too_many_sections(self):
         x=fixture();struct.pack_into("<I",x,96,17);self.invalid(x)
+    def append_command(self, image, command):
+        count, size = struct.unpack_from("<II", image, 16)
+        struct.pack_into("<II", image, 16, count+1, size+len(command))
+        image[32+size:32+size+len(command)] = command
+
+    def test_segment_must_fit_entirely_in_user_address_space(self):
+        for address in (0xffff800000000000, 0x800000000000):
+            image = fixture()
+            struct.pack_into("<Q", image, 56, address)
+            self.invalid(image)
+        image = fixture()
+        struct.pack_into("<QQ", image, 56, 0x7ffffffff000, 0x2000)
+        self.invalid(image)
+
+    def test_entry_file_offset_cannot_map_to_two_executable_segments(self):
+        image = fixture()
+        self.append_command(image, struct.pack("<II16sQQQQIIII", 0x19, 72,
+            b"__OTHER", 0x100002000, 0x1000, 0, 0x1000, 5, 5, 0, 0))
+        self.invalid(image)
+
+    def test_adjacent_ranges_cannot_share_a_page(self):
+        image = fixture()
+        struct.pack_into("<Q", image, 64, 0x1800)
+        self.append_command(image, struct.pack("<II16sQQQQIIII", 0x19, 72,
+            b"__DATA", 0x100001800, 0x800, 0x800, 0x800, 3, 3, 0, 0))
+        self.invalid(image)
+        struct.pack_into("<QQQQ", image, 152, 0x100002000, 0x1000, 0, 0)
+        self.assertEqual(self.probe(image).returncode, 0)
+
+    def test_known_metadata_commands_validate_payload(self):
+        for command in (
+            struct.pack("<II", 0x1b, 8),
+            struct.pack("<II", 0x24, 8),
+            struct.pack("<6I", 0x32, 24, 1, 0, 0, 1),
+            struct.pack("<6I", 0x32, 24, 2, 0, 0, 0),
+        ):
+            image = fixture()
+            self.append_command(image, command)
+            self.invalid(image)
+        image = fixture()
+        self.append_command(image, struct.pack("<II16s", 0x1b, 24, bytes(16)))
+        self.append_command(image, struct.pack("<6I", 0x32, 24, 1, 0, 0, 0))
+        self.assertEqual(self.probe(image).returncode, 0)
+
 if __name__=="__main__":unittest.main()
