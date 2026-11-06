@@ -29,7 +29,17 @@ bounded instruction subset. Both stop at the unresolved `_setlocale`
 call, after 15 Intel instructions and 18 ARM64 instructions. Each path
 also rejects an invalid entry opcode before reaching a guest import.
 
-Darwin import implementations and instruction coverage for the remainder
-of the workload are pending. The execution gates are `--version` parity
-and the fixed JSON query under a read-only file grant on a source-built
-Ryzova guest.
+## Version execution
+
+The opt-in C-locale profile uses a read-only service page for the guest
+stack guard and standard stream pointers. The bounded heap is writable
+and non-executable. Allocation metadata and stream state are private to
+the interpreter. The version path implements the libSystem operations it
+encounters, including the one-string format used by `printf`, and compares
+the bytes emitted by the guest with the macOS reference. The hosted test
+also changes the guest format bytes and checks the corresponding output.
+
+The native version job builds the runtime and kernel with the guest
+toolchain, verifies the installed kernel digest, reboots, and compares
+separate stdout and stderr digests and successful exit for the exact same
+binaries. The fixed read-only JSON query remains a separate gate.

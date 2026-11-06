@@ -165,12 +165,12 @@ linkedit(const Mac8Image *plan, U32 off, U64 size)
 }
 
 static int
-walk_chains(const Byte *image, U32 offset, U32 length, Mac8Image *plan, Byte *arena)
+walk_chains(const Byte *image, U32 offset, U32 length, Mac8Image *plan, Byte *arena, Mac8Bind bind)
 {
     const Byte *p=image+offset, *record;
     U32 starts, imports, symbols, i, name, at, record_end, rel, pages, page, start, slot;
     U32 previous, next, ordinal, bind_count=0, rebase_count=0, fixup_pages=0;
-    U64 value, target;
+    U64 value, target, resolved;
     Byte referenced[Mac8Imports];
     const Mac8Segment *s;
     unsigned int j;
@@ -239,6 +239,11 @@ walk_chains(const Byte *image, U32 offset, U32 length, Mac8Image *plan, Byte *ar
                     if(ordinal>=plan->imports || ((value>>24)&0x7ffffffULL))
                         return 0;
                     target=MAC8_UNRESOLVED+16*ordinal;
+                    if(arena && bind){
+                        resolved=bind((const char *)image+plan->names[ordinal]);
+                        if(resolved)
+                            target=resolved;
+                    }
                     referenced[ordinal]=1;
                     bind_count++;
                 }else{
@@ -268,7 +273,7 @@ walk_chains(const Byte *image, U32 offset, U32 length, Mac8Image *plan, Byte *ar
 }
 
 int
-mac8_load(const Byte *image, U32 length, Byte *arena, U32 capacity, Mac8Image *out)
+mac8_load_bound(const Byte *image, U32 length, Byte *arena, U32 capacity, Mac8Image *out, Mac8Bind bind)
 {
     Mac8Image plan;
     const Byte *cmd;
@@ -358,15 +363,22 @@ mac8_load(const Byte *image, U32 length, Byte *arena, U32 capacity, Mac8Image *o
        (plan.cpu==0x0100000cU && (!(seen&128) || entry%4)) ||
        !within(text_start,text_bytes,entry,1) || text_start<end ||
        !plan.bss_bytes || capacity<plan.mapped_bytes ||
-       !walk_chains(image,fixoff,fixbytes,&plan,0))
+       !walk_chains(image,fixoff,fixbytes,&plan,0,0))
         return 0;
     plan.entry=entry;
     memset(arena,0,plan.mapped_bytes);
     memmove(arena,image,length);
     memset(arena+plan.bss,0,plan.bss_bytes);
     /* The second pass reads identical, caller-owned immutable input. */
-    if(!walk_chains(image,fixoff,fixbytes,&plan,arena))
+    if(!walk_chains(image,fixoff,fixbytes,&plan,arena,bind))
         return 0;
     *out=plan;
     return 1;
+}
+
+
+int
+mac8_load(const Byte *image, U32 length, Byte *arena, U32 capacity, Mac8Image *out)
+{
+    return mac8_load_bound(image, length, arena, capacity, out, 0);
 }

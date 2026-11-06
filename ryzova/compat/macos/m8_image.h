@@ -30,6 +30,12 @@ struct Mac8Image {
 int mac8_load(const unsigned char *, unsigned int, unsigned char *,
               unsigned int, Mac8Image *);
 
+/* Trusted resolver may replace a bind with a guest address. Returning zero
+ * preserves the unresolved token. Resolution runs only after validation. */
+typedef unsigned long long (*Mac8Bind)(const char *);
+int mac8_load_bound(const unsigned char *, unsigned int, unsigned char *,
+                    unsigned int, Mac8Image *, Mac8Bind);
+
 /* A span must fit entirely in one segment with the requested guest rights. */
 int mac8_access(const Mac8Image *, unsigned long long, unsigned int, unsigned int);
 
