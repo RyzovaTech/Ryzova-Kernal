@@ -4,7 +4,7 @@
 #define NATIVE_OPENS 64U
 typedef struct NativeOpen { uint64_t token,path;uint32_t access,share,dev,type;int fd; } NativeOpen;
 struct CwFileNative {
-    char root[256];int rootfd,syncfd;uint64_t path;uint32_t dev,type,serial,peak,flushes;uint64_t sync_serial;
+    char root[256];int rootfd,syncfd;uint64_t path;uint32_t dev,type,serial,peak,flushes;uint64_t sync_serial,read_bytes,write_bytes;
     NativeOpen handles[NATIVE_OPENS];
 };
 static uint32_t native_error(void) {
@@ -118,14 +118,22 @@ static uint32_t nread(void *context,uint64_t token,uint64_t at,unsigned char *ou
     NativeOpen *o=opened(context,token);Dir *d;long count;uint32_t error=checked(o,&d);
     if(error)return error;free(d);
     if(!(o->access&CW_FILE_READ) || at>CW_FILE_LIMIT || n>CW_FILE_LIMIT)return 5;
-    count=pread(o->fd,out,n,at);if(count<0)return native_error();*actual=count;return 0;
+    count=pread(o->fd,out,n,at);
+    if(count<0)return native_error();
+    ((CwFileNative *)context)->read_bytes+=(uint32_t)count;
+    *actual=(uint32_t)count;
+    return 0;
 }
 static uint32_t nwrite(void *context,uint64_t token,uint64_t at,const unsigned char *in,uint32_t n,uint32_t *actual) {
     NativeOpen *o=opened(context,token);Dir *d;long count;uint32_t error=checked(o,&d);
     if(error)return error;free(d);
     if(!(o->access&CW_FILE_WRITE))return 5;
     if(at>CW_FILE_LIMIT || n>CW_FILE_LIMIT-at)return 223;
-    count=pwrite(o->fd,in,n,at);if(count<0)return native_error();*actual=count;return 0;
+    count=pwrite(o->fd,in,n,at);
+    if(count<0)return native_error();
+    ((CwFileNative *)context)->write_bytes+=(uint32_t)count;
+    *actual=(uint32_t)count;
+    return 0;
 }
 static uint32_t nsize(void *context,uint64_t token,uint64_t *out) {
     NativeOpen *o=opened(context,token);Dir *d;uint32_t error=checked(o,&d);
@@ -160,3 +168,6 @@ const CwFileOps *cw_file_native_ops(void) { static CwFileOps ops={nopen,nread,nw
 uint32_t cw_file_native_peak_count(CwFileNative *h) { return h->peak; }
 
 uint32_t cw_file_native_sync_count(CwFileNative *h) { return h->flushes; }
+
+uint64_t cw_file_native_read_bytes(CwFileNative *h) { return h->read_bytes; }
+uint64_t cw_file_native_write_bytes(CwFileNative *h) { return h->write_bytes; }

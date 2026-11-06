@@ -48,18 +48,24 @@ def build(output):
     return output
 
 
+def api_grant_words():
+    count = int(re.search(r'#define CW_API_COUNT (\d+)U',
+                          (ROOT/'ryzova/compat/windows/api.h').read_text()).group(1))
+    if not 0 < count <= 256:
+        raise ValueError('registry exceeds permission words')
+    return [(1 << max(0, min(32, count-word*32))) - 1 for word in range(8)]
+
+
 def execute_image(binary,budget=16777216):
     binary=Path(binary).resolve();image=binary.read_bytes();verify_image(image)
     imports=import_names(image)
-    count=int(re.search(r'#define CW_API_COUNT (\d+)U',(ROOT/'ryzova/compat/windows/api.h').read_text()).group(1))
-    if count>256:raise ValueError('registry exceeds permission words')
-    high=[str((1<<max(0,min(32,count-word*32)))-1) for word in range(1,8)]
+    words=api_grant_words()
     with tempfile.TemporaryDirectory() as work:
         path=Path(work);root=path/'work';root.mkdir();(root/'input.json').write_bytes(INPUT)
         probe=build(path/'probe')
         command=subprocess.list2cmdline(['jq.exe',*ARGS])
         run=subprocess.run([str(probe),str(binary),command,'RYZOVA_TRACE','explicit','3',
-                            str((1<<min(count,32))-1),str(budget),str(root),*high],capture_output=True,text=True,timeout=30)
+                            str(words[0]),str(budget),str(root),*map(str,words[1:])],capture_output=True,text=True,timeout=30)
         if run.stderr:raise ValueError('diagnostic stderr: '+run.stderr)
         result=json.loads(run.stdout)
         if run.returncode!=(0 if result['status']==0 else 1):raise ValueError('trace exit/report mismatch')

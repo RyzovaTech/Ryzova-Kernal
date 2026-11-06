@@ -107,7 +107,7 @@ jobs:
           echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  9front.qcow2.gz' | sha256sum -c -
           gzip -dc 9front.qcow2.gz > 9front.qcow2
           qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-windows.qcow2
-      - name: Native TLS startup, fault and budget gates
+      - name: Verify native jq parity and compatibility fixtures
         run: python3 scripts/compact_windows_w7_native.py native-windows.qcow2 --bootstrap-gzip 9front.qcow2.gz --reference artifacts/w7-reference
       - uses: actions/upload-artifact@v4
         if: always()

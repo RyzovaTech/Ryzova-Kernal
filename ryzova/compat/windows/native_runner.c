@@ -75,7 +75,11 @@ void main(int argc,char **argv) {
     if(!status)status=cw_run(m,budget);
     if(randomfd>=0)close(randomfd);
     for(i=0;i<heap_limit/4096;i++)if(s->protection[i]&128)committed+=4096;
-    print("CW_NATIVE status=%d executed=%d exited=%d code=%ud steps=%ud stop=%s ip=%llud owned=%llud guest=%ud open=%ud peak_handles=%ud heap=%ud error=%ud flushes=%ud\n",status,m->instructions!=0,m->exited,m->exit_code,m->instructions,cw_status_name(status),m->last_guest_ip,(uvlong)owned,plan.image_bytes+CW_STACK+4096+heap_limit,provider?cw_file_native_open_count(provider):0,provider?cw_file_native_peak_count(provider):0,committed,s->last_error,provider?cw_file_native_sync_count(provider):0);
+    print("CW_NATIVE status=%d executed=%d exited=%d code=%ud steps=%ud stop=%s ip=%llud owned=%llud guest=%ud open=%ud peak_handles=%ud heap=%ud error=%ud flushes=%ud rights=%ud read_bytes=%llud write_bytes=%llud profile=%ud stop_import=%ud\n",status,m->instructions!=0,m->exited,m->exit_code,m->instructions,cw_status_name(status),m->last_guest_ip,(uvlong)owned,plan.image_bytes+CW_STACK+4096+heap_limit,provider?cw_file_native_open_count(provider):0,provider?cw_file_native_peak_count(provider):0,committed,s->last_error,provider?cw_file_native_sync_count(provider):0,
+          s->files?ns->mounts[0].rights:0,
+          (uvlong)(provider?cw_file_native_read_bytes(provider):0),
+          (uvlong)(provider?cw_file_native_write_bytes(provider):0),
+          m->plan.profile_flags,m->stop_import);
     print("CW_PROFILE flags=%ud unresolved=%ud stop_import=%ud\n",profile,plan.unresolved_imports,m->stop_import);
     print("CW_OUT ");for(i=0;i<(int)s->output_bytes[0];i++)print("%02ux",s->output[0][i]);print("\nCW_ERR ");for(i=0;i<(int)s->output_bytes[1];i++)print("%02ux",s->output[1][i]);print("\n");
     for(i=0;i<CW_API_COUNT;i++)if(s->calls[i])print("CW_CALL %s %ud\n",cw_api_name(i),s->calls[i]);

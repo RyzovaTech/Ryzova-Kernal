@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Source-built Ryzova Kernel: initial-thread TLS execution and failure gates."""
+"""Verify pinned jq and compatibility fixtures on a source-built Ryzova Kernel."""
 import argparse
 import functools
 import http.server
@@ -14,9 +14,56 @@ import threading
 from compact_windows_w2 import ROOT, PREFERRED
 from compact_windows_w6_native import bootstrap_provenance, digest, extract_kernel, parse_cases, session, standalone
 from compact_windows_w7_tls import tls_fixture, verify_reference
+from compact_windows_w7_jq import ARGS as JQ_ARGS, INPUT as JQ_INPUT, verify_reference as verify_jq_reference
+from compact_windows_w7_trace import api_grant_words
 from compact_windows_w7_imports import verify_reference as verify_import_reference, EXPECTED_CALLS
 from compact_windows_w7_startup import verify_reference as verify_startup_reference, EXPECTED_CALLS as STARTUP_CALLS, LOW_MASK, HIGH_MASK
 from compact_windows_w7_sync import verify_reference as verify_sync_reference, sync_fixture, EXPECTED_CALLS as SYNC_CALLS, LOW_MASK as SYNC_LOW, HIGH_MASK as SYNC_HIGH
+
+
+JQ_ROOT = '/tmp/cw-w7-jq'
+JQ_INPUT_PATH = JQ_ROOT + '/input.json'
+JQ_READ_ONLY = 9  # CW_GRANT_READ | CW_GRANT_METADATA
+JQ_BUDGET = 16777216
+
+
+def jq_case(reference):
+    # The inner string follows Windows argv quoting. rc receives it as one word.
+    command = subprocess.list2cmdline(['jq.exe', *JQ_ARGS])
+    rc_command = "'" + command.replace("'", "''") + "'"
+    words = api_grant_words()
+    extra = ''.join(f' -g {i}:{mask}' for i, mask in enumerate(words) if i >= 2 and mask)
+    args = (f'-P trace -b {JQ_BUDGET} -r {JQ_ROOT} -R {JQ_READ_ONLY} '
+            f'-a {words[0]} -A {words[1]}{extra} -c {rc_command}')
+    return dict(image='jq', status=0, code=reference['exit_code'],
+                out=reference['stdout_hex'], err=reference['stderr_hex'], args=args)
+
+
+def verify_jq_io(record):
+    expected = dict(rights=JQ_READ_ONLY, read_bytes=len(JQ_INPUT), write_bytes=0,
+                    profile=3, stop_import=0, peak_handles=1)
+    for key, value in expected.items():
+        if record.get(key) != value:
+            raise ValueError(f'native jq receipt {key}: expected {value}, got {record.get(key)}')
+    if not 0 < record.get('steps', 0) <= JQ_BUDGET:
+        raise ValueError('invalid native jq instruction count')
+    calls = record.get('calls', {})
+    if (calls.get('_wfopen') != 1 or calls.get('fgets', 0) < 1 or
+            calls.get('fclose', 0) < 1 or calls.get('fwrite', 0) < 1 or
+            calls.get('exit') != 1):
+        raise ValueError('native jq did not complete the expected stream and exit path')
+
+
+def verify_guest_input(log, sha):
+    sections = re.split(rb'(?m)^CW_CASE_jq-readonly_(?:BEGIN|END)\r?$', log)
+    if len(sections) != 3:
+        raise ValueError('missing or duplicate native jq boundary')
+    before, case, after = sections
+    pattern = rb'(?m)^([0-9a-f]{64})[ \t]+' + re.escape(JQ_INPUT_PATH.encode()) + rb'\r?$'
+    if (re.findall(pattern, before), re.findall(pattern, case), re.findall(pattern, after)) != (
+            [sha.encode()], [], [sha.encode()]):
+        raise ValueError('native jq input hash mismatch before or after execution')
+    return case
 
 
 def images_and_cases(ref):
@@ -58,6 +105,10 @@ def main():
     base_sha = bootstrap_provenance(args.image, args.bootstrap_gzip)
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     receipt, api_receipt, startup_receipt, sync_receipt, images, cases = images_and_cases(args.reference)
+    jq_reference = verify_jq_reference(args.reference)
+    images['jq'] = (args.reference/'jq.exe').read_bytes()
+    cases['jq-readonly'] = jq_case(jq_reference)
+    (out/'input.json').write_bytes(JQ_INPUT)
     for name, data in images.items():
         (out/(name+'.exe')).write_bytes(data)
     archive = out/'source.tgz'
@@ -92,9 +143,11 @@ def main():
                     'sha1sum -2 256 /amd64/bin/compact-windows']
         for name in images:
             commands.append(f'hget http://10.0.2.2:8000/{name}.exe > /tmp/cw-{name}.exe; sha1sum -2 256 /tmp/cw-{name}.exe')
+        commands.append(f'mkdir -p {JQ_ROOT}; hget http://10.0.2.2:8000/input.json > {JQ_INPUT_PATH}; sha1sum -2 256 {JQ_INPUT_PATH}')
         for name, spec in cases.items():
             commands.append(f"echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows {spec.get('args', '')} /tmp/cw-{spec['image']}.exe; echo CW_CASE_{name}_END")
-        fresh = session(args.image, commands, out, 'fresh', 120)
+        commands.append(f'sha1sum -2 256 {JQ_INPUT_PATH}')
+        fresh = session(args.image, commands, out, 'fresh', 180)
         if b'Ryzova Kernel 0.1.0-dev' not in fresh or b'9front-derived' not in fresh or not standalone(fresh, 'CW_IDENTITY_END'):
             raise ValueError('fresh source-built guest identity')
         if not re.search(rb'(?m)^'+runtimes[0]+rb'\s+/amd64/bin/compact-windows\r?$', fresh):
@@ -102,8 +155,13 @@ def main():
         hashes = {name: digest(out/(name+'.exe')) for name in images}
         for name, sha in hashes.items():
             if not re.search(rb'(?m)^'+sha.encode()+rb'\s+/tmp/cw-'+name.encode()+rb'\.exe\r?$', fresh):
-                raise ValueError('native TLS fixture hash mismatch')
+                raise ValueError(f'native executable hash mismatch: {name}')
+        jq_log = verify_guest_input(fresh, jq_reference['input_sha256'])
         records = parse_cases(fresh, cases)
+        jq_record = records['jq-readonly']
+        verify_jq_io(jq_record)
+        jq_record['stdout_hex'] = re.search(rb'(?m)^CW_OUT ([0-9a-f]*)\r?$', jq_log)[1].decode()
+        jq_record['stderr_hex'] = re.search(rb'(?m)^CW_ERR ([0-9a-f]*)\r?$', jq_log)[1].decode()
         if records['api-set']['calls'] != EXPECTED_CALLS:
             raise ValueError('native API-set dispatch counts differ')
         if records['startup-api']['calls'] != STARTUP_CALLS:
@@ -120,7 +178,10 @@ def main():
                       native_startup_state_verified=True,
                       sync_api_reference=sync_receipt, native_sync_state_verified=True,
                       native_api_set_imports_verified=True,
-                      native_amd64_qemu_tls_startup_verified=True, jq_execution_verified=False,
+                      native_amd64_qemu_tls_startup_verified=True, jq_execution_verified=True,
+                      jq_reference=jq_reference, jq_input_sha256=jq_reference['input_sha256'],
+                      jq_executable_sha256=hashes['jq'], jq_root_rights=JQ_READ_ONLY,
+                      jq_input_unchanged=True, native_jq_query_parity_verified=True,
                       physical_hardware_qualified=False, full_w7_complete=False)
         (out/'qualification.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
     finally:

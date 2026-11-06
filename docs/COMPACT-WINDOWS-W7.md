@@ -240,3 +240,24 @@ arithmetic with masked exceptions and default rounding.
 
 The receipt records hosted parity. Native qualification of the unchanged
 jq workload is the W7.3 gate.
+
+
+## W7.3 source-built kernel query parity
+
+The W7 native job builds the kernel and Compact Windows runtime inside the
+pinned AMD64 QEMU bootstrap guest, installs the kernel, checks its image
+independently, and boots the installed kernel for a fresh run. It verifies
+the kernel identity and the runtime hash before launching the unchanged
+upstream jq executable. Windows and the booted guest use the same pinned
+binary, query arguments and JSON bytes.
+
+jq receives a single directory grant with read and metadata rights (mask 9).
+The native case requires exactly 18 bytes read, zero file bytes written,
+one peak provider handle and no open handles after exit. The guest hashes
+the input before and after the case and compares the executable hash with
+the Windows reference. Stdout, stderr and exit code are checked against the
+Windows receipt from the same source commit. The qualification artifact
+contains the native receipt and the serial evidence.
+
+Qualification is for this workload in the explicit diagnostic profile on
+AMD64 QEMU. The W7.4 review covers the final checks and merge protection.
