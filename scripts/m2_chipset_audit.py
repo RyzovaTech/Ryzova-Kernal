@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """M2 independent PCI family provenance and fail-closed qualification audit.
 
 The registry is for discovery/diagnostics only. No new driver is attached by

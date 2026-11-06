@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """M0 source-only PCI/USB candidate index; never binds or certifies hardware."""
 import argparse
 from collections import defaultdict

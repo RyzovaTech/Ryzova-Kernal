@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """Isolated third QEMU guest: source-built Ryzova PCI chipset discovery only.
 
 Keeps network-sensitive legacy baseline boot separate from synthetic PCI NICs.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """Source-level USB xHCI safety guards, not a physical device test."""
 import re
 import unittest

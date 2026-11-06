@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 #include <assert.h>
 #include <string.h>
 #include "../sys/src/cmd/nusb/lib/m1class.h"

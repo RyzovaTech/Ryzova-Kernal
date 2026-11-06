@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """M5 ARM64 ECAM linkage and server/legacy readiness audit."""
 import copy
 import sys

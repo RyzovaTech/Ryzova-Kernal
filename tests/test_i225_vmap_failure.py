@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """Static regression: i225 failed MMIO mapping must not unmap a nil address.
 
 The native kernel CI checks that the real C kernel still compiles and boots.

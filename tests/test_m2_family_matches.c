@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 /* M2 exact source candidates, NOT a physical hardware certification test. */
 #include <assert.h>
 #include <string.h>

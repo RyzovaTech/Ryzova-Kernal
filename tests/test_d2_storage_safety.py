@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 """Static regression guards for D2 storage safety patches (not hardware tests)."""
 import re
 import unittest
