@@ -43,7 +43,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
             cases_by_arch[arch] = receipt['cases']
             binaries[arch] = name, digest
     else:
-        (output/'input.json').write_bytes(INPUT)
+        (output/INPUT_NAME).write_bytes(INPUT)
         for arch, (name, _, digest, _, _) in TARGETS.items():
             ref = references/f'macos-m8-jq-{arch}'
             (output/name).write_bytes(verified_image(arch, (ref/name).read_bytes()))
@@ -94,7 +94,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
                 commands.append(f"launch={program}")
             else:
                 commands.extend([
-                    f'hget {url}/input.json >/tmp/m8-input; cp /tmp/m8-input /tmp/m8-input-original',
+                    f'hget {url}/{INPUT_NAME} >/tmp/m8-input; cp /tmp/m8-input /tmp/m8-input-original',
                     'sha1sum -2 256 /tmp/m8-input-original',
                     f"q='{QUERY}'",
                 ])
@@ -149,7 +149,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
         if any(digest_line(run, name) != input_digest for name in ('/tmp/m8-input-original', '/tmp/m8-input')):
             raise ValueError('native input digest changed')
         receipt.update(input_sha256=input_digest, input_unchanged=True, jq_profile_qualified=True,
-                       guest_input_alias='records.json')
+                       guest_input_alias=INPUT_NAME)
     (output/'qualification.json').write_text(json.dumps(receipt, indent=2)+'\n')
     print(json.dumps(receipt))
 
