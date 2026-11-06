@@ -12,6 +12,21 @@ Ryzova Kernel is an **experimental 9front/Plan 9-derived kernel and systems-soft
 >
 > This summary was reviewed against `main` at [`e6e17d7`](https://github.com/RyzovaTech/Ryzova-Kernal/commit/e6e17d7feefb7b29df11f9dd07d4fa7f2e1aa596). Historical documents and CI receipts can refer to earlier commits or superseded stages; they are not blanket certification of current or future revisions.
 
+## More than an upstream 9front rebuild
+
+**9front/Plan 9 is Ryzova Kernel's starting architecture, not the complete scope or identity of the project.** Ryzova keeps upstream history, attribution, namespaces and 9P while developing an independent systems-engineering direction. It is **not** a renamed 9front ISO, a theme, a Linux distribution, or an already finished general-purpose replacement for Windows or macOS.
+
+The following workstreams are distinct and should not be conflated:
+
+1. **Native kernel and platform engineering.** Ryzova-specific kernel-facing code includes the read-only [`#Z` identity device](sys/src/9/port/devryzova.c), AMD64 native source-build integration, and [driver-related kernel sources](sys/src/9/port/). The underlying 9front kernel remains a substantial inherited foundation; user-space compatibility interpreters are not incorrectly described as kernel-native ABI support.
+2. **Cross-platform application execution environments.** [Compact Linux](ryzova/compat/linux/), [Compact Windows](ryzova/compat/windows/), and [Compact macOS](ryzova/compat/macos/) are independently engineered, bounded loaders, interpreters, API/runtime adapters and launchers. Some selected unmodified ELF, PE and Mach-O workloads have native Ryzova-guest QEMU proof. This does **not** imply general Linux/Win32/Darwin application support, native execution of guest machine code, or a fully interchangeable OS ABI.
+3. **The Plan 9 resource model as a design tool.** Per-process namespaces, 9P and file-oriented resource access are used to explore explicit application grants and remote services. The goal is to make resources and compatibility environments composable without assuming that every proposed namespace is already mounted or every adapter shares one finished interface.
+4. **A larger distributed-systems direction.** The [unified resource architecture](docs/PHASE8-2-UNIFIED-RESOURCES.md) investigates a future logical environment spanning storage, bounded caching, compute, network, GPU and devices, with identity-aware admission, placement and failure isolation. Today this consists of scoped 9P/TLS and coordinator experiments—not a production cluster OS, transparent shared memory, or pooled physical local CPU/RAM.
+5. **Driver and hardware foundations.** The [M-series and D-series driver work](docs/drivers/D-SERIES-RELEASE-GATES.md) covers PCI/device inventory, selected AMD64 controller/USB paths, safety regression tests and ARM64 server research. [Bluetooth HCI diagnostics and VirtIO-GPU wire-format helpers](docs/drivers/D6-NEW-DRIVER-FOUNDATIONS.md) are early, explicitly limited foundations—not verified end-to-end Bluetooth, 2D/3D GPU support or hardware certification.
+6. **Evidence-driven development.** Source checks, native toolchain builds, QEMU boot/reboot checks, hash provenance, selected differential application tests and fail-closed release gates distinguish demonstrated engineering from plans. A green test is evidence for its named workload and source revision, not universal certification.
+
+**Long-term direction:** a kernel/platform that independent developers could build operating-system variants and new interfaces on, including a potential RyzovaOS. A public, certified kernel release, finished desktop environment and complete cross-OS interoperability are *goals*, not present deliverables.
+
 ## Project status at a glance
 
 | Area | Demonstrated / implemented | Not established |
