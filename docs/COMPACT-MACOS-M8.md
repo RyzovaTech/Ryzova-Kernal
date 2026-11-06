@@ -22,6 +22,14 @@ changing the arena or the output plan.
 | Intel | 856064 | 1221 | 136 |
 | ARM64 | 851968 | 1232 | 135 |
 
-The next gate is `--version` parity in a bounded Mach-O execution profile,
-followed by the fixed JSON query under a read-only file grant. Guest
-instruction execution and Darwin import handling are still pending.
+The hosted startup check passes `jq --version` arguments into each guest
+entry point. Intel uses the existing AMD64 instruction engine with
+Windows API dispatch and bootstrap handling disabled. ARM64 runs a
+bounded instruction subset. Both stop at the unresolved `_setlocale`
+call, after 15 Intel instructions and 18 ARM64 instructions. Each path
+also rejects an invalid entry opcode before reaching a guest import.
+
+Darwin import implementations and instruction coverage for the remainder
+of the workload are pending. The execution gates are `--version` parity
+and the fixed JSON query under a read-only file grant on a source-built
+Ryzova guest.

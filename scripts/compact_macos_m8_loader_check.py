@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Exercise the M8 C loader with the exact macOS reference bytes."""
+"""Exercise the M8 loader and startup boundary with exact macOS reference bytes."""
 import argparse
 import ctypes as C
 from pathlib import Path
@@ -9,12 +9,17 @@ from compact_macos_m8_jq import TARGETS, save_json, sha256, source_head, verifie
 
 
 CAP = 1024 * 1024
+STACK = 65536
 BASE = 0x200000
 UNRESOLVED = 0x10000
 R, W, X = 1, 2, 4
 EXPECTED = {
     'x86_64': (4096, 2144, 856064, 136, 1221, 6),
     'arm64': (16384, 14664, 851968, 135, 1232, 3),
+}
+FIRST_IMPORT = {
+    'x86_64': (15, 0x6f227, 0xbe4b8),
+    'arm64': (18, 0x66a88, 0xb4810),
 }
 
 
@@ -27,6 +32,11 @@ class Image(C.Structure):
         'cpu', 'page', 'entry', 'mapped_bytes', 'imports', 'binds',
         'rebases', 'fixup_pages', 'bss', 'bss_bytes',
     )] + [('names', C.c_uint * 256), ('segments', Segment * 5)]
+
+
+class Stop(C.Structure):
+    _fields_ = [(name, C.c_ulonglong) for name in ('pc', 'last_pc', 'arg0', 'arg1')
+                ] + [(name, C.c_uint) for name in ('steps', 'name')]
 
 
 def commands(image):
@@ -113,7 +123,30 @@ def map_and_check(lib, arch, image):
     return dict(sha256=sha256(image), page_bytes=plan.page, entry=plan.entry,
                 mapped_bytes=plan.mapped_bytes, binds=plan.binds, rebases=plan.rebases,
                 fixup_pages=plan.fixup_pages, bss_bytes=plan.bss_bytes,
-                rejected=sorted(negative), execution_verified=False)
+                rejected=sorted(negative), workload_execution_verified=False)
+
+
+def check_start(lib, arch, image):
+    arena = C.create_string_buffer(CAP+STACK)
+    stop = Stop()
+    if lib.mac8_start(image, len(image), arena, len(arena), C.byref(stop)) != 1:
+        raise ValueError(f'{arch}: startup stopped at {stop.last_pc:#x} after {stop.steps} steps')
+    name = image[stop.name:].split(b'\0', 1)[0]
+    actual = stop.steps, stop.last_pc-BASE, stop.arg1-BASE
+    if (actual != FIRST_IMPORT[arch] or name != b'_setlocale' or stop.arg0 != 0
+            or arena[stop.arg1-BASE:stop.arg1-BASE+1] != b'\0'):
+        raise ValueError(f'{arch}: unexpected first import {name!r}, {actual}')
+
+    # A valid mapping with an invalid entry opcode must stop at the entry.
+    entry = EXPECTED[arch][1]
+    unsupported = b'\x0f\x0b' if arch == 'x86_64' else bytes(4)
+    candidate = image[:entry]+unsupported+image[entry+len(unsupported):]
+    rejected = Stop()
+    if (lib.mac8_start(candidate, len(candidate), arena, len(arena), C.byref(rejected)) != 0
+            or rejected.steps != 0 or rejected.last_pc != BASE+entry or rejected.pc):
+        raise ValueError(f'{arch}: invalid entry opcode did not stop startup')
+    return dict(steps=stop.steps, last_instruction_rva=stop.last_pc-BASE,
+                unresolved_import=name.decode('ascii'), workload_execution_verified=False)
 
 
 def main():
@@ -125,13 +158,16 @@ def main():
     lib = C.CDLL(str(args.loader.resolve()))
     lib.mac8_load.argtypes = [C.c_void_p, C.c_uint, C.c_void_p, C.c_uint, C.POINTER(Image)]
     lib.mac8_access.argtypes = [C.POINTER(Image), C.c_ulonglong, C.c_uint, C.c_uint]
+    lib.mac8_start.argtypes = [C.c_void_p, C.c_uint, C.c_void_p, C.c_uint, C.POINTER(Stop)]
     report = {}
     for arch, (name, _, _, _, _) in TARGETS.items():
         image = verified_image(arch, (args.references/f'macos-m8-jq-{arch}'/name).read_bytes())
         report[arch] = map_and_check(lib, arch, image)
+        report[arch]['startup'] = check_start(lib, arch, image)
         print(f'{arch}: mapped {report[arch]["mapped_bytes"]} bytes, checked '
-              f'{len(report[arch]["rejected"])} malformed cases')
-    save_json(args.output, dict(schema='compact-macos-m8-image-map/v1',
+              f'{len(report[arch]["rejected"])} malformed images and traced '
+              f'{report[arch]["startup"]["steps"]} instructions to the first import')
+    save_json(args.output, dict(schema='compact-macos-m8-startup/v1',
                                source_commit=source_head(), architectures=report))
 
 

@@ -350,7 +350,7 @@ static int packed_integer(Decode *d,unsigned int op,unsigned int reg,Operand o) 
     return CW_OK;
 }
 
-static int tick(CwMachine *m) {
+static int tick(CwMachine *m,int windows_bootstrap) {
     Decode d;Operand o,q;unsigned int op,n,reg=0,group=0,prefixes=0;
     uint64_t a,b,v,target=0;int jump=0;
     memset(&d,0,sizeof(d));d.m=m;d.start=d.cur=m->ip;
@@ -380,7 +380,7 @@ static int tick(CwMachine *m) {
     else if(op==0xc3){
         if(d.rex || (d.prefix && d.prefix!=0xf3))return CW_OPCODE;
         a=m->r[4];v=pop(&d);
-        if(!d.error && v>=CW_TLS_RETURN)return cw_bootstrap_return(m,v,a);
+        if(windows_bootstrap && !d.error && v>=CW_TLS_RETURN)return cw_bootstrap_return(m,v,a);
         else {jump=1;target=v;}
     }
     else if(op==0xc9){if(d.prefix || d.rex)return CW_OPCODE;m->r[4]=m->r[5];v=pop(&d);if(!d.error)m->r[5]=v;}
@@ -583,12 +583,16 @@ static int tick(CwMachine *m) {
     if(d.error)return d.error;
     m->ip=jump?target:d.cur;return CW_OK;
 }
+int cw_cpu_step(CwMachine *m) {
+    return tick(m,0);
+}
+
 int cw_run(CwMachine *m,uint32_t budget) {
     if(!m || !m->image || !m->stack)return CW_HEADER;
     if(m->status)return m->status;
     if(m->exited)return CW_OK;
     if(!budget || budget>CW_STEP_LIMIT(m->plan.profile_flags)){cw_files_close_all(m);return m->status=CW_BUDGET;}
-    while(m->instructions<budget){int status;if(m->ip<CW_THUNK_BASE)m->last_guest_ip=m->ip;m->instructions++;status=m->ip>=CW_THUNK_BASE?cw_api_dispatch(m):tick(m);if(status){cw_files_close_all(m);return m->status=status;}if(m->exited){cw_files_close_all(m);return CW_OK;}}
+    while(m->instructions<budget){int status;if(m->ip<CW_THUNK_BASE)m->last_guest_ip=m->ip;m->instructions++;status=m->ip>=CW_THUNK_BASE?cw_api_dispatch(m):tick(m,1);if(status){cw_files_close_all(m);return m->status=status;}if(m->exited){cw_files_close_all(m);return CW_OK;}}
     cw_files_close_all(m);return m->status=CW_BUDGET;
 }
 
