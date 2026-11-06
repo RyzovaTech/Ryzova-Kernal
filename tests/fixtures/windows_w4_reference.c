@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 /* Freestanding Windows AMD64 file-I/O reference; no CRT or copied SDK DLLs. */
 #if !defined(_WIN64)
 #error Windows AMD64 target required
