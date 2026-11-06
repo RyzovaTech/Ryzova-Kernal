@@ -23,6 +23,7 @@ from compact_windows_w7_sync import verify_reference as verify_sync_reference, s
 
 JQ_ROOT = '/tmp/cw-w7-jq'
 JQ_INPUT_PATH = JQ_ROOT + '/input.json'
+JQ_LAUNCHER_PATH = '/tmp/cw-w7-jq.rc'
 JQ_READ_ONLY = 9  # CW_GRANT_READ | CW_GRANT_METADATA
 JQ_BUDGET = 16777216
 
@@ -109,6 +110,12 @@ def main():
     images['jq'] = (args.reference/'jq.exe').read_bytes()
     cases['jq-readonly'] = jq_case(jq_reference)
     (out/'input.json').write_bytes(JQ_INPUT)
+    # Keep the serial command short. The full quoted Windows argv and policy
+    # travel in a checked guest script instead of through the UART.
+    launcher = out/'jq-launch.rc'
+    launcher.write_text(f"/amd64/bin/compact-windows {cases['jq-readonly']['args']} /tmp/cw-jq.exe\n",
+                        encoding='ascii')
+    launcher_sha = digest(launcher)
     for name, data in images.items():
         (out/(name+'.exe')).write_bytes(data)
     archive = out/'source.tgz'
@@ -144,8 +151,11 @@ def main():
         for name in images:
             commands.append(f'hget http://10.0.2.2:8000/{name}.exe > /tmp/cw-{name}.exe; sha1sum -2 256 /tmp/cw-{name}.exe')
         commands.append(f'mkdir -p {JQ_ROOT}; hget http://10.0.2.2:8000/input.json > {JQ_INPUT_PATH}; sha1sum -2 256 {JQ_INPUT_PATH}')
+        commands.append(f'hget http://10.0.2.2:8000/jq-launch.rc > {JQ_LAUNCHER_PATH}; sha1sum -2 256 {JQ_LAUNCHER_PATH}')
         for name, spec in cases.items():
-            commands.append(f"echo CW_CASE_{name}_BEGIN; /amd64/bin/compact-windows {spec.get('args', '')} /tmp/cw-{spec['image']}.exe; echo CW_CASE_{name}_END")
+            command = (f'rc {JQ_LAUNCHER_PATH}' if name == 'jq-readonly' else
+                       f"/amd64/bin/compact-windows {spec.get('args', '')} /tmp/cw-{spec['image']}.exe")
+            commands.append(f'echo CW_CASE_{name}_BEGIN; {command}; echo CW_CASE_{name}_END')
         commands.append(f'sha1sum -2 256 {JQ_INPUT_PATH}')
         fresh = session(args.image, commands, out, 'fresh', 180)
         if b'Ryzova Kernel 0.1.0-dev' not in fresh or b'9front-derived' not in fresh or not standalone(fresh, 'CW_IDENTITY_END'):
@@ -156,6 +166,10 @@ def main():
         for name, sha in hashes.items():
             if not re.search(rb'(?m)^'+sha.encode()+rb'\s+/tmp/cw-'+name.encode()+rb'\.exe\r?$', fresh):
                 raise ValueError(f'native executable hash mismatch: {name}')
+        launcher_hashes = re.findall(rb'(?m)^([0-9a-f]{64})[ \t]+' +
+                                     re.escape(JQ_LAUNCHER_PATH.encode()) + rb'\r?$', fresh)
+        if launcher_hashes != [launcher_sha.encode()]:
+            raise ValueError('native jq launcher hash mismatch')
         jq_log = verify_guest_input(fresh, jq_reference['input_sha256'])
         records = parse_cases(fresh, cases)
         jq_record = records['jq-readonly']
@@ -181,6 +195,7 @@ def main():
                       native_amd64_qemu_tls_startup_verified=True, jq_execution_verified=True,
                       jq_reference=jq_reference, jq_input_sha256=jq_reference['input_sha256'],
                       jq_executable_sha256=hashes['jq'], jq_root_rights=JQ_READ_ONLY,
+                      jq_launcher_sha256=launcher_sha,
                       jq_input_unchanged=True, native_jq_query_parity_verified=True,
                       physical_hardware_qualified=False, full_w7_complete=False)
         (out/'qualification.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
