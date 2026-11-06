@@ -13,4 +13,6 @@ const CwFileOps *cw_file_native_ops(void);
 uint32_t cw_file_native_open_count(CwFileNative *);
 uint32_t cw_file_native_peak_count(CwFileNative *);
 uint32_t cw_file_native_sync_count(CwFileNative *);
+uint64_t cw_file_native_read_bytes(CwFileNative *);
+uint64_t cw_file_native_write_bytes(CwFileNative *);
 #endif

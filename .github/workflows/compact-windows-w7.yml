@@ -1,0 +1,122 @@
+name: Compact Windows W7 jq baseline
+on:
+  pull_request:
+    paths:
+      - 'scripts/compact_windows_w7_jq.py'
+      - 'scripts/compact_windows_w7_tls.py'
+      - 'scripts/compact_windows_w7_native.py'
+      - 'scripts/compact_windows_w7_imports.py'
+      - 'scripts/compact_windows_w7_startup.py'
+      - 'scripts/compact_windows_w7_sync.py'
+      - 'scripts/compact_windows_w7_trace.py'
+      - 'tests/test_compact_windows_w7.py'
+      - 'tests/test_compact_windows_w7_imports.py'
+      - 'tests/test_compact_windows_w7_startup.py'
+      - 'tests/test_compact_windows_w7_sync.py'
+      - 'tests/test_compact_windows_w7_trace.py'
+      - 'tests/test_compact_windows_w2.py'
+      - 'tests/test_compact_windows_w4.py'
+      - 'tests/fixtures/windows_w7_admission.c'
+      - 'ryzova/compat/windows/**'
+      - '.github/workflows/compact-windows-w7.yml'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
+jobs:
+  windows-reference:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - shell: pwsh
+        run: git config --global core.protectNTFS false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/compact_windows_w7_jq.py
+            /scripts/compact_windows_w7_tls.py
+            /scripts/compact_windows_w7_imports.py
+            /scripts/compact_windows_w7_startup.py
+            /scripts/compact_windows_w7_sync.py
+            /scripts/compact_windows_w2.py
+            /scripts/compact_windows_w3.py
+            /scripts/compact_windows_w4.py
+            /scripts/compact_windows_w5.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/compact_windows_w7_jq.py reference --out artifacts/w7-reference
+      - run: python scripts/compact_windows_w7_tls.py reference --out artifacts/w7-reference
+      - run: python scripts/compact_windows_w7_imports.py reference --out artifacts/w7-reference
+      - run: python scripts/compact_windows_w7_startup.py reference --out artifacts/w7-reference
+      - run: python scripts/compact_windows_w7_sync.py reference --out artifacts/w7-reference
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-w7-jq-reference
+          path: artifacts/w7-reference
+          if-no-files-found: error
+  admission-audit:
+    runs-on: ubuntu-24.04
+    needs: windows-reference
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-w7-jq-reference
+          path: artifacts/w7-reference
+      - run: python3 scripts/compact_windows_w7_jq.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
+      - run: python3 -m unittest discover -s tests -p 'test_compact_windows_w7*.py' -v
+      - run: python3 -m unittest discover -s tests -p 'test_compact_windows_w4.py' -v
+      - run: python3 scripts/compact_windows_w7_tls.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
+      - run: python3 scripts/compact_windows_w7_imports.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
+      - run: python3 scripts/compact_windows_w7_startup.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
+      - run: python3 scripts/compact_windows_w7_sync.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
+      - name: Verify the hosted jq query against the Windows reference
+        run: python3 scripts/compact_windows_w7_trace.py artifacts/w7-reference/jq.exe --require-startup --require-query --reference artifacts/w7-reference --out artifacts/w7-audit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-w7-jq-admission-audit
+          path: artifacts/w7-audit
+          if-no-files-found: error
+  native-tls:
+    runs-on: ubuntu-24.04
+    needs: [windows-reference, admission-audit]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-w7-jq-reference
+          path: artifacts/w7-reference
+      - name: Install isolated QEMU dependencies
+        run: |
+          sudo apt-get -o Acquire::Retries=2 update -qq
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends qemu-system-x86 qemu-utils mtools
+      - name: Verify foundation and pinned native build guest
+        run: |
+          bash scripts/verify-foundation.sh
+          curl --fail --location --retry 3 --max-time 900 https://build.9front.org/release/9front-11952.amd64.qcow2.gz -o 9front.qcow2.gz
+          echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  9front.qcow2.gz' | sha256sum -c -
+          gzip -dc 9front.qcow2.gz > 9front.qcow2
+          qemu-img create -f qcow2 -F qcow2 -b 9front.qcow2 native-windows.qcow2
+      - name: Verify native jq parity and compatibility fixtures
+        run: python3 scripts/compact_windows_w7_native.py native-windows.qcow2 --bootstrap-gzip 9front.qcow2.gz --reference artifacts/w7-reference
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-w7-native-tls-evidence
+          path: |
+            artifacts/compact-windows/w7-native/*.json
+            artifacts/compact-windows/w7-native/*.log
+          if-no-files-found: warn

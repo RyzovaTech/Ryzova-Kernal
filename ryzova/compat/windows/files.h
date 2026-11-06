@@ -38,5 +38,6 @@ struct CwFileNamespace {
 int cw_attach_files(CwMachine *,CwFileNamespace *,const CwDirectoryGrant *,uint32_t,const CwFileOps *,void *);
 int cw_file_path(const uint16_t *,char *,uint32_t *);
 uint64_t cw_file_call(CwMachine *,unsigned int,const uint64_t *);
+uint32_t cw_file_read_bytes(CwMachine *,uint64_t,unsigned char *,uint32_t,uint32_t *);
 void cw_files_close_all(CwMachine *);
 #endif

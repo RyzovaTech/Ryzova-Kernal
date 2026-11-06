@@ -18,7 +18,7 @@ def build(output):
     output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
     subprocess.run([os.environ.get('CC','cc'),'-D_GNU_SOURCE','-DCW_FILES_PROBE','-std=c11','-Wall','-Wextra','-Werror','-pedantic','-O2',
                     '-fsanitize=undefined','-fno-sanitize-recover=all',
-                    *[str(ROOT/'ryzova/compat/windows'/n) for n in ('loader.c','cpu.c','api.c','crt.c','files.c','files_host.c','api_probe.c')],
+                    *[str(ROOT/'ryzova/compat/windows'/n) for n in ('loader.c','cpu.c','api.c','crt.c','sync_objects.c','files.c','files_host.c','api_probe.c')],
                     '-o',str(output)],check=True)
     return output
 

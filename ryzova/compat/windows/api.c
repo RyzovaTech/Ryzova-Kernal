@@ -11,12 +11,52 @@
 #define ERR_ENVIRONMENT 203U
 #define ERR_ADDRESS 487U
 #define ERR_NOACCESS 998U
-static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno"};
+static const char *const names[]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno","AreFileApisANSI","SetFileApisToANSI","SetFileApisToOEM","TlsAlloc","TlsFree","TlsGetValue","TlsSetValue","CreateEventA","SetEvent","ResetEvent","CreateSemaphoreA","ReleaseSemaphore","WaitForSingleObject","WaitForMultipleObjects","InitializeCriticalSection","DeleteCriticalSection","EnterCriticalSection","LeaveCriticalSection","TryEnterCriticalSection","GetCurrentProcess","GetCurrentProcessId","GetCurrentThread","GetCurrentThreadId","DuplicateHandle","SetUnhandledExceptionFilter","_set_invalid_parameter_handler","_set_app_type","__p__fmode","__p__commode","_initterm","_initterm_e","_initialize_wide_environment","_configure_wide_argv","__p___argc","__p___wargv","__p__wenviron","_set_new_mode","_crt_atexit","_cexit","exit","_exit","GetModuleHandleA","GetProcAddress","rand_s","WideCharToMultiByte","setlocale","__acrt_iob_func","_fileno","_setmode","_isatty","_get_osfhandle","_wfopen","getc","fread","fgets","feof","ferror","clearerr","fclose","fflush","fputc","fputs","fwrite","putchar","puts","_write","GetConsoleMode","isalpha","isalnum","isspace","strchr","strrchr","memchr","strnlen","wcsnlen","_strdup","strcpy","strncpy","getenv","___lc_codepage_func","MultiByteToWideChar","IsDBCSLeadByteEx","_fullpath","PathIsRelativeA","GetThreadPriority","SetThreadPriority"};
+typedef char CwApiRegistryCount[(sizeof(names)/sizeof(names[0])==CW_API_COUNT)?1:-1];
 int cw_api_id(const char *name) {
-    unsigned int i;for(i=0;i<CW_API_COUNT;i++)if(!strcmp(name,names[i]))return (int)i;
+    unsigned int i;for(i=0;i<CW_API_COUNT;i++)if(names[i] && !strcmp(name,names[i]))return (int)i;
     return -1;
 }
-const char *cw_api_module(unsigned int id) { return id<CW_MEMCPY?"kernel32.dll":(id<CW_API_COUNT?"ucrtbase.dll":NULL); }
+const char *cw_api_module(unsigned int id) { return id>=CW_API_COUNT?NULL:id==CW_PATH_IS_RELATIVE?"shlwapi.dll":cw_crt_export(id)?"ucrtbase.dll":"kernel32.dll"; }
+uint32_t cw_api_word_mask(unsigned int word) {
+    unsigned int remaining;
+    if(word>=CW_API_WORDS || word*32>=CW_API_COUNT)return 0;
+    remaining=CW_API_COUNT-word*32;
+    return remaining>=32?UINT32_MAX:(1U<<remaining)-1U;
+}
+int cw_plan_has_api(const CwPlan *p,unsigned int id) {
+    uint32_t word;
+    if(id>=CW_API_COUNT)return 0;
+    word=id<32?p->api_mask:p->api_mask_high[id/32-1];return !!(word&(1U<<(id%32)));
+}
+void cw_plan_add_api(CwPlan *p,unsigned int id) {
+    if(id>=CW_API_COUNT)return;
+    if(id<32)p->api_mask|=1U<<id;
+    else p->api_mask_high[id/32-1]|=1U<<(id%32);
+}
+int cw_launch_allows_plan(const CwLaunch *launch,const CwPlan *p) {
+    unsigned int i;
+    if((launch->profile_flags&~CW_PROFILE_TRACE) || (p->profile_flags&~launch->profile_flags))return 0;
+    if((launch->api_mask&~cw_api_word_mask(0)) || (p->api_mask&~launch->api_mask))return 0;
+    for(i=1;i<CW_API_WORDS;i++)if((launch->api_mask_high[i-1]&~cw_api_word_mask(i)) ||
+        (p->api_mask_high[i-1]&~launch->api_mask_high[i-1]))return 0;
+    return 1;
+}
+int cw_api_module_id(const char *name) {
+    static const char *const modules[]={"kernel32.dll","ucrtbase.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll","api-ms-win-crt-private-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll","api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll","api-ms-win-crt-environment-l1-1-0.dll","api-ms-win-crt-utility-l1-1-0.dll","api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-filesystem-l1-1-0.dll","shlwapi.dll"};
+    unsigned int i;for(i=0;i<sizeof(modules)/sizeof(modules[0]);i++)if(!strcmp(name,modules[i]))return (int)i+1;
+    return 0;
+}
+int cw_api_module_matches(unsigned int id,const char *module) {
+    const char *alias;
+    if(id>=CW_API_COUNT || !cw_api_module_id(module))return 0;
+    if(!strcmp(cw_api_module(id),module))return 1;
+    alias=cw_crt_alias(id);return alias && !strcmp(alias,module);
+}
 const char *cw_api_name(unsigned int id) { return id<CW_API_COUNT?names[id]:NULL; }
 uint64_t cw_api_token(unsigned int id) { return id<CW_API_COUNT?CW_THUNK_BASE+16U*id:0; }
 static int span(uint64_t size,uint64_t at,uint64_t bytes) { return at<=size && bytes<=size-at; }
@@ -47,9 +87,9 @@ static int overlap(const void *a,size_t an,const void *b,size_t bn) {
 int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigned char *heap,size_t heap_bytes) {
     unsigned int i,j;int length;CwLaunch copy;
     if(!m || !m->image || !s || !launch || s->bound_machine || m->services || m->instructions || m->exited)return CW_API;
-    if((launch->api_mask&~CW_ALL_APIS) || (m->plan.api_mask&~launch->api_mask) ||
+    if(!cw_launch_allows_plan(launch,&m->plan) ||
        (launch->console_mask&~3U) || launch->environment_count>CW_ENV_COUNT ||
-       heap_bytes>CW_HEAP_LIMIT || heap_bytes%4096 || (heap_bytes && !heap) ||
+       heap_bytes>CW_HEAP_LIMIT_FOR(m->plan.profile_flags) || heap_bytes%4096 || (heap_bytes && !heap) ||
        (size_t)m->plan.image_bytes+CW_STACK+4096+heap_bytes>CW_MAX_MEMORY)return CW_API;
     length=utf16_length(launch->command_line,CW_COMMAND_UNITS,0);if(length<0)return CW_API;
     for(i=0;i<launch->environment_count;i++) {
@@ -65,7 +105,7 @@ int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigne
            overlap(heap,heap_bytes,s,sizeof(*s)) || overlap(heap,heap_bytes,launch,sizeof(*launch)))return CW_API;
     }
     copy=*launch;
-    memset(s,0,sizeof(*s));s->launch=copy;s->heap=heap;s->heap_bytes=heap_bytes;
+    memset(s,0,sizeof(*s));s->launch=copy;s->heap=heap;s->heap_bytes=heap_bytes;s->file_apis_ansi=1;s->crt_globals[1]=0x40;
     s->command_base=(m->stack_base+CW_STACK+4096+65535)&~UINT64_C(65535);
     s->heap_base=s->command_base+65536;
     for(i=0;i<=(unsigned int)length;i++){s->command_bytes[2*i]=(unsigned char)copy.command_line[i];s->command_bytes[2*i+1]=(unsigned char)(copy.command_line[i]>>8);}
@@ -73,13 +113,26 @@ int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigne
     s->bound_machine=m;m->services=s;return CW_OK;
 }
 unsigned char *cw_service_memory(CwMachine *m,uint64_t at,size_t n,unsigned int rights) {
+    static unsigned char c_locale[2]={'C',0};
     CwServices *s=m->services;uint64_t off;size_t first,last,i;
     if(!s || s->bound_machine!=m || !n)return NULL;
     if(at>=s->command_base && span(sizeof(s->command_bytes),at-s->command_base,n))
         return rights==CW_R?s->command_bytes+(size_t)(at-s->command_base):NULL;
     if(at>=s->command_base+4096 && span(4,at-s->command_base-4096,n))
         return rights==CW_X?NULL:s->errno_bytes+(size_t)(at-s->command_base-4096);
+    if(at>=s->command_base+4112 && span(sizeof(s->crt_globals),at-s->command_base-4112,n))
+        return (rights&CW_X)?NULL:s->crt_globals+(size_t)(at-s->command_base-4112);
+    if(at>=s->command_base+8192 && span(sizeof(s->crt_argv),at-s->command_base-8192,n))
+        return (rights&CW_X)?NULL:s->crt_argv+(size_t)(at-s->command_base-8192);
+    if(at>=s->command_base+16384 && span(sizeof(s->crt_environment),at-s->command_base-16384,n))
+        return (rights&CW_X)?NULL:s->crt_environment+(size_t)(at-s->command_base-16384);
+    if(at>=s->command_base+32768 && span(sizeof(s->crt_narrow_env),at-s->command_base-32768,n))
+        return rights==CW_R?(unsigned char *)s->crt_narrow_env+(size_t)(at-s->command_base-32768):NULL;
+    if(at>=s->command_base+6144 && span(2,at-s->command_base-6144,n))
+        return rights==CW_R?c_locale+(size_t)(at-s->command_base-6144):NULL;
     if(at<s->heap_base || !span(s->heap_bytes,at-s->heap_base,n) || rights==CW_X)return NULL;
+    if(s->trace_crt_base && (at<=s->trace_crt_base? s->trace_crt_base-at<n :
+       at-s->trace_crt_base<s->trace_crt_size) && !cw_crt_trace_span(s,at,n))return NULL;
     off=at-s->heap_base;first=(size_t)(off/4096);last=(size_t)((off+n-1)/4096);
     for(i=first;i<=last;i++)if(!s->owner[i] || !(s->protection[i]&rights))return NULL;
     return s->heap+(size_t)off;
@@ -196,22 +249,192 @@ int cw_heap_release(CwMachine *m,uint64_t at) {
     uint64_t args[3]={at,0,0x8000};int result;uint32_t error=m->services->last_error;
     result=(int)virtual_free(m,args);m->services->last_error=error;return result;
 }
-int cw_api_dispatch(CwMachine *m) {
-    uint64_t token=m->ip;unsigned int id;uint64_t a[7],result=0,ret;unsigned char *stack;
+/* Bounded UTF-16 -> UTF-8 conversion; CP_UTF8 has no default-character channel. */
+static uint64_t wide_to_multi(CwMachine *m,const uint64_t *a) {
+    CwServices *s=m->services;unsigned char *input,*output;uint32_t units,i,needed=0,at=0,c,low,pass;
+    int32_t count=(int32_t)a[3],capacity=(int32_t)a[5];
+    if((uint32_t)a[0]!=65001 || (a[1]&~UINT64_C(0x80)) || a[6] || a[7] || !a[2] || !count || count< -1 || capacity<0)
+        return fail(s,ERR_PARAMETER);
+    if(count==-1) {
+        for(units=0;units<32768;units++) {
+            if(a[2]>UINT64_MAX-(uint64_t)units*2 || !(input=cw_memory(m,a[2]+(uint64_t)units*2,2,CW_R)))return fail(s,ERR_NOACCESS);
+            if(!input[0] && !input[1]){units++;break;}
+        }
+        if(units==32768)return fail(s,ERR_PARAMETER);
+    }else units=(uint32_t)count;
+    if(units>32768 || !(input=cw_memory(m,a[2],(size_t)units*2,CW_R)))return fail(s,ERR_NOACCESS);
+    output=NULL;
+    for(pass=0;pass<2;pass++) {
+        for(i=0;i<units;i++) {
+            c=input[i*2]|(uint32_t)input[i*2+1]<<8;
+            if(c>=0xd800 && c<=0xdbff && i+1<units && (low=input[(i+1)*2]|(uint32_t)input[(i+1)*2+1]<<8)>=0xdc00 && low<=0xdfff) {
+                c=0x10000+((c-0xd800)<<10)+low-0xdc00;i++;
+            }else if(c>=0xd800 && c<=0xdfff){if(a[1]&0x80)return fail(s,1113);c=0xfffd;}
+            if(!pass)needed+=c<128?1:c<2048?2:c<65536?3:4;
+            else {
+                if(c<128)output[at++]=(unsigned char)c;
+                else if(c<2048){output[at++]=(unsigned char)(0xc0|(c>>6));output[at++]=(unsigned char)(0x80|(c&63));}
+                else if(c<65536){output[at++]=(unsigned char)(0xe0|(c>>12));output[at++]=(unsigned char)(0x80|((c>>6)&63));output[at++]=(unsigned char)(0x80|(c&63));}
+                else {output[at++]=(unsigned char)(0xf0|(c>>18));output[at++]=(unsigned char)(0x80|((c>>12)&63));output[at++]=(unsigned char)(0x80|((c>>6)&63));output[at++]=(unsigned char)(0x80|(c&63));}
+            }
+        }
+        if(!pass) {
+            if(!capacity)return needed;
+            if((uint32_t)capacity<needed)return fail(s,122);
+            if(!a[4] || !(output=cw_memory(m,a[4],needed,CW_W)))return fail(s,ERR_NOACCESS);
+            if(a[2]<=a[4]?a[4]-a[2]<(uint64_t)units*2:a[2]-a[4]<needed)return fail(s,ERR_PARAMETER);
+        }
+    }
+    return needed;
+}
+/* Decode one UTF-8 scalar. A malformed prefix consumes only its valid
+ * continuation prefix, leaving the next independent byte for the caller. */
+static uint32_t utf8_scalar(const unsigned char *p,uint32_t n,uint32_t *used) {
+    uint32_t value,need,i,low=0x80,high=0xbf;
+    *used=1;
+    if(p[0]<0x80)return p[0];
+    if(p[0]>=0xc2 && p[0]<=0xdf){value=p[0]&31;need=2;}
+    else if(p[0]>=0xe0 && p[0]<=0xef){
+        value=p[0]&15;need=3;
+        if(p[0]==0xe0)low=0xa0;
+        if(p[0]==0xed)high=0x9f;
+    }else if(p[0]>=0xf0 && p[0]<=0xf4){
+        value=p[0]&7;need=4;
+        if(p[0]==0xf0)low=0x90;
+        if(p[0]==0xf4)high=0x8f;
+    }else return UINT32_MAX;
+    for(i=1;i<need;i++){
+        if(i==n || p[i]<low || p[i]>high)return UINT32_MAX;
+        *used=i+1;
+        value=(value<<6)|(p[i]&63);
+        low=0x80;high=0xbf;
+    }
+    return value;
+}
+
+static uint64_t multi_to_wide(CwMachine *m,const uint64_t *a) {
     CwServices *s=m->services;
+    unsigned char *src,*dst=NULL;
+    int32_t length=(int32_t)a[3],capacity=(int32_t)a[5];
+    uint32_t n,i,pass,needed=0,at=0,used,c,unit;
+    if((uint32_t)a[0]!=65001 || (a[1]&~UINT64_C(8)) || !a[2] ||
+       !length || length< -1 || capacity<0)return fail(s,ERR_PARAMETER);
+    if(length==-1){
+        for(n=0;n<65536;n++){
+            if(a[2]>UINT64_MAX-n || !(src=cw_memory(m,a[2]+n,1,CW_R)))return fail(s,ERR_NOACCESS);
+            if(!*src){n++;break;}
+        }
+        if(n==65536)return fail(s,ERR_PARAMETER);
+    }else n=(uint32_t)length;
+    if(n>65536 || !(src=cw_memory(m,a[2],n,CW_R)))return fail(s,ERR_NOACCESS);
+    for(pass=0;pass<2;pass++){
+        for(i=0;i<n;i+=used){
+            c=utf8_scalar(src+i,n-i,&used);
+            if(c==UINT32_MAX){
+                if(a[1]&8)return fail(s,1113);
+                c=0xfffd;
+            }
+            if(!pass){needed+=c>=0x10000?2:1;continue;}
+            if(c>=0x10000){
+                c-=0x10000;unit=0xd800+(c>>10);
+                dst[at++]=(unsigned char)unit;dst[at++]=(unsigned char)(unit>>8);
+                c=0xdc00+(c&1023);
+            }
+            dst[at++]=(unsigned char)c;dst[at++]=(unsigned char)(c>>8);
+        }
+        if(!pass){
+            if(!capacity)return needed;
+            if((uint32_t)capacity<needed)return fail(s,122);
+            if(!a[4] || !(dst=cw_memory(m,a[4],needed*2,CW_W)))return fail(s,ERR_NOACCESS);
+            if(a[2]<=a[4]?a[4]-a[2]<n:a[2]-a[4]<needed*2)return fail(s,ERR_PARAMETER);
+        }
+    }
+    return needed;
+}
+
+/* Opaque handles identify the sandbox's built-in service contracts, not host DLLs. */
+static int import_string(CwMachine *m,uint64_t at,char *out,unsigned int capacity,int lower) {
+    unsigned int i;unsigned char *p;
+    for(i=0;i<capacity;i++) {
+        if(at>UINT64_MAX-i || !(p=cw_memory(m,at+i,1,CW_R)))return 0;
+        if(*p>127)return 0;
+        out[i]=(char)*p;if(lower && out[i]>='A' && out[i]<='Z')out[i]=(char)(out[i]+32);
+        if(!out[i])return 1;
+    }
+    return 0;
+}
+static int service_module(CwMachine *m,uint64_t at,uint64_t *result) {
+    char name[128];int module;
+    if(!at){*result=m->plan.base;return CW_OK;}
+    if(!import_string(m,at,name,sizeof(name),1))return CW_API;
+    module=cw_api_module_id(name);
+    if(!module){m->services->last_error=126;*result=0;}
+    else *result=UINT64_C(0x20000)+(unsigned int)module;
+    return CW_OK;
+}
+static int service_address(CwMachine *m,const uint64_t *a,uint64_t *result) {
+    static const char *const modules[]={"kernel32.dll","ucrtbase.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll","api-ms-win-crt-private-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll","api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll","api-ms-win-crt-environment-l1-1-0.dll","api-ms-win-crt-utility-l1-1-0.dll","api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-filesystem-l1-1-0.dll","shlwapi.dll"};
+    CwServices *s=m->services;char name[128];int id;uint64_t module=a[0]-UINT64_C(0x20001);
+    *result=0;
+    if(module>=sizeof(modules)/sizeof(modules[0])){s->last_error=126;return CW_OK;}
+    if(a[1]<=65535){s->last_error=127;return CW_OK;}
+    if(!import_string(m,a[1],name,sizeof(name),0))return CW_API;
+    id=cw_api_id(name);
+    if(id<0 || !cw_api_module_matches((unsigned int)id,modules[module])){s->last_error=127;return CW_OK;}
+    if(!((id<32?s->launch.api_mask:s->launch.api_mask_high[id/32-1])&(1U<<(id%32)))){s->last_error=5;return CW_OK;}
+    s->dynamic_apis[id/32]|=1U<<(id%32);*result=cw_api_token((unsigned int)id);return CW_OK;
+}
+int cw_api_dispatch(CwMachine *m) {
+    uint64_t token=m->ip;unsigned int id;uint64_t a[8],result=0,ret;unsigned char *stack;
+    CwServices *s=m->services;
+    if(token==CW_CRT_RETURN)return cw_crt_continue(m);
+    if(token>=CW_MISSING_IMPORT_BASE && token-CW_MISSING_IMPORT_BASE<16U*CW_MAX_IMPORTS && !((token-CW_MISSING_IMPORT_BASE)%16)){
+        unsigned int slot=(unsigned int)((token-CW_MISSING_IMPORT_BASE)/16);
+        if(!s || s->bound_machine!=m || !(m->plan.profile_flags&CW_PROFILE_DEFER_IMPORTS) ||
+           !(s->launch.profile_flags&CW_PROFILE_DEFER_IMPORTS) || slot>=m->plan.import_count ||
+           m->plan.imports[slot].api!=UINT32_MAX)return CW_API;
+        m->stop_import=slot+1;return CW_UNIMPLEMENTED;
+    }
     if(token<CW_THUNK_BASE || token-CW_THUNK_BASE>=16U*CW_API_COUNT || (token-CW_THUNK_BASE)%16)return CW_MEMORY;
     id=(unsigned int)((token-CW_THUNK_BASE)/16);
-    if(!s || s->bound_machine!=m || !(m->plan.api_mask&(1U<<id)) || !(s->launch.api_mask&(1U<<id)))return CW_API;
+    if(!s || s->bound_machine!=m || !(cw_plan_has_api(&m->plan,id) || (s->dynamic_apis[id/32]&(1U<<(id%32)))) ||
+       !((id<32?s->launch.api_mask:s->launch.api_mask_high[id/32-1])&(1U<<(id%32))))return CW_API;
     if((m->r[4]&15)!=8 || m->r[4]<m->stack_base || m->r[4]-m->stack_base>CW_STACK-40 || !(stack=cw_memory(m,m->r[4],40,CW_R)))return CW_ABI;
     if(!cw_memory(m,m->r[4]+8,32,CW_W))return CW_ABI;
-    a[0]=m->r[1];a[1]=m->r[2];a[2]=m->r[8];a[3]=m->r[9];a[4]=a[5]=a[6]=0;
-    if(id==CW_WRITE_FILE || id==CW_READ_FILE || id==CW_CREATE_FILE) {
-        unsigned int count=id==CW_CREATE_FILE?3U:1U,i;
+    a[0]=m->r[1];a[1]=m->r[2];a[2]=m->r[8];a[3]=m->r[9];a[4]=a[5]=a[6]=a[7]=0;
+    if(id==CW_WRITE_FILE || id==CW_READ_FILE || id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE || id==CW_WIDE_TO_MULTI || id==CW_MULTI_TO_WIDE) {
+        unsigned int count=id==CW_WIDE_TO_MULTI?4U:id==CW_MULTI_TO_WIDE?2U:(id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE)?3U:1U,i;
         unsigned char *extra=cw_memory(m,m->r[4]+40,count*8,CW_R);if(!extra)return CW_ABI;
         for(i=0;i<count;i++)a[4+i]=get64(extra+i*8);
     }
     ret=get64(stack);s->calls[id]++;
     switch(id) {
+    case CW_GET_THREAD_PRIORITY:case CW_SET_THREAD_PRIORITY:{
+        int status=cw_sync_call(m,id,a,&result);if(status)return status;break;
+    }
+    case CW_PATH_IS_RELATIVE:{
+        char path[CW_PATH_LIMIT+1];
+        if(!a[0]){result=1;break;}
+        if(!import_string(m,a[0],path,sizeof(path),0))return CW_API;
+        result=!path[0] || (path[0]!='\\' && path[0]!='/' && path[1]!=':');
+        break;
+    }
+    case CW_DBCS_LEAD_BYTE:
+        /* ACP and OEMCP are single-byte in the current locale profile. */
+        if((uint32_t)a[0]!=0 && (uint32_t)a[0]!=1 &&
+           (uint32_t)a[0]!=1252 && (uint32_t)a[0]!=65001)s->last_error=ERR_PARAMETER;
+        break;
+    case CW_MULTI_TO_WIDE:result=multi_to_wide(m,a);break;
+    case CW_WIDE_TO_MULTI:result=wide_to_multi(m,a);break;
+    case CW_MODULE_HANDLE_A:{int status=service_module(m,a[0],&result);if(status)return status;break;}
+    case CW_PROC_ADDRESS:{int status=service_address(m,a,&result);if(status)return status;break;}
+    case CW_GET_CONSOLE_MODE:
+        /* These handles capture redirected bytes. No terminal mode exists. */
+        result=fail(s,ERR_INVALID_HANDLE);break;
     case CW_GET_STD_HANDLE:
         if((uint32_t)a[0]==UINT32_MAX-10)result=(s->launch.console_mask&1)?0x10001:0;
         else if((uint32_t)a[0]==UINT32_MAX-11)result=(s->launch.console_mask&2)?0x10002:0;
@@ -223,22 +446,46 @@ int cw_api_dispatch(CwMachine *m) {
     case CW_EXIT_PROCESS:cw_files_close_all(m);m->exit_code=(uint32_t)a[0];m->exited=1;m->exit_kind=1;return CW_OK;
     case CW_GET_LAST_ERROR:result=s->last_error;break;
     case CW_SET_LAST_ERROR:s->last_error=(uint32_t)a[0];break;
+    case CW_SET_UNHANDLED_FILTER:
+        if(a[0] && !cw_memory(m,a[0],1,CW_X))return CW_ABI;
+        result=s->exception_filter;s->exception_filter=a[0];break;
+    case CW_FILE_APIS_ANSI:result=s->file_apis_ansi;break;
+    case CW_FILE_APIS_SET_ANSI:s->file_apis_ansi=1;break;
+    case CW_FILE_APIS_SET_OEM:s->file_apis_ansi=0;break;
+    case CW_TLS_ALLOC:{
+        unsigned int i;
+        for(i=0;i<CW_DYNAMIC_TLS_SLOTS;i++)if(!(s->tls_used[i/32]&(1U<<(i%32))))break;
+        if(i==CW_DYNAMIC_TLS_SLOTS){s->last_error=ERR_MEMORY;result=UINT32_MAX;}
+        else {s->tls_used[i/32]|=1U<<(i%32);s->tls_values[i]=0;result=i;}
+        break;
+    }
+    case CW_TLS_FREE:case CW_TLS_GET:case CW_TLS_SET:{
+        uint32_t index=(uint32_t)a[0];
+        if(index>=CW_DYNAMIC_TLS_SLOTS || (id==CW_TLS_FREE && !(s->tls_used[index/32]&(1U<<(index%32)))))result=fail(s,ERR_PARAMETER);
+        else if(id==CW_TLS_FREE){s->tls_used[index/32]&=~(1U<<(index%32));s->tls_values[index]=0;result=1;}
+        else if(id==CW_TLS_SET){s->tls_values[index]=a[1];result=1;}
+        else {result=s->tls_values[index];s->last_error=0;}
+        break;
+    }
     case CW_GET_COMMAND_LINE:result=s->command_base;break;
     case CW_GET_ENVIRONMENT_VARIABLE:result=environment(m,a);break;
     case CW_VIRTUAL_ALLOC:result=a[0] && cw_crt_owned(m,a[0])?fail(s,ERR_ADDRESS):virtual_alloc(m,a);break;
     case CW_VIRTUAL_FREE:result=cw_crt_owned(m,a[0])?fail(s,ERR_ADDRESS):virtual_free(m,a);break;
-    case CW_CREATE_FILE:case CW_READ_FILE:case CW_CLOSE_HANDLE:
+    case CW_CLOSE_HANDLE:
+        if(cw_sync_handle_family(a[0])){int status=cw_sync_call(m,id,a,&result);if(status)return status;}
+        else result=cw_file_call(m,id,a);
+        break;
+    case CW_CREATE_FILE:case CW_READ_FILE:
     case CW_SET_FILE_POINTER:case CW_GET_FILE_SIZE:case CW_FLUSH_FILE_BUFFERS:
         result=cw_file_call(m,id,a);break;
     default:
-        if(id>=CW_MEMCPY){int status=cw_crt_call(m,id,a,&result);if(status)return status;}
+        if(cw_crt_export(id)){int status=cw_crt_call(m,id,a,&result);if(status==CW_CRT_PENDING)return CW_OK;if(status)return status;}
+        else if(id>=CW_CREATE_EVENT && id<=CW_DUPLICATE_HANDLE){int status=cw_sync_call(m,id,a,&result);if(status)return status;}
         else return CW_API;
     }
     m->r[0]=result;m->r[4]+=8;
-    if(ret==UINT64_MAX) {
-        if(m->r[4]-8!=m->initial_sp)return CW_ABI;
-        m->exited=1;m->exit_code=(uint32_t)result;
-    }else m->ip=ret;
+    if(ret>=CW_TLS_RETURN)return cw_bootstrap_return(m,ret,m->r[4]-8);
+    else m->ip=ret;
     /* Nonvolatile integer/vector state remains intact; volatile state is unspecified. */
     return CW_OK;
 }

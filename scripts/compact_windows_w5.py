@@ -40,7 +40,7 @@ def imported_pe_modules(code,modules,payload=b''):
 def build(output):
     output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
     subprocess.run([os.environ.get('CC','cc'),'-std=c11','-Wall','-Wextra','-Werror','-pedantic','-O2','-fsanitize=undefined','-fno-sanitize-recover=all',
-                    *[str(ROOT/'ryzova/compat/windows'/name) for name in ('loader.c','cpu.c','api.c','crt.c','files.c','api_probe.c')],'-o',str(output)],check=True)
+                    *[str(ROOT/'ryzova/compat/windows'/name) for name in ('loader.c','cpu.c','api.c','crt.c','sync_objects.c','files.c','api_probe.c')],'-o',str(output)],check=True)
     return output
 
 def execute(probe,image,budget=262144):

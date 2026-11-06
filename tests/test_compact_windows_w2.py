@@ -22,9 +22,9 @@ class Section(C.Structure):
 class Import(C.Structure):
     _fields_ = [("iat", C.c_uint32), ("api", C.c_uint32)]
 class Plan(C.Structure):
-    _fields_ = [('preferred_base', C.c_uint64), ('base', C.c_uint64)] + [(n, C.c_uint32) for n in ('image_bytes', 'headers', 'entry', 'count', 'reloc_rva', 'reloc_bytes')] + [('sections', Section * 16)] + [(n, C.c_uint32) for n in ('import_count', 'api_mask', 'iat_rva', 'iat_bytes')] + [('imports', Import * 32)]
+    _fields_ = [('preferred_base', C.c_uint64), ('base', C.c_uint64)] + [(n, C.c_uint32) for n in ('image_bytes', 'headers', 'entry', 'count', 'reloc_rva', 'reloc_bytes')] + [('sections', Section * 16)] + [(n, C.c_uint32) for n in ('import_count', 'api_mask', 'iat_rva', 'iat_bytes')] + [('imports', Import * 256)] + [(n, C.c_uint32) for n in ('tls_present', 'tls_rva', 'tls_bytes', 'tls_zero', 'tls_index', 'tls_count')] + [('tls_callbacks', C.c_uint32 * 8), ('api_mask_high', C.c_uint32 * 7), ('profile_flags', C.c_uint32), ('unresolved_imports', C.c_uint32)]
 class Machine(C.Structure):
-    _fields_ = [('plan', Plan), ('image', C.c_void_p), ('stack', C.c_void_p), ('stack_base', C.c_uint64), ('initial_sp', C.c_uint64), ('r', C.c_uint64 * 16), ('ip', C.c_uint64), ('flags', C.c_uint64), ('xmm', (C.c_ubyte * 16) * 16), ('instructions', C.c_uint32), ('exit_code', C.c_uint32), ('exited', C.c_int), ('status', C.c_int), ('exit_kind', C.c_uint32), ('services', C.c_void_p), ('last_guest_ip', C.c_uint64)]
+    _fields_ = [('plan', Plan), ('image', C.c_void_p), ('stack', C.c_void_p), ('stack_base', C.c_uint64), ('initial_sp', C.c_uint64), ('r', C.c_uint64 * 16), ('ip', C.c_uint64), ('flags', C.c_uint64), ('xmm', (C.c_ubyte * 16) * 16), ('instructions', C.c_uint32), ('exit_code', C.c_uint32), ('exited', C.c_int), ('status', C.c_int), ('exit_kind', C.c_uint32), ('services', C.c_void_p), ('last_guest_ip', C.c_uint64), ('tls_next', C.c_uint32), ('stop_import', C.c_uint32), ('x87_control', C.c_uint16), ('x87_status', C.c_uint16), ('x87_tag', C.c_uint16), ('x87_opcode', C.c_uint16), ('x87_ip', C.c_uint64), ('x87_dp', C.c_uint64), ('x87', (C.c_ubyte * 10) * 8), ('mxcsr', C.c_uint32)]
 
 class WindowsW2Tests(unittest.TestCase):
     @classmethod
@@ -33,9 +33,10 @@ class WindowsW2Tests(unittest.TestCase):
         cls.directory = Path(cls.temp.name)
         cls.probe = build(cls.directory / 'probe', sanitize=True)
         library = cls.directory / 'runtime.so'
-        subprocess.run([os.environ.get('CC', 'cc'), '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-shared', '-fPIC', '-fsanitize=undefined', '-fno-sanitize-recover=all', *[str(ROOT / 'ryzova/compat/windows' / x) for x in ('loader.c', 'cpu.c', 'api.c', 'crt.c', 'files.c')], '-o', str(library)], check=True)
+        subprocess.run([os.environ.get('CC', 'cc'), '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-shared', '-fPIC', '-fsanitize=undefined', '-fno-sanitize-recover=all', *[str(ROOT / 'ryzova/compat/windows' / x) for x in ('loader.c', 'cpu.c', 'api.c', 'crt.c', 'sync_objects.c', 'files.c')], '-o', str(library)], check=True)
         cls.lib = C.CDLL(str(library))
         cls.lib.cw_plan.argtypes = [C.c_void_p, C.c_size_t, C.c_uint64, C.POINTER(Plan)]
+        cls.lib.cw_plan_diagnostic.argtypes = cls.lib.cw_plan.argtypes + [C.POINTER(C.c_uint32)]
         cls.lib.cw_load.argtypes = [C.c_void_p, C.c_size_t, C.c_uint64, C.c_void_p, C.c_size_t, C.POINTER(Machine)]
         cls.lib.cw_read.argtypes = [C.POINTER(Machine), C.c_uint64, C.c_void_p, C.c_size_t, C.c_uint]
         cls.lib.cw_write.argtypes = [C.POINTER(Machine), C.c_uint64, C.c_void_p, C.c_size_t]
@@ -68,6 +69,50 @@ class WindowsW2Tests(unittest.TestCase):
     def test_all_six_w1_variants_are_denied_by_execution_admission(self):
         for name, blob in variants().items():
             with self.subTest(name=name): self.denied(blob)
+    def test_resource_metadata_is_opaque_and_requires_read_only_backing(self):
+        image = bytearray(pe(b'\xc3', bytes(32)))
+        section = 0x188 + 40
+        directory = 0x98 + 112 + 2*8
+        image[section:section+8] = b'.rsrc\x00\x00\x00'
+        struct.pack_into('<I', image, section+36, 0x40000040)
+        struct.pack_into('<II', image, directory, 0x2000, 32)
+        self.assertEqual(self.admitted(bytes(image))[0], 0)
+        for offset, fmt, value in (
+            (section+36, 'I', 0xc0000040),
+            (section+36, 'I', 0x60000040),
+            (directory, 'I', 0x1000),
+            (directory, 'I', 0x2001),
+            (directory+4, 'I', 15),
+            (directory+4, 'I', 513),
+            (section+8, 'I', 16),
+            (section, 'Q', 0),
+            (0x400+14, 'H', 3),
+        ):
+            with self.subTest(offset=offset, value=value):
+                self.denied(self.mutate(offset, fmt, value, image))
+
+    def test_directory_diagnostic_clears_denied_plan_and_reports_first_unsupported(self):
+        sentinel = 0xffffffff
+        plan = Plan()
+        for directories, expected_status, expected_directory in (
+            ((), 0, sentinel), ((7,), 2, 7), ((7, 13), 2, 7), ((0, 9), 2, 0),
+        ):
+            image = pe(b'\xc3')
+            for directory in directories:
+                image = self.mutate(0x98+112+directory*8, 'II', (0x1000, 8), image)
+            C.memset(C.byref(plan), 0xa5, C.sizeof(plan))
+            reported = C.c_uint32(123)
+            status = self.lib.cw_plan_diagnostic(image, len(image), 0, C.byref(plan), C.byref(reported))
+            self.assertEqual((status, reported.value), (expected_status, expected_directory))
+            self.assertEqual(status, self.admitted(image)[0])
+            self.assertEqual(status, self.lib.cw_plan_diagnostic(image, len(image), 0, C.byref(plan), None))
+            if status:
+                self.assertEqual(bytes(plan), bytes(C.sizeof(plan)))
+                self.denied(image)
+        reported = C.c_uint32(123)
+        self.assertNotEqual(self.lib.cw_plan_diagnostic(b'', 0, 0, C.byref(plan), C.byref(reported)), 0)
+        self.assertEqual(reported.value, sentinel)
+
     def test_windows_profile_fields_checked_independently(self):
         for offset, fmt, value in [(0x98+68,'H',2),(0x98+24,'Q',PREFERRED+1),(0x98+24,'Q',0x8000000000000000),(0x98+60,'I',0),(0x188+20,'I',0),(0x98+112+13*8,'II',(0x1000,8)),(0x84,'H',0xAA64),(0x98,'H',0x10B),(0x96,'H',0x2022),(0x96,'H',0)]:
             with self.subTest(offset=offset,value=value):self.denied(self.mutate(offset,fmt,value))

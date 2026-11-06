@@ -60,7 +60,7 @@ class WindowsW5Tests(unittest.TestCase):
 
     def test_two_modules_resolve_only_their_own_explicit_exports(self):
         ctx=self.context();self.assertEqual(ctx[0].plan.import_count,17)
-        for module,name in [('kernel32.dll','malloc'),('ucrtbase.dll','WriteFile'),('msvcrt.dll','malloc'),('api-ms-win-crt-heap-l1-1-0.dll','malloc')]:self.denied(imported_pe_modules(b'\xc3',{module:(name,)}))
+        for module,name in [('kernel32.dll','malloc'),('ucrtbase.dll','WriteFile'),('msvcrt.dll','malloc'),('api-ms-win-crt-heap-l1-1-0.dll','WriteFile')]:self.denied(imported_pe_modules(b'\xc3',{module:(name,)}))
         self.denied(imported_pe_modules(b'\xc3',{'KERNEL32.DLL':('GetLastError',),'kernel32.dll':('SetLastError',)}))
     def test_crt_calls_need_launch_permission_and_iat_is_immutable(self):
         blob=imported_pe_modules(b'\xc3',{'ucrtbase.dll':('strlen',)})
