@@ -49,6 +49,9 @@ main(int argc, char **argv)
     if(fd<0 || readn(fd, &guard, sizeof guard)!=sizeof guard || !guard)
         sysfatal("initialize guest stack guard: %r");
     close(fd);
+    /* Match the guest profile's initial IEEE rounding and exception masks. */
+    setfcr(FPRNR);
+    setfsr(0);
     memset(&result, 0, sizeof result);
     if(version)
         status = mac8_start(image, image_bytes, arena, Mac8ArenaBytes, guard, &result);

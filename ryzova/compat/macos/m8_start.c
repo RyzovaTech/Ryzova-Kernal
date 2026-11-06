@@ -1533,6 +1533,27 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
                 flags = arm_flags(v, access, sub ? v-access : v+access, op>>31, sub);
             }else
                 flags = op&15;
+        }else if((op&0x7fe0f800U)==0x1ac00800U){ /* UDIV/SDIV */
+            wide = op>>31;
+            bytes = wide ? 64 : 32;
+            rt2 = (op>>16)&31;
+            v = rn==31 ? 0 : r[rn];
+            access = rt2==31 ? 0 : r[rt2];
+            if(!wide){
+                v = (unsigned int)v;
+                access = (unsigned int)access;
+            }
+            if(!access)
+                v = 0;
+            else if(op&(1U<<10)){
+                Word minimum = (Word)1<<(bytes-1);
+                Word mask = wide ? ~(Word)0 : 0xffffffffU;
+                if(v!=minimum || access!=mask)
+                    v = (Word)((int64_t)sign_extend(v, bytes)/(int64_t)sign_extend(access, bytes));
+            }else
+                v /= access;
+            if(rd!=31)
+                r[rd] = wide ? v : (unsigned int)v;
         }else if((op&0x7fe0f000U)==0x1ac02000U){ /* Variable shifts */
             wide = op>>31;
             bytes = wide ? 64 : 32;
