@@ -19,21 +19,40 @@ def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def verify(image, bootstrap, references, output):
+def verify(image, bootstrap, references, output, sqlite=False):
     base_sha = bootstrap_provenance(image, bootstrap)
     output.mkdir(parents=True, exist_ok=True)
     commit = source_head()
     cases_by_arch = {}
-    (output/'input.json').write_bytes(INPUT)
-    for arch, (name, _, digest, _, _) in TARGETS.items():
-        ref = references/f'macos-m8-jq-{arch}'
-        (output/name).write_bytes(verified_image(arch, (ref/name).read_bytes()))
-        receipt = json.loads((ref/'reference.json').read_text())
-        cases = receipt['cases']
-        if (receipt['source_commit'], receipt['sha256'], receipt['architecture'], cases) != (
-                commit, digest, arch, expected_cases()):
-            raise ValueError(f'{arch}: native reference evidence mismatch')
-        cases_by_arch[arch] = cases
+    binaries = {}
+    if sqlite:
+        from compact_macos_m92_sqlite import IMAGE_SHA256, check_cases, inventory
+        for arch, digest in IMAGE_SHA256.items():
+            ref = references/f'macos-m92-sqlite-{arch}'
+            binary = (ref/'sqlite3').read_bytes()
+            receipt = json.loads((ref/'reference.json').read_text())
+            if (receipt['source_commit'], receipt['architecture'], receipt['image_sha256'],
+                hashlib.sha256(binary).hexdigest()) != (commit, arch, digest, digest):
+                raise ValueError(f'{arch}: SQLite native reference evidence mismatch')
+            if receipt['layout'] != inventory(arch, binary):
+                raise ValueError(f'{arch}: SQLite Mach-O inventory differs')
+            check_cases(receipt['cases'])
+            name = f'sqlite3-{arch}'
+            (output/name).write_bytes(binary)
+            cases_by_arch[arch] = receipt['cases']
+            binaries[arch] = name, digest
+    else:
+        (output/'input.json').write_bytes(INPUT)
+        for arch, (name, _, digest, _, _) in TARGETS.items():
+            ref = references/f'macos-m8-jq-{arch}'
+            (output/name).write_bytes(verified_image(arch, (ref/name).read_bytes()))
+            receipt = json.loads((ref/'reference.json').read_text())
+            cases = receipt['cases']
+            if (receipt['source_commit'], receipt['sha256'], receipt['architecture'], cases) != (
+                    commit, digest, arch, expected_cases()):
+                raise ValueError(f'{arch}: native reference evidence mismatch')
+            cases_by_arch[arch] = cases
+            binaries[arch] = name, digest
 
     sources = subprocess.check_output(
         ['git', 'ls-files', '-z', 'sys/src/9', 'sys/include', 'amd64/include',
@@ -68,38 +87,46 @@ def verify(image, bootstrap, references, output):
             kernel_sha = digest_line(build, '9pc64')
             extract_kernel(image, output, kernel_sha)
             runner_sha = digest_line(build, program)
-            commands = [
-                f"cat '#Z/version'; sha1sum -2 256 {program}", setup,
-                f'hget {url}/input.json >/tmp/m8-input; cp /tmp/m8-input /tmp/m8-input-original',
-                'sha1sum -2 256 /tmp/m8-input-original',
-                "q='{count: (.items | length), sum: (.items | add)}'",
-            ]
+            commands = [f"cat '#Z/version'; sha1sum -2 256 {program}", setup]
+            if sqlite:
+                # Short serial commands avoid overrunning the emulated console.
+                commands.append(f"launch={program}")
+            else:
+                commands.extend([
+                    f'hget {url}/input.json >/tmp/m8-input; cp /tmp/m8-input /tmp/m8-input-original',
+                    'sha1sum -2 256 /tmp/m8-input-original',
+                    "q='{count: (.items | length), sum: (.items | add)}'",
+                ])
             markers = {}
-            for arch, (name, *_details) in TARGETS.items():
+            for arch, (name, _) in binaries.items():
                 path = f'/tmp/m8-{arch}'
                 commands.append(f'hget {url}/{name} > {path}; sha1sum -2 256 {path}')
                 for case in ('version', 'query'):
                     prefix = f'{path}-{case}'
                     marker = f'M8_{arch}_{case}_OK'
                     markers[len(commands)] = marker
-                    launch = (f'--run {path} -- jq --version' if case == 'version' else
-                              f'--run --read-only records.json /tmp/m8-input {path} -- jq -c $q records.json')
+                    if sqlite:
+                        argv = cases_by_arch[arch][case]['argv']
+                        guest = " ".join("'" + word.replace("'", "''") + "'" for word in argv)
+                        launch = f'$launch --run {path} -- sqlite3 {guest}'
+                    else:
+                        args = (f'--run {path} -- jq --version' if case == 'version' else
+                                f'--run --read-only records.json /tmp/m8-input {path} -- jq -c $q records.json')
+                        launch = f'{program} {args}'
                     commands.append(
-                        f'if({program} {launch} >{prefix}.out >[2]{prefix}.err) echo {marker}; '
+                        f'if({launch} >{prefix}.out >[2]{prefix}.err) echo {marker}; '
                         f'if not cat {prefix}.err')
                     commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
-            commands.append('sha1sum -2 256 /tmp/m8-input')
+            if not sqlite:
+                commands.append('sha1sum -2 256 /tmp/m8-input')
             run = session(image, commands, output, 'fresh', 120, markers)
         finally:
             server.shutdown()
 
     if b'Ryzova Kernel' not in run or digest_line(run, program) != runner_sha:
         raise ValueError('native kernel or runtime identity differs')
-    input_digest = hashlib.sha256(INPUT).hexdigest()
-    if any(digest_line(run, name) != input_digest for name in ('/tmp/m8-input-original', '/tmp/m8-input')):
-        raise ValueError('native input digest changed')
     report = {}
-    for arch, (name, _, digest, _, _) in TARGETS.items():
+    for arch, (_, digest) in binaries.items():
         path = f'/tmp/m8-{arch}'
         if digest_line(run, path) != digest:
             raise ValueError(f'{arch}: in-guest executable digest differs')
@@ -109,11 +136,19 @@ def verify(image, bootstrap, references, output):
                 if digest_line(run, f'{path}-{case}.{suffix}') != expected_digest:
                     raise ValueError(f'{arch}: native {case} {stream} differs')
         report[arch] = dict(sha256=digest, cases=cases_by_arch[arch])
-    receipt = dict(schema='compact-macos-m8-native-jq/v1', source_commit=commit,
+    schema = 'compact-macos-m93-native-sqlite/v1' if sqlite else 'compact-macos-m8-native-jq/v1'
+    receipt = dict(schema=schema, source_commit=commit,
                    source_archive_sha256=source_sha, bootstrap_sha256=base_sha, kernel_sha256=kernel_sha,
                    runner_sha256=runner_sha, host_architecture='amd64', architectures=report,
-                   input_sha256=input_digest, input_unchanged=True, jq_profile_qualified=True,
-                   launcher='--run', guest_input_alias='records.json')
+                   launcher='--run')
+    if sqlite:
+        receipt['sqlite_profile_qualified'] = True
+    else:
+        input_digest = hashlib.sha256(INPUT).hexdigest()
+        if any(digest_line(run, name) != input_digest for name in ('/tmp/m8-input-original', '/tmp/m8-input')):
+            raise ValueError('native input digest changed')
+        receipt.update(input_sha256=input_digest, input_unchanged=True, jq_profile_qualified=True,
+                       guest_input_alias='records.json')
     (output/'qualification.json').write_text(json.dumps(receipt, indent=2)+'\n')
     print(json.dumps(receipt))
 
@@ -122,5 +157,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('image', 'bootstrap', 'references', 'output'):
         parser.add_argument(name, type=Path)
+    parser.add_argument('--sqlite', action='store_true')
     args = parser.parse_args()
-    verify(args.image, args.bootstrap, args.references, args.output)
+    verify(args.image, args.bootstrap, args.references, args.output, args.sqlite)

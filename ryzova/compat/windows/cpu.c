@@ -523,6 +523,14 @@ static int tick(CwMachine *m,int windows_bootstrap) {
         if(group==2 || group==3)return CW_OPCODE;
         v=shift(&d,group,get(&d,o,n),n,count);put(&d,o,n,v);
     }
+    else if(op==0xfe){ /* INC/DEC r/m8 */
+        o=operand(&d,&reg,&group,1);
+        if(group>1)return CW_OPCODE;
+        a=m->flags&CF;
+        v=alu(&d,group?5:0,get(&d,o,1),1,1);
+        m->flags=(m->flags&~(uint64_t)CF)|a;
+        put(&d,o,1,v);
+    }
     else if(op==0xff){o=operand(&d,&reg,&group,n);if(group==2 || group==4 || group==6){if(d.prefix)return CW_OPCODE;v=get(&d,o,8);if(group==6)push(&d,v);else {if(group==2)push(&d,d.cur);jump=1;target=v;}}else if(group<2){a=m->flags&CF;v=alu(&d,group?5:0,get(&d,o,n),1,n);m->flags=(m->flags&~(uint64_t)CF)|a;put(&d,o,n,v);}else return CW_OPCODE;}
     else if(op==0xd9){
         if(d.prefix || d.rex&8)return CW_OPCODE;
@@ -629,6 +637,35 @@ static int tick(CwMachine *m,int windows_bootstrap) {
         else if(second==0xaf){uint64_t high;o=operand(&d,&reg,&group,n);product(get(&d,regop(&d,reg,n),n),get(&d,o,n),n,1,&v,&high);multiply_flags(&d,v,high,n,1);put(&d,regop(&d,reg,n),n,v);}
         else if(second==0xbe || second==0xbf){unsigned int small=second==0xbe?1:2;o=operand(&d,&reg,&group,small);put(&d,regop(&d,reg,n),n,sign_extend(get(&d,o,small),small));}
         else if(second==0xb6 || second==0xb7){unsigned int small=second==0xb6?1:2;o=operand(&d,&reg,&group,small);put(&d,regop(&d,reg,n),n,get(&d,o,small));}
+        else if(second==0xae && !d.prefix && !d.rex){
+            /* Guest execution is single-threaded and memory accesses are ordered. */
+            if(fetch(&d,1)!=0xf0)return CW_OPCODE; /* MFENCE */
+        }
+        else if(second>=0xc8 && second<=0xcf && !d.prefix){ /* BSWAP */
+            unsigned int i;
+            reg=(second&7)+((d.rex&1)?8:0);
+            a=m->r[reg];
+            v=0;
+            for(i=0;i<n;i++)v=(v<<8)|((a>>(8*i))&255);
+            put(&d,regop(&d,reg,n),n,v);
+        }
+        else if(second==0x3a && d.prefix==0x66){
+            unsigned int lane,width=(d.rex&8)?8:4;
+            if(fetch(&d,1)!=0x22)return CW_OPCODE; /* PINSRD/PINSRQ */
+            o=operand(&d,&reg,&group,width);
+            lane=(unsigned int)fetch(&d,1)&(16/width-1);
+            v=get(&d,o,width);
+            if(!d.error)xmm_put(m->xmm[reg]+lane*width,width,v);
+        }
+        else if(second==0xfe && d.prefix==0x66){ /* PADDD */
+            unsigned char source[16];
+            unsigned int i;
+            o=operand(&d,&reg,&group,8);
+            if(o.reg<0 && (address(&d,o)&15))return CW_MEMORY;
+            d.error=xmm_read(&d,o,source,16);
+            if(!d.error)for(i=0;i<16;i+=4)
+                xmm_put(m->xmm[reg]+i,4,xmm_low(m->xmm[reg]+i,4)+xmm_low(source+i,4));
+        }
         else if(second==0x50 && (!d.prefix || d.prefix==0x66)){
             unsigned int stride=d.prefix==0x66?8:4;
             unsigned int i;

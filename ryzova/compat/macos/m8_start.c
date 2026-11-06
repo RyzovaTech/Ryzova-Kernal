@@ -11,7 +11,7 @@
 enum {
     Intel64 = 0x01000007, Arm64 = 0x0100000c,
     StackBase = 0xC00000, StackBytes = Mac8StackBytes, StartBudget = 4096,
-    Argv = 0x100, Envp = 0x1a0, LocaleEnv = 0x1d0, Args = 0x200, ArgLimit = 4096, GuardOffset = 8, StreamsOffset = 16, RuneOffset = 64, ErrnoOffset = 16, PathOffset = 64, PathBytes = 1024
+    Argv = 0x100, Envp = 0x1a0, LocaleEnv = 0x1d0, HomeEnv = 0x1e0, Args = 0x200, ArgLimit = 4096, GuardOffset = 8, StreamsOffset = 16, RuneOffset = 64, ZoneOffset = 3328, ErrnoOffset = 16, PathOffset = 64, PathBytes = 1024
 };
 
 typedef unsigned long long Word;
@@ -21,6 +21,9 @@ typedef unsigned long long Word;
 enum { ServiceExtent = Mac8ArenaBytes-Mac8StackBytes };
 #define STREAM_HANDLE 0x18000ULL
 #define INPUT_HANDLE (STREAM_HANDLE+48)
+#define NULL_HANDLE (STREAM_HANDLE+64)
+#define MALLOC_ZONE (SERVICE_BASE+ZoneOffset)
+#define MALLOC_ZONE_SIZE 0x19100ULL
 #define ERRNO_ADDRESS (WRITABLE_BASE+ErrnoOffset)
 
 static Word
@@ -42,9 +45,12 @@ write_le(unsigned char *data, unsigned int bytes, Word value)
 }
 
 static Word
-sign_extend(unsigned int value, unsigned int bits)
+sign_extend(Word value, unsigned int bits)
 {
-    Word range = (Word)1 << bits;
+    Word range;
+    if(bits==64)
+        return value;
+    range = (Word)1 << bits;
     return (Word)value - ((value & (range>>1)) ? range : 0);
 }
 
@@ -259,17 +265,42 @@ format_guest(const Mac8Image *plan, const unsigned char *arena, const unsigned c
     return -1;
 }
 
-enum { KeyLimit = 16, ExitLimit = 16 };
+enum { KeyLimit = 16, ExitLimit = 16, MutexLimit = 64, MutexBytes = 64, MutexAttrBytes = 16, MutexAttrTag = 0x4d385441 };
 #define EXIT_RETURN 0x19010ULL
+#define MAIN_RETURN 0x19020ULL
+typedef struct GuestMutex GuestMutex;
+struct GuestMutex {
+    Word address;
+    unsigned int depth, recursive;
+};
 typedef struct Thread Thread;
 struct Thread {
+    Word sigint;
+    GuestMutex mutexes[MutexLimit];
     Word values[KeyLimit];
     Word cleanup[ExitLimit], exit_sp;
     const unsigned char *input;
     const char *input_name;
     unsigned int input_bytes, input_offset;
-    unsigned int allocated, closed, cleanup_count, input_open, input_eof;
+    unsigned int allocated, closed, cleanup_count, input_open, input_eof, zone, null_open, null_eof;
 };
+
+static GuestMutex *
+guest_mutex(Thread *thread, Word address, int create)
+{
+    GuestMutex *slot = 0;
+    unsigned int i;
+    for(i=0; i<MutexLimit; i++){
+        if(thread->mutexes[i].address==address)
+            return &thread->mutexes[i];
+        if(!slot && !thread->mutexes[i].address)
+            slot = &thread->mutexes[i];
+    }
+    if(!slot || !create)
+        return 0;
+    slot->address = address;
+    return slot;
+}
 
 static int
 write_stream(Thread *thread, Mac8Stop *out, Word stream, const unsigned char *bytes, unsigned int count)
@@ -295,7 +326,7 @@ write_stream(Thread *thread, Mac8Stop *out, Word stream, const unsigned char *by
  * a guest memory or allocation-ownership fault. Return 2 for guest exit. */
 static int
 service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
-             Mac8Heap *heap, const char *name, Word a0, Word a1, Word a2, Word a3, Word varargs,
+             Mac8Heap *heap, const char *name, Word a0, Word a1, Word a2, Word a3, Word a4, Word varargs,
              Word *result, Thread *thread, Mac8Stop *out)
 {
     unsigned int offset, i;
@@ -303,6 +334,40 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
     unsigned char *dest, formatted[Mac8OutputLimit];
     int count, zero = !strcmp(name, "_calloc");
     *result = 0;
+    if(!strcmp(name, "_malloc_create_zone")){
+        if(a0>Mac8HeapBytes || a1 || thread->zone)
+            return 1;
+        thread->zone = 1;
+        *result = MALLOC_ZONE;
+        return 1;
+    }
+    if(!strcmp(name, "_malloc_set_zone_name")){
+        if(a0!=MALLOC_ZONE || !thread->zone || string_length(plan, arena, stack, a1, 64)<0)
+            return -1;
+        return 1;
+    }
+    if(!strcmp(name, "_malloc_zone_size") || !strcmp(name, "_malloc_size")){
+        if(!strcmp(name, "_malloc_zone_size")){
+            if(a0!=MALLOC_ZONE || !thread->zone)
+                return -1;
+            a0 = a1;
+        }
+        for(i=0; i<heap->count; i++)
+            if(a0==HEAP_BASE+heap->blocks[i].offset){
+                *result = heap->blocks[i].bytes;
+                break;
+            }
+        return 1;
+    }
+    if(!strcmp(name, "_malloc_zone_malloc") || !strcmp(name, "_malloc_zone_free") ||
+       !strcmp(name, "_malloc_zone_realloc")){
+        if(a0!=MALLOC_ZONE || !thread->zone)
+            return -1;
+        name = !strcmp(name, "_malloc_zone_malloc") ? "_malloc" :
+               !strcmp(name, "_malloc_zone_free") ? "_free" : "_realloc";
+        a0 = a1;
+        a1 = a2;
+    }
     if(!strcmp(name, "_setlocale")){
         if(!locale_call(plan, arena, stack, a0, a1))
             return -1;
@@ -376,6 +441,75 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
         }
         dest[i] = 0;
         *result = WRITABLE_BASE+PathOffset;
+    }else if(!strcmp(name, "_sysctlbyname")){
+        count = string_length(plan, arena, stack, a0, 64);
+        if(count<0)
+            return -1;
+        left = guest_read(plan, arena, stack, a0, count+1, 1);
+        if(!left)
+            return -1;
+        if(a3 || a4 || strcmp((const char *)left, "hw.ncpu")){
+            write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, a3 || a4 ? 1 : 2);
+            *result = (unsigned int)-1;
+        }else{
+            unsigned char *length = guest_write(plan, arena, stack, a2, 8, 1);
+            if(!length)
+                return -1;
+            if(a1 && read_le(length, 8)<4){
+                write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 12);
+                *result = (unsigned int)-1;
+            }else{
+                if(a1){
+                    dest = guest_write(plan, arena, stack, a1, 4, 1);
+                    if(!dest)
+                        return -1;
+                    write_le(dest, 4, 1);
+                }
+                write_le(length, 8, 4);
+            }
+        }
+    }else if(!strcmp(name, "_access")){
+        count = string_length(plan, arena, stack, a0, PathBytes);
+        if(count<0)
+            return -1;
+        left = guest_read(plan, arena, stack, a0, count+1, 1);
+        if(!left)
+            return -1;
+        if(strcmp((const char *)left, "/dev/null") &&
+           (!thread->input || strcmp((const char *)left, thread->input_name)))
+            i = 2;
+        else if(a1&~7ULL)
+            i = 22;
+        else
+            i = a1&3 ? 13 : 0;
+        if(i){
+            write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, i);
+            *result = (unsigned int)-1;
+        }
+    }else if(!strcmp(name, "_stat") || !strcmp(name, "_stat$INODE64")){
+        count = string_length(plan, arena, stack, a0, PathBytes);
+        if(count<0)
+            return -1;
+        left = guest_read(plan, arena, stack, a0, count+1, 1);
+        if(!left)
+            return -1;
+        if(strcmp((const char *)left, "/dev/null") &&
+           (!thread->input || strcmp((const char *)left, thread->input_name))){
+            write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 2);
+            *result = (unsigned int)-1;
+        }else{
+            /* Darwin LP64 stat64, with synthetic metadata for this namespace. */
+            dest = guest_write(plan, arena, stack, a1, 144, 1);
+            if(!dest)
+                return -1;
+            memset(dest, 0, 144);
+            i = !strcmp((const char *)left, "/dev/null");
+            write_le(dest+4, 2, i ? 0020444 : 0100444);
+            write_le(dest+6, 2, 1);
+            write_le(dest+8, 8, i ? 1 : 2);
+            write_le(dest+96, 8, i ? 0 : thread->input_bytes);
+            write_le(dest+112, 4, 4096);
+        }
     }else if(!strcmp(name, "_pathconf")){
         count = string_length(plan, arena, stack, a0, PathBytes);
         if(count<0)
@@ -415,6 +549,71 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
         dest[0] = '/';
         dest[1] = 0;
         *result = a1;
+    }else if(!strcmp(name, "_pthread_mutexattr_init") || !strcmp(name, "_pthread_mutexattr_settype") ||
+             !strcmp(name, "_pthread_mutexattr_destroy")){
+        dest = guest_write(plan, arena, stack, a0, MutexAttrBytes, 1);
+        if(!dest || a0%8)
+            return -1;
+        if(!strcmp(name, "_pthread_mutexattr_init")){
+            memset(dest, 0, MutexAttrBytes);
+            write_le(dest, 8, MutexAttrTag);
+        }else if(read_le(dest, 8)!=MutexAttrTag)
+            *result = 22;
+        else if(!strcmp(name, "_pthread_mutexattr_destroy"))
+            memset(dest, 0, MutexAttrBytes);
+        else if(a1!=0 && a1!=2)
+            *result = 22;
+        else
+            write_le(dest+8, 4, a1);
+    }else if(!strcmp(name, "_pthread_mutex_init")){
+        GuestMutex *mutex;
+        dest = guest_write(plan, arena, stack, a0, MutexBytes, 1);
+        if(!dest || a0%8)
+            return -1;
+        i = 0;
+        if(a1){
+            left = guest_read(plan, arena, stack, a1, MutexAttrBytes, 1);
+            if(!left || a1%8 || read_le(left, 8)!=MutexAttrTag)
+                return -1;
+            i = read_le(left+8, 4);
+            if(i!=0 && i!=2)
+                return -1;
+        }
+        if(guest_mutex(thread, a0, 0))
+            *result = 16;
+        else if(!(mutex=guest_mutex(thread, a0, 1)))
+            *result = 35;
+        else{
+            memset(dest, 0, MutexBytes);
+            mutex->recursive = i==2;
+        }
+    }else if(!strcmp(name, "_pthread_mutex_lock") || !strcmp(name, "_pthread_mutex_trylock") ||
+             !strcmp(name, "_pthread_mutex_unlock") || !strcmp(name, "_pthread_mutex_destroy")){
+        GuestMutex *mutex;
+        dest = guest_write(plan, arena, stack, a0, MutexBytes, 1);
+        if(!dest || a0%8)
+            return -1;
+        mutex = guest_mutex(thread, a0, read_le(dest, 8)==0x32aaaba7);
+        if(!mutex)
+            *result = 22;
+        else if(!strcmp(name, "_pthread_mutex_destroy")){
+            if(mutex->depth)
+                *result = 16;
+            else {
+                memset(mutex, 0, sizeof(*mutex));
+                memset(dest, 0, MutexBytes);
+            }
+        }else if(!strcmp(name, "_pthread_mutex_unlock")){
+            if(!mutex->depth)
+                *result = 1;
+            else
+                mutex->depth--;
+        }else if(mutex->depth && !mutex->recursive)
+            *result = !strcmp(name, "_pthread_mutex_trylock") ? 16 : 11;
+        else if(mutex->depth==65535)
+            *result = 35;
+        else
+            mutex->depth++;
     }else if(!strcmp(name, "_pthread_key_create")){
         dest = guest_write(plan, arena, stack, a0, 8, 1);
         if(!dest || (a1 && !mac8_access(plan, a1, 1, Mac8Execute)))
@@ -445,6 +644,43 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
             *result = (unsigned int)-1;
         else
             thread->cleanup[thread->cleanup_count++] = a0;
+    }else if(!strcmp(name, "_open")){
+        count = string_length(plan, arena, stack, a0, PathBytes);
+        if(count<0)
+            return -1;
+        left = guest_read(plan, arena, stack, a0, count+1, 1);
+        if(!left)
+            return -1;
+        /* The snapshot-only namespace does not publish a POSIX fd bridge. */
+        write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4,
+                 !strcmp((const char *)left, "/dev/urandom") ? 2 : 13);
+        *result = (unsigned int)-1;
+    }else if(!strcmp(name, "_time")){
+        *result = 946684800; /* The isolated virtual clock starts at 2000-01-01 UTC. */
+        if(a0){
+            dest = guest_write(plan, arena, stack, a0, 8, 1);
+            if(!dest)
+                return -1;
+            write_le(dest, 8, *result);
+        }
+    }else if(!strcmp(name, "_getuid") || !strcmp(name, "_geteuid")){
+        *result = 1000; /* Unprivileged identity in the guest namespace. */
+    }else if(!strcmp(name, "_getpid")){
+        *result = 1; /* This launch has one process. */
+    }else if(!strcmp(name, "_getpwuid")){
+        /* A missing account record is a normal result in this namespace. */
+        write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 0);
+    }else if(!strcmp(name, "_signal")){
+        /* The bounded single-thread profile has no external signal source.
+         * Keep the guest SIGINT disposition and validate handler addresses. */
+        if(a0!=2 || (a1>1 && (!mac8_access(plan, a1, 1, Mac8Execute) ||
+                             (plan->cpu==Arm64 && a1%4)))){
+            write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 22);
+            *result = ~(Word)0;
+        }else{
+            *result = thread->sigint;
+            thread->sigint = a1;
+        }
     }else if(!strcmp(name, "_isatty")){
         i = (unsigned int)a0;
         write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, i<3 && !(thread->closed&(1U<<i)) ? 25 : 9);
@@ -452,13 +688,26 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
         count = string_length(plan, arena, stack, a0, 4096);
         if(count<0)
             return -1;
-        if(count==6){
-            left = guest_read(plan, arena, stack, a0, 7, 1);
-            if(!left)
-                return -1;
-            if(!memcmp(left, "LC_ALL", 7))
-                *result = StackBase+LocaleEnv+7;
-        }
+        left = guest_read(plan, arena, stack, a0, count+1, 1);
+        if(!left)
+            return -1;
+        if(!strcmp((const char *)left, "LC_ALL"))
+            *result = StackBase+LocaleEnv+7;
+        else if(!strcmp((const char *)left, "HOME"))
+            *result = StackBase+HomeEnv+5;
+    }else if(!strcmp(name, "_strchr") || !strcmp(name, "_strrchr")){
+        count = string_length(plan, arena, stack, a0, 65536);
+        if(count<0)
+            return -1;
+        left = guest_read(plan, arena, stack, a0, count+1, 1);
+        if(!left)
+            return -1;
+        for(i=0; i<=(unsigned int)count; i++)
+            if(left[i]==(unsigned char)a1){
+                *result = a0+i;
+                if(!strcmp(name, "_strchr"))
+                    break;
+            }
     }else if(!strcmp(name, "_memchr")){
         if(a2>Mac8InputLimit)
             return -1;
@@ -470,7 +719,10 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
             if(right)
                 *result = a0+(right-left);
         }
-    }else if(!strcmp(name, "_memcpy") || !strcmp(name, "_memmove") || !strcmp(name, "_memcmp")){
+    }else if(!strcmp(name, "_memcpy") || !strcmp(name, "_memmove") ||
+             !strcmp(name, "_memcmp") || !strcmp(name, "___memcpy_chk")){
+        if(!strcmp(name, "___memcpy_chk") && a2>a3)
+            return -1;
         if(a2>Mac8InputLimit)
             return -1;
         if(!strcmp(name, "_memcmp")){
@@ -531,6 +783,12 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
         memcpy(out->stdout_data+out->stdout_bytes, formatted, count);
         out->stdout_bytes += count;
         *result = count;
+    }else if(!strcmp(name, "_vfprintf")){
+        count = format_guest(plan, arena, stack, a1, a2, varargs ? StackArgs : IntelVaList,
+                             formatted, Mac8OutputLimit);
+        if(count<0 || !write_stream(thread, out, a0, formatted, count))
+            return -1;
+        *result = count;
     }else if(!strcmp(name, "_vsnprintf")){
         count = format_guest(plan, arena, stack, a2, a3, varargs ? StackArgs : IntelVaList,
                              formatted, Mac8OutputLimit);
@@ -556,7 +814,15 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
             return -1;
         if(strcmp((const char *)right, "r") && strcmp((const char *)right, "rb"))
             write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 13); /* EACCES */
-        else if(!thread->input || strcmp((const char *)left, thread->input_name))
+        else if(!strcmp((const char *)left, "/dev/null")){
+            if(thread->null_open)
+                write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 24);
+            else {
+                thread->null_open = 1;
+                thread->null_eof = 0;
+                *result = NULL_HANDLE;
+            }
+        }else if(!thread->input || strcmp((const char *)left, thread->input_name))
             write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 2);
         else if(thread->input_open)
             write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 24); /* EMFILE */
@@ -567,6 +833,10 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
             *result = INPUT_HANDLE;
         }
     }else if(!strcmp(name, "_fgets")){
+        if(a2==NULL_HANDLE && thread->null_open && a1 && a1<=Mac8InputLimit){
+            thread->null_eof = 1;
+            return 1;
+        }
         if(a2!=INPUT_HANDLE || !thread->input_open || a1==0 || a1>Mac8InputLimit)
             return -1;
         if(thread->input_offset==thread->input_bytes){
@@ -590,6 +860,10 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
         out->file_reads += i;
         *result = a0;
     }else if(!strcmp(name, "_feof")){
+        if(a0==NULL_HANDLE && thread->null_open){
+            *result = thread->null_eof;
+            return 1;
+        }
         if(a0!=INPUT_HANDLE || !thread->input_open)
             return -1;
         *result = thread->input_eof;
@@ -603,12 +877,37 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
                 return -1;
             *result = a2;
         }
+    }else if(!strcmp(name, "_fputs") || !strcmp(name, "_puts")){
+        int newline = !strcmp(name, "_puts");
+        count = string_length(plan, arena, stack, a0, Mac8OutputLimit);
+        if(count<0 || count+newline>Mac8OutputLimit)
+            return -1;
+        left = guest_read(plan, arena, stack, a0, count+1, 1);
+        if(!left)
+            return -1;
+        memcpy(formatted, left, count);
+        if(newline)
+            formatted[count++] = '\n';
+        if(!write_stream(thread, out, newline ? STREAM_HANDLE+16 : a1, formatted, count))
+            return -1;
     }else if(!strcmp(name, "_fputc") || !strcmp(name, "_putchar")){
         formatted[0] = a0;
         if(!write_stream(thread, out, !strcmp(name, "_putchar") ? STREAM_HANDLE+16 : a1, formatted, 1))
             return -1;
         *result = formatted[0];
+    }else if(!strcmp(name, "_setvbuf")){
+        /* Captured output is already unbuffered. Accept Darwin _IONBF
+         * with no caller buffer, before the first stream operation. */
+        if(a1 || a2!=2 || a3 ||
+           !((a0==STREAM_HANDLE+16 && !(thread->closed&2) && !out->stdout_bytes) ||
+             (a0==STREAM_HANDLE+32 && !(thread->closed&4) && !out->stderr_bytes)))
+            *result = (unsigned int)-1;
     }else if(!strcmp(name, "_ferror") || !strcmp(name, "_fflush") || !strcmp(name, "_fclose")){
+        if(a0==NULL_HANDLE && thread->null_open){
+            if(!strcmp(name, "_fclose"))
+                thread->null_open = 0;
+            return 1;
+        }
         if(a0==INPUT_HANDLE && thread->input_open){
             if(!strcmp(name, "_fclose"))
                 thread->input_open = 0;
@@ -639,6 +938,13 @@ static int
 stop_at_import(const Mac8Image *plan, Mac8Stop *out, Word target, Word a0, Word a1)
 {
     Word delta;
+    if(target==MALLOC_ZONE_SIZE){
+        out->pc = target;
+        out->arg0 = a0;
+        out->arg1 = a1;
+        out->name = 0;
+        return 1;
+    }
     if(target < MAC8_UNRESOLVED)
         return 0;
     delta = target-MAC8_UNRESOLVED;
@@ -727,11 +1033,22 @@ intel_start(const Mac8Image *plan, const unsigned char *image, unsigned char *ar
     machine.mxcsr = 0x1f80;
     machine.ip = MAC8_BASE+plan->entry;
     machine.r[4] = StackBase+StackBytes-8;
+    write_le(stack+StackBytes-8, 8, MAIN_RETURN);
     machine.r[7] = argc; /* argc in RDI */
     machine.r[6] = StackBase+Argv;
     machine.r[2] = StackBase+Envp;
-    machine.r[1] = StackBase+Envp+16;
+    machine.r[1] = StackBase+Envp+24;
     for(out->steps=0; out->steps<budget; out->steps++){
+        if(machine.ip==MAIN_RETURN){
+            if(machine.r[4]!=StackBase+StackBytes || thread->exit_sp)
+                return 0;
+            out->exit_code = machine.r[0]&255;
+            if(!thread->cleanup_count)
+                return 2;
+            thread->exit_sp = machine.r[4];
+            machine.ip = EXIT_RETURN;
+            continue;
+        }
         if(machine.ip==EXIT_RETURN){
             if(!thread->exit_sp || thread->exit_sp!=machine.r[4])
                 return 0;
@@ -751,8 +1068,9 @@ intel_start(const Mac8Image *plan, const unsigned char *image, unsigned char *ar
         }
         if(stop_at_import(plan, out, machine.ip, machine.r[7], machine.r[6])){
             Word sp = machine.r[4], link;
-            const char *name = (const char *)image+out->name;
-            if(!services || !plan->system_import[(out->pc-MAC8_UNRESOLVED)/16])
+            const char *name = out->pc==MALLOC_ZONE_SIZE ? "_malloc_zone_size" :
+                               (const char *)image+out->name;
+            if(!services || (out->pc!=MALLOC_ZONE_SIZE && !plan->system_import[(out->pc-MAC8_UNRESOLVED)/16]))
                 return 1;
             if(sp%16!=8 || !stack_span(sp, 8))
                 return 0;
@@ -783,7 +1101,7 @@ intel_start(const Mac8Image *plan, const unsigned char *image, unsigned char *ar
                 result = 0;
             }else
                 handled = service_call(plan, arena, stack, heap, name,
-                                       out->arg0, out->arg1, machine.r[2], machine.r[1], 0, &result, thread, out);
+                                       out->arg0, out->arg1, machine.r[2], machine.r[1], machine.r[8], 0, &result, thread, out);
             if(handled==2 && thread->cleanup_count){
                 thread->exit_sp = sp+8;
                 write_le(stack+(sp-StackBase), 8, EXIT_RETURN);
@@ -804,6 +1122,22 @@ intel_start(const Mac8Image *plan, const unsigned char *image, unsigned char *ar
             return 0;
     }
     return 0;
+}
+
+static Word
+multiply_high(Word a, Word b, int is_signed)
+{
+    Word lo = (Word)(unsigned int)a*(unsigned int)b;
+    Word cross = (a>>32)*(unsigned int)b+(lo>>32);
+    Word carry = (Word)(unsigned int)a*(b>>32)+(unsigned int)cross;
+    Word high = (a>>32)*(b>>32)+(cross>>32)+(carry>>32);
+    if(is_signed){
+        if(a>>63)
+            high -= b;
+        if(b>>63)
+            high -= a;
+    }
+    return high;
 }
 
 static Word
@@ -896,10 +1230,21 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
     const unsigned char *p;
     unsigned char *dst;
     r[0] = argc;
+    r[30] = MAIN_RETURN;
     r[1] = StackBase+Argv;
     r[2] = StackBase+Envp;
-    r[3] = StackBase+Envp+16;
+    r[3] = StackBase+Envp+24;
     for(out->steps=0; out->steps<budget; out->steps++){
+        if(pc==MAIN_RETURN){
+            if(sp!=StackBase+StackBytes || thread->exit_sp)
+                return 0;
+            out->exit_code = r[0]&255;
+            if(!thread->cleanup_count)
+                return 2;
+            thread->exit_sp = sp;
+            pc = EXIT_RETURN;
+            continue;
+        }
         if(pc==EXIT_RETURN){
             if(!thread->exit_sp || thread->exit_sp!=sp)
                 return 0;
@@ -918,8 +1263,9 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
             continue;
         }
         if(stop_at_import(plan, out, pc, r[0], r[1])){
-            const char *name = (const char *)image+out->name;
-            if(!services || !plan->system_import[(out->pc-MAC8_UNRESOLVED)/16])
+            const char *name = out->pc==MALLOC_ZONE_SIZE ? "_malloc_zone_size" :
+                               (const char *)image+out->name;
+            if(!services || (out->pc!=MALLOC_ZONE_SIZE && !plan->system_import[(out->pc-MAC8_UNRESOLVED)/16]))
                 return 1;
             out->link = r[30];
             out->arg2 = r[2];
@@ -950,7 +1296,7 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
                 result = 0;
             }else
                 handled = service_call(plan, arena, stack, heap, name,
-                                       out->arg0, out->arg1, r[2], r[3], sp, &result, thread, out);
+                                       out->arg0, out->arg1, r[2], r[3], r[4], sp, &result, thread, out);
             if(handled==2 && thread->cleanup_count){
                 thread->exit_sp = sp;
                 r[30] = EXIT_RETURN;
@@ -974,7 +1320,8 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
         rn = (op>>5)&31;
         v = rn==31 ? sp : r[rn];
         imm = (op>>10)&0xfff;
-        if((op&0x1f800000U)==0x11000000U){ /* ADD/SUB (immediate) */
+        if(op==0xd5033bbfU){ /* DMB ISH, ordered single-thread guest memory. */
+        }else if((op&0x1f800000U)==0x11000000U){ /* ADD/SUB (immediate) */
             if(op&(1U<<22))
                 imm <<= 12;
             wide = op>>31;
@@ -1034,7 +1381,7 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
                 flags = arm_flags(v, access, addr, wide, sub);
             if(rd!=31)
                 r[rd] = wide ? addr : (unsigned int)addr;
-        }else if((op&0x7e000000U)==0x28000000U && (mode=(op>>23)&3)!=0){ /* STP/LDP W/X */
+        }else if(((op&0x7e000000U)==0x28000000U || (op&0xfe400000U)==0x68400000U) && (mode=(op>>23)&3)!=0){ /* STP/LDP W/X or LDPSW */
             bytes = (op>>31) ? 8 : 4;
             rt2 = (op>>10)&31;
             addr = v+sign_extend((op>>15)&0x7f, 7)*bytes;
@@ -1048,9 +1395,9 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
                 if(!p || rd==rt2)
                     return 0;
                 if(rd!=31)
-                    r[rd] = read_le(p, bytes);
+                    r[rd] = (op&(1U<<30)) ? sign_extend(read_le(p, 4), 32) : read_le(p, bytes);
                 if(rt2!=31)
-                    r[rt2] = read_le(p+bytes, bytes);
+                    r[rt2] = (op&(1U<<30)) ? sign_extend(read_le(p+4, 4), 32) : read_le(p+bytes, bytes);
             }else{
                 dst = guest_write(plan, arena, stack, access, 2*bytes, services);
                 if(!dst)
@@ -1245,15 +1592,27 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
             for(mode=0; mode<bytes; mode+=4)
                 memcpy(vector+mode, fp[rn]+(mode^4), 4);
             memcpy(fp[rd], vector, 16);
+        }else if((op&0xffe08400U)==0x6e000400U){ /* INS, vector element */
+            imm = (op>>16)&31;
+            mode = (op>>11)&15;
+            if(!(imm&15))
+                return 0;
+            for(cond=0; !(imm&(1U<<cond)); cond++)
+                ;
+            bytes = 1U<<cond;
+            if(mode&(bytes-1))
+                return 0;
+            memmove(fp[rd]+(imm>>(cond+1))*bytes, fp[rn]+mode, bytes);
         }else if((op&0xfffffc00U)==0x4d408400U){ /* LD1 D lane 1 */
             p = guest_read(plan, arena, stack, v, 8, services);
             if(!p)
                 return 0;
             memcpy(fp[rd]+8, p, 8);
-        }else if((op&0xffe0fc00U)==0x4e201c00U){ /* AND V.16B */
+        }else if((op&0xffe0fc00U)==0x4e201c00U || (op&0xffe0fc00U)==0x6e201c00U){ /* AND/EOR V.16B */
             rt2 = (op>>16)&31;
             for(bytes=0; bytes<16; bytes++)
-                fp[rd][bytes] = fp[rn][bytes]&fp[rt2][bytes];
+                fp[rd][bytes] = (op&(1U<<29)) ? fp[rn][bytes]^fp[rt2][bytes] :
+                                                 fp[rn][bytes]&fp[rt2][bytes];
         }else if((op&0xffe0fc00U)==0x6ee08c00U){ /* CMEQ V.2D */
             rt2 = (op>>16)&31;
             for(bytes=0; bytes<16; bytes+=8)
@@ -1388,17 +1747,24 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
                 v += fp[rn][mode];
             memset(fp[rd], 0, 16);
             write_le(fp[rd], 2, v);
-        }else if((op&0x9ff8fc00U)==0x0f00e400U){ /* MOVI, byte or byte-mask immediate */
+        }else if((op&0x9ff80c00U)==0x0f000400U){ /* MOVI, selected element widths */
+            unsigned int size = (op&(1U<<30)) ? 16 : 8;
             imm = (((op>>16)&7)<<5) | ((op>>5)&31);
-            if(op&(1U<<29)){
-                for(bytes=0; bytes<8; bytes++)
-                    fp[rd][bytes] = fp[rd][bytes+8] = (imm&(1U<<bytes)) ? 255 : 0;
-                if(!(op&(1U<<30)))
-                    memset(fp[rd]+8, 0, 8);
-            }else{
-                memset(fp[rd], imm, 8);
-                memset(fp[rd]+8, (op&(1U<<30)) ? imm : 0, 8);
-            }
+            mode = (op>>12)&15;
+            memset(fp[rd], 0, 16);
+            if(mode==14){
+                if(op&(1U<<29)){
+                    for(bytes=0; bytes<size; bytes++)
+                        fp[rd][bytes] = (imm&(1U<<(bytes%8))) ? 255 : 0;
+                }else
+                    memset(fp[rd], imm, size);
+            }else if(mode<12 && !(mode&1) && !(op&(1U<<29))){
+                bytes = mode<8 ? 4 : 2;
+                imm <<= (mode%(bytes*2))*4;
+                for(cond=0; cond<size; cond+=bytes)
+                    write_le(fp[rd]+cond, bytes, imm);
+            }else
+                return 0;
         }else if(((op&0xfe000000U)==0xac000000U || (op&0xfe000000U)==0x6c000000U) && (mode=(op>>23)&3)!=0){ /* STP/LDP D/Q */
             bytes = op>>31 ? 16 : 8;
             rt2 = (op>>10)&31;
@@ -1542,6 +1908,22 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
                 v /= access;
             if(rd!=31)
                 r[rd] = wide ? v : (unsigned int)v;
+        }else if((op&0x7ffffc00U)==0x5ac01000U){ /* CLZ */
+            v = rn==31 ? 0 : r[rn];
+            bytes = op>>31 ? 64 : 32;
+            mode = bytes;
+            while(mode && !((v>>(mode-1))&1))
+                mode--;
+            if(rd!=31)
+                r[rd] = bytes-mode;
+        }else if((op&0xfffffc00U)==0x5ac00800U || (op&0xfffffc00U)==0xdac00c00U){ /* REV W/X */
+            v = rn==31 ? 0 : r[rn];
+            bytes = op>>31 ? 8 : 4;
+            access = 0;
+            for(mode=0; mode<bytes; mode++)
+                access = (access<<8)|((v>>(mode*8))&255);
+            if(rd!=31)
+                r[rd] = access;
         }else if((op&0x7fe0f000U)==0x1ac02000U){ /* Variable shifts */
             wide = op>>31;
             bytes = wide ? 64 : 32;
@@ -1562,6 +1944,11 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
             cond = op&15;
             if(arm_cond(flags, cond))
                 next = pc+(sign_extend((op>>5)&0x7ffff, 19)<<2);
+        }else if((op&0xff60fc00U)==0x9b407c00U){ /* SMULH/UMULH */
+            rt2 = (op>>16)&31;
+            if(rd!=31)
+                r[rd] = multiply_high(rn==31 ? 0 : r[rn], rt2==31 ? 0 : r[rt2],
+                                      !(op&(1U<<23)));
         }else if((op&0xff600000U)==0x9b200000U){ /* SMADDL/UMADDL and subtract forms */
             rt2 = (op>>16)&31;
             mode = (op>>10)&31;
@@ -1653,6 +2040,7 @@ mac9_run(const unsigned char *image, unsigned int length, unsigned char *arena,
         memset(arena+Mac8Limit, 0, ServiceExtent-Mac8Limit);
         arena[Mac8Limit] = 'C';
         rune_locale(arena+Mac8Limit+RuneOffset);
+        write_le(arena+Mac8Limit+ZoneOffset+16, 8, MALLOC_ZONE_SIZE);
         write_le(arena+Mac8Limit+GuardOffset, 8, guard);
         for(i=0; i<3; i++)
             write_le(arena+Mac8Limit+StreamsOffset+8*i, 8, STREAM_HANDLE+16*i);
@@ -1661,6 +2049,8 @@ mac9_run(const unsigned char *image, unsigned int length, unsigned char *arena,
     memset(stack, 0, StackBytes);
     write_le(stack+Envp, 8, StackBase+LocaleEnv);
     memcpy(stack+LocaleEnv, "LC_ALL=C", sizeof("LC_ALL=C"));
+    write_le(stack+Envp+8, 8, StackBase+HomeEnv);
+    memcpy(stack+HomeEnv, "HOME=/", sizeof("HOME=/"));
     for(i=0; i<argc; i++){
         if(!argv[i] || strlen(argv[i])>=ArgLimit-start)
             return 0;

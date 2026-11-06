@@ -1,8 +1,10 @@
-name: Compact macOS M9.2 SQLite admission
+name: Compact macOS M9 SQLite qualification
 on:
   pull_request:
     paths:
-      - 'ryzova/compat/macos/m8_image.*'
+      - 'ryzova/compat/macos/**'
+      - 'ryzova/compat/windows/cpu.c'
+      - 'scripts/compact_macos_m8_native.py'
       - 'scripts/compact_macos_m92_sqlite.py'
       - '.github/workflows/compact-macos-m92.yml'
   workflow_dispatch:
@@ -49,14 +51,48 @@ jobs:
         with:
           pattern: macos-m92-sqlite-*
           path: references
-      - name: Measure exact SQLite image admission
+      - name: Verify SQLite mapping and hosted execution parity
         run: |
           cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -fPIC -shared \
             -fsanitize=undefined -fno-sanitize-recover=all \
-            ryzova/compat/macos/m8_image.c -o /tmp/mac-m92-loader.so
-          python3 scripts/compact_macos_m92_sqlite.py audit /tmp/mac-m92-loader.so references evidence/admission.json
+            ryzova/compat/macos/{m8_image,m8_heap,m8_fma,m8_start}.c \
+            ryzova/compat/windows/{cpu,loader,api,crt,sync_objects,files}.c \
+            -o /tmp/mac-m92-loader.so
+          python3 scripts/compact_macos_m92_sqlite.py audit /tmp/mac-m92-loader.so references evidence/admission.json --execute
       - uses: actions/upload-artifact@v4
         with:
           name: macos-m92-admission
           path: evidence/admission.json
           if-no-files-found: error
+  native-sqlite:
+    needs: admission
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: macos-m92-sqlite-*
+          path: references
+      - name: Prepare the pinned native build guest
+        run: |
+          sudo apt-get -o Acquire::Retries=2 update -qq
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends qemu-system-x86 qemu-utils mtools
+          bash scripts/verify-foundation.sh
+          curl --fail --location --retry 3 --max-time 600 https://build.9front.org/release/9front-11952.amd64.qcow2.gz -o bootstrap.qcow2.gz
+          echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  bootstrap.qcow2.gz' | sha256sum -c -
+          gzip -dc bootstrap.qcow2.gz > bootstrap.qcow2
+          qemu-img create -f qcow2 -F qcow2 -b bootstrap.qcow2 mac-m8.qcow2
+      - name: Verify SQLite parity on source-built Ryzova
+        run: python3 scripts/compact_macos_m8_native.py mac-m8.qcow2 bootstrap.qcow2.gz references evidence/native --sqlite
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-m93-native-sqlite
+          path: |
+            evidence/native/*.json
+            evidence/native/*.log
+          if-no-files-found: ignore
