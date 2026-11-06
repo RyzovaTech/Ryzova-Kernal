@@ -72,6 +72,7 @@ def verify(image, bootstrap, references, output):
                 f"cat '#Z/version'; sha1sum -2 256 {program}", setup,
                 f'hget {url}/input.json >/tmp/m8-input; cp /tmp/m8-input /tmp/m8-input-original',
                 'sha1sum -2 256 /tmp/m8-input-original',
+                "q='{count: (.items | length), sum: (.items | add)}'",
             ]
             markers = {}
             for arch, (name, *_details) in TARGETS.items():
@@ -81,9 +82,10 @@ def verify(image, bootstrap, references, output):
                     prefix = f'{path}-{case}'
                     marker = f'M8_{arch}_{case}_OK'
                     markers[len(commands)] = marker
-                    argument = ' /tmp/m8-input' if case == 'query' else ''
+                    launch = (f'--run {path} -- jq --version' if case == 'version' else
+                              f'--run --read-only records.json /tmp/m8-input {path} -- jq -c $q records.json')
                     commands.append(
-                        f'if({program} --{case} {path}{argument} >{prefix}.out >[2]{prefix}.err) echo {marker}; '
+                        f'if({program} {launch} >{prefix}.out >[2]{prefix}.err) echo {marker}; '
                         f'if not cat {prefix}.err')
                     commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
             commands.append('sha1sum -2 256 /tmp/m8-input')
@@ -110,7 +112,8 @@ def verify(image, bootstrap, references, output):
     receipt = dict(schema='compact-macos-m8-native-jq/v1', source_commit=commit,
                    source_archive_sha256=source_sha, bootstrap_sha256=base_sha, kernel_sha256=kernel_sha,
                    runner_sha256=runner_sha, host_architecture='amd64', architectures=report,
-                   input_sha256=input_digest, input_unchanged=True, jq_profile_qualified=True)
+                   input_sha256=input_digest, input_unchanged=True, jq_profile_qualified=True,
+                   launcher='--run', guest_input_alias='records.json')
     (output/'qualification.json').write_text(json.dumps(receipt, indent=2)+'\n')
     print(json.dumps(receipt))
 

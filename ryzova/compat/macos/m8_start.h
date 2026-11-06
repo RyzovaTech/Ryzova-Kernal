@@ -29,4 +29,10 @@ int mac8_start(const unsigned char *, unsigned int, unsigned char *,
 /* The optional immutable input is exposed only as guest input.json. */
 int mac8_run(const unsigned char *, unsigned int, unsigned char *, unsigned int,
              unsigned long long, unsigned int, const char *const *, unsigned int, const unsigned char *, unsigned int, Mac8Stop *);
+/* M9 accepts one immutable input under a caller-selected guest basename.
+ * The name, bytes and argv remain valid for the duration of the run. */
+int mac9_grant_name(const char *);
+int mac9_run(const unsigned char *, unsigned int, unsigned char *, unsigned int,
+             unsigned long long, unsigned int, const char *const *, unsigned int,
+             const char *, const unsigned char *, unsigned int, Mac8Stop *);
 #endif

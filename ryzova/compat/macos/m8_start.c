@@ -266,6 +266,7 @@ struct Thread {
     Word values[KeyLimit];
     Word cleanup[ExitLimit], exit_sp;
     const unsigned char *input;
+    const char *input_name;
     unsigned int input_bytes, input_offset;
     unsigned int allocated, closed, cleanup_count, input_open, input_eof;
 };
@@ -555,7 +556,7 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
             return -1;
         if(strcmp((const char *)right, "r") && strcmp((const char *)right, "rb"))
             write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 13); /* EACCES */
-        else if(!thread->input || strcmp((const char *)left, "input.json"))
+        else if(!thread->input || strcmp((const char *)left, thread->input_name))
             write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 2);
         else if(thread->input_open)
             write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 24); /* EMFILE */
@@ -1610,9 +1611,28 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
 }
 
 int
-mac8_run(const unsigned char *image, unsigned int length, unsigned char *arena,
+mac9_grant_name(const char *name)
+{
+    unsigned int i;
+    unsigned char c;
+    if(!name || !name[0])
+        return 0;
+    for(i=0; i<64; i++){
+        c = name[i];
+        if(!c)
+            return strcmp(name, ".") && strcmp(name, "..");
+        if(!((c>='A' && c<='Z') || (c>='a' && c<='z') ||
+             (c>='0' && c<='9') || c=='.' || c=='_' || c=='-'))
+            return 0;
+    }
+    return 0;
+}
+
+int
+mac9_run(const unsigned char *image, unsigned int length, unsigned char *arena,
          unsigned int capacity, Word guard, unsigned int argc, const char *const *argv,
-         unsigned int budget, const unsigned char *input, unsigned int input_bytes, Mac8Stop *out)
+         unsigned int budget, const char *input_name, const unsigned char *input,
+         unsigned int input_bytes, Mac8Stop *out)
 {
     Mac8Image plan;
     unsigned char *stack;
@@ -1621,7 +1641,8 @@ mac8_run(const unsigned char *image, unsigned int length, unsigned char *arena,
     Thread thread = {0};
     int status = 0;
     if(!out || !arena || capacity<StackBytes || !argc || argc>(Envp-Argv)/8-1 ||
-       !argv || !budget || budget>Mac8MaxBudget || input_bytes>Mac8Limit || (!input && input_bytes))
+       !argv || !budget || budget>Mac8MaxBudget || input_bytes>Mac8Limit ||
+       (input ? !mac9_grant_name(input_name) : input_name || input_bytes))
         return 0;
     image_capacity = capacity-StackBytes;
     if(guard && image_capacity<ServiceExtent)
@@ -1654,6 +1675,7 @@ mac8_run(const unsigned char *image, unsigned int length, unsigned char *arena,
         return 0;
     heap->count = 0;
     thread.input = input;
+    thread.input_name = input_name;
     thread.input_bytes = input_bytes;
     if(plan.cpu==Intel64)
         status = intel_start(&plan, image, arena, stack, guard!=0, argc, budget, heap, &thread, out);
@@ -1663,6 +1685,15 @@ mac8_run(const unsigned char *image, unsigned int length, unsigned char *arena,
     return status;
 }
 
+
+int
+mac8_run(const unsigned char *image, unsigned int length, unsigned char *arena,
+         unsigned int capacity, Word guard, unsigned int argc, const char *const *argv,
+         unsigned int budget, const unsigned char *input, unsigned int input_bytes, Mac8Stop *out)
+{
+    return mac9_run(image, length, arena, capacity, guard, argc, argv, budget,
+                    input ? "input.json" : 0, input, input_bytes, out);
+}
 
 int
 mac8_start(const unsigned char *image, unsigned int length, unsigned char *arena,
