@@ -1,0 +1,7 @@
+</$objtype/mkfile
+TARG=compact-macos-m2
+OFILES=m2.$O grant.$O dynamic.$O arm64.$O workload.$O
+HFILES=grant.h dynamic.h arm64.h workload.h
+BIN=/$objtype/bin
+CFLAGS=$CFLAGS -DMAC_PLAN9
+</sys/src/cmd/mkone

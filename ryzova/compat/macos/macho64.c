@@ -14,6 +14,7 @@
 #define VM_WRITE 2U
 #define MAX_SIZE (64U*1024U*1024U)
 #define PAGE 4096U
+#define USER_END UINT64_C(0x0000800000000000)
 static uint32_t u32(const unsigned char *p) {
     return (uint32_t)p[0] | (uint32_t)p[1]<<8 |
            (uint32_t)p[2]<<16 | (uint32_t)p[3]<<24;
@@ -24,8 +25,8 @@ static uint64_t u64(const unsigned char *p) {
 static int span(size_t n,uint64_t a,uint64_t b) {
     return a <= (uint64_t)n && b <= (uint64_t)n-a;
 }
-static int overlap(uint64_t a,uint64_t al,uint64_t b,uint64_t bl) {
-    return a < b+bl && b < a+al;
+static int page_overlap(uint64_t a, uint64_t al, uint64_t b, uint64_t bl) {
+    return a/PAGE <= (b+bl-1)/PAGE && b/PAGE <= (a+al-1)/PAGE;
 }
 int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out) {
     RyzMachoPlan plan;
@@ -66,7 +67,7 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
             if (cmdsize<72 || count==RYZ_MACHO_MAX_SEGMENTS)
                 return 3;
             sections=u32(image+(size_t)offset+64);
-            if (sections>16 || (uint64_t)sections*80U>cmdsize-72U)
+            if (sections>16 || (uint64_t)sections*80U!=cmdsize-72U)
                 return 2;
             va=u64(image+(size_t)offset+24);
             vsize=u64(image+(size_t)offset+32);
@@ -75,7 +76,7 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
             maxprot=u32(image+(size_t)offset+56);
             initprot=u32(image+(size_t)offset+60);
             if (vsize==0 || vsize>MAX_SIZE || va<0x10000 ||
-                va>UINT64_MAX-vsize || fs>vsize ||
+                va>=USER_END || vsize>USER_END-va || fs>vsize ||
                 (maxprot & ~7U)!=0 || (initprot & ~7U)!=0 ||
                 (initprot & ~maxprot)!=0 ||
                 ((maxprot|initprot)&(VM_EXECUTE|VM_WRITE))==(VM_EXECUTE|VM_WRITE))
@@ -83,7 +84,7 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
             if (!span(length,fo,fs) || (va%PAGE)!=(fo%PAGE))
                 return 3;
             for(j=0;j<count;++j)
-                if (overlap(va,vsize,plan.segments[j].virtual_address,
+                if (page_overlap(va,vsize,plan.segments[j].virtual_address,
                             plan.segments[j].virtual_bytes))
                     return 4;
             seg=&plan.segments[count++];
@@ -94,8 +95,17 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
                 return 2;
             entry_offset=u64(image+(size_t)offset+8);
             has_main=1;
-        } else if (cmd!=LC_UUID && cmd!=LC_BUILD_VERSION &&
-                   cmd!=LC_VERSION_MIN_MACOSX) {
+        } else if (cmd==LC_UUID) {
+            if (cmdsize!=24)
+                return 2;
+        } else if (cmd==LC_BUILD_VERSION) {
+            if (cmdsize<24 || u32(image+(size_t)offset+8)!=1 ||
+                (uint64_t)u32(image+(size_t)offset+20)*8U!=cmdsize-24U)
+                return 2;
+        } else if (cmd==LC_VERSION_MIN_MACOSX) {
+            if (cmdsize!=16)
+                return 2;
+        } else {
             return 2; /* Explicitly reject dylibs, dyld, codesign, threads. */
         }
         offset+=cmdsize;
@@ -106,6 +116,8 @@ int ryz_macho64_plan(const unsigned char *image,size_t length,RyzMachoPlan *out)
         const RyzMachoSegment *s=&plan.segments[index];
         if ((s->protection&VM_EXECUTE) && entry_offset>=s->file_offset &&
             entry_offset-s->file_offset<s->file_bytes) {
+            if (entry_found)
+                return 4;
             plan.entry=s->virtual_address+(entry_offset-s->file_offset);
             entry_found=1;
         }
