@@ -8,7 +8,7 @@ enum { Mac8OutputLimit = 256, Mac8MaxBudget = 16777216 };
 
 typedef struct Mac8Stop Mac8Stop;
 struct Mac8Stop {
-    unsigned long long pc, last_pc, arg0, arg1;
+    unsigned long long pc, last_pc, arg0, arg1, arg2, arg3, link;
     unsigned int steps, name, locale_calls, alloc_calls;
     unsigned int exit_code, stdout_bytes, stderr_bytes, file_opens, file_reads;
     unsigned char stdout_data[Mac8OutputLimit], stderr_data[Mac8OutputLimit];

@@ -58,8 +58,12 @@ main(int argc, char **argv)
     else
         status = mac8_run(image, image_bytes, arena, Mac8ArenaBytes, guard,
                           nelem(query), query, Mac8MaxBudget, input, input_bytes, &result);
-    if(status!=2)
-        sysfatal("M8 stopped at %llux after %ud steps (%d)", result.last_pc, result.steps, status);
+    if(status!=2){
+        fprint(2, "M8 fault pc=%llux token=%llux link=%llux args=%llux,%llux,%llux,%llux output=%ud,%ud\n",
+               result.last_pc, result.pc, result.link, result.arg0, result.arg1,
+               result.arg2, result.arg3, result.stdout_bytes, result.stderr_bytes);
+        sysfatal("M8 stopped after %ud steps (%d)", result.steps, status);
+    }
     if(write(1, result.stdout_data, result.stdout_bytes)!=result.stdout_bytes ||
        write(2, result.stderr_data, result.stderr_bytes)!=result.stderr_bytes)
         sysfatal("write guest output: %r");

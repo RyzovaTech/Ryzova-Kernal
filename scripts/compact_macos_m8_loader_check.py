@@ -40,7 +40,7 @@ class Image(C.Structure):
 
 
 class Stop(C.Structure):
-    _fields_ = [(name, C.c_ulonglong) for name in ('pc', 'last_pc', 'arg0', 'arg1')
+    _fields_ = [(name, C.c_ulonglong) for name in ('pc', 'last_pc', 'arg0', 'arg1', 'arg2', 'arg3', 'link')
                 ] + [(name, C.c_uint) for name in ('steps', 'name', 'locale_calls', 'alloc_calls', 'exit_code', 'stdout_bytes', 'stderr_bytes',
                                            'file_opens', 'file_reads')] + [
                     ('stdout_data', C.c_ubyte * 256), ('stderr_data', C.c_ubyte * 256)]

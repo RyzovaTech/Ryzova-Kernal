@@ -756,6 +756,9 @@ intel_start(const Mac8Image *plan, const unsigned char *image, unsigned char *ar
             if(sp%16!=8 || !stack_span(sp, 8))
                 return 0;
             link = read_le(stack+(sp-StackBase), 8);
+            out->link = link;
+            out->arg2 = machine.r[2];
+            out->arg3 = machine.r[1];
             if(!mac8_access(plan, link, 1, Mac8Execute) &&
                !(link==ONCE_RETURN && once.object && once.sp==sp+8) &&
                !(link==EXIT_RETURN && thread->exit_sp==sp+8))
@@ -918,6 +921,9 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
             const char *name = (const char *)image+out->name;
             if(!services)
                 return 1;
+            out->link = r[30];
+            out->arg2 = r[2];
+            out->arg3 = r[3];
             if(sp%16 || r[30]%4 ||
                (!mac8_access(plan, r[30], 4, Mac8Execute) &&
                 !(r[30]==ONCE_RETURN && once.object && once.sp==sp) &&
