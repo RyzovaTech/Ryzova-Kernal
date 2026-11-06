@@ -214,6 +214,35 @@ def check_query(lib, arch, image, expected):
     return report
 
 
+def check_launcher(lib, arch, image):
+    arena = C.create_string_buffer(ARENA)
+    source = C.create_string_buffer(INPUT)
+    alias = b'records-01.json'
+
+    def run(name, grant):
+        args = (C.c_char_p*4)(b'jq', b'-c', b'.items', name)
+        stop = Stop()
+        status = lib.mac9_run(image, len(image), arena, len(arena), GUARD,
+                              len(args), args, 16777216, grant, source, len(INPUT), C.byref(stop))
+        return status, stop
+
+    status, stop = run(alias, alias)
+    stdout = bytes(stop.stdout_data[:stop.stdout_bytes])
+    if (status, stop.exit_code, stdout, stop.stderr_bytes, stop.file_opens, stop.file_reads) != (
+            2, 0, b'[2,3,5]\n', 0, 1, len(INPUT)) or source.raw != INPUT+b'\0':
+        raise ValueError(f'{arch}: caller argv or selected file alias differs at {stop.last_pc:#x}')
+    for name in (b'input.json', b'../'+alias, b'/'+alias):
+        status, denied = run(name, alias)
+        if denied.file_opens or denied.file_reads or denied.stdout_bytes or (status==2 and not denied.exit_code):
+            raise ValueError(f'{arch}: grant escaped via {name!r}')
+    for bad in (b'', b'.', b'..', b'../escape', b'a/b', b'a\\b', b'a:b', b'a b', b'a'*64):
+        status, denied = run(alias, bad)
+        if status or denied.steps or lib.mac9_grant_name(bad):
+            raise ValueError(f'{arch}: invalid guest basename admitted: {bad!r}')
+    return dict(stdout_hex=stdout.hex(), guest_alias=alias.decode(), input_unchanged=True,
+                exact_alias_enforced=True)
+
+
 def check_float(lib):
     word = C.c_ulonglong
     lib.mac8_fma.argtypes = [word, word, word, C.POINTER(word)]
@@ -277,6 +306,8 @@ def main():
     lib.mac8_run.argtypes = [C.c_void_p, C.c_uint, C.c_void_p, C.c_uint, C.c_ulonglong,
                             C.c_uint, C.POINTER(C.c_char_p), C.c_uint, C.c_void_p, C.c_uint,
                             C.POINTER(Stop)]
+    lib.mac9_grant_name.argtypes = [C.c_char_p]
+    lib.mac9_run.argtypes = lib.mac8_run.argtypes[:-3]+[C.c_char_p]+lib.mac8_run.argtypes[-3:]
     check_heap(lib)
     check_float(lib)
     report = {}
@@ -288,6 +319,7 @@ def main():
         report[arch]['startup'] = check_start(lib, arch, image)
         report[arch]['version'] = check_version(lib, arch, image, cases['version'])
         report[arch]['query'] = check_query(lib, arch, image, cases['query'])
+        report[arch]['launcher'] = check_launcher(lib, arch, image)
         print(f'{arch}: mapped {report[arch]["mapped_bytes"]} bytes, checked '
               f'{len(report[arch]["rejected"])} malformed images and traced '
               f'{report[arch]["startup"]["steps"]} instructions to the first import. Version and query match.')

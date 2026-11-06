@@ -29,18 +29,43 @@ main(int argc, char **argv)
     static const char *query[] = {
         "jq", "-c", "{count: (.items | length), sum: (.items | add)}", "input.json"
     };
-    int fd, status, version;
+    int fd, status, version = 0, at, guest_argc = 0;
     unsigned int image_bytes, input_bytes = 0;
     unsigned char *image, *arena, *input = nil;
+    const char *alias = nil;
+    char *image_path = nil, *input_path = nil;
+    const char *const *guest_argv = nil;
     uvlong guard;
     Mac8Stop result;
 
-    version = argc==3 && !strcmp(argv[1], "--version");
-    if(!version && (argc!=4 || strcmp(argv[1], "--query")))
-        sysfatal("usage: compact-macos-m8 --version MACH-O or --query MACH-O INPUT");
-    image = read_file(argv[2], &image_bytes, 0);
-    if(!version)
-        input = read_file(argv[3], &input_bytes, 1);
+    if(argc==3 && !strcmp(argv[1], "--version")){
+        version = 1;
+        image_path = argv[2];
+    }else if(argc==4 && !strcmp(argv[1], "--query")){
+        image_path = argv[2];
+        alias = "input.json";
+        input_path = argv[3];
+        guest_argc = nelem(query);
+        guest_argv = query;
+    }else if(argc>=5 && !strcmp(argv[1], "--run")){
+        at = 2;
+        if(argc>=8 && !strcmp(argv[at], "--read-only")){
+            alias = argv[at+1];
+            input_path = argv[at+2];
+            if(!mac9_grant_name(alias))
+                sysfatal("invalid read-only guest basename");
+            at += 3;
+        }
+        if(argc-at<3 || strcmp(argv[at+1], "--") || !argv[at+2][0])
+            sysfatal("expected MACH-O -- ARGV0 [ARG ...]");
+        image_path = argv[at];
+        guest_argc = argc-at-2;
+        guest_argv = (const char *const *)(argv+at+2);
+    }else
+        sysfatal("usage: compact-macos-m8 --run [--read-only NAME FILE] MACH-O -- ARGV0 [ARG ...]");
+    image = read_file(image_path, &image_bytes, 0);
+    if(input_path)
+        input = read_file(input_path, &input_bytes, 1);
     arena = malloc(Mac8ArenaBytes);
     if(!arena)
         sysfatal("allocate guest arena");
@@ -56,8 +81,8 @@ main(int argc, char **argv)
     if(version)
         status = mac8_start(image, image_bytes, arena, Mac8ArenaBytes, guard, &result);
     else
-        status = mac8_run(image, image_bytes, arena, Mac8ArenaBytes, guard,
-                          nelem(query), query, Mac8MaxBudget, input, input_bytes, &result);
+        status = mac9_run(image, image_bytes, arena, Mac8ArenaBytes, guard,
+                          guest_argc, guest_argv, Mac8MaxBudget, alias, input, input_bytes, &result);
     if(status!=2){
         fprint(2, "M8 fault pc=%llux token=%llux link=%llux args=%llux,%llux,%llux,%llux output=%ud,%ud\n",
                result.last_pc, result.pc, result.link, result.arg0, result.arg1,
