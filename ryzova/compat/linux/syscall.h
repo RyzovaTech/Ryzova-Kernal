@@ -26,7 +26,7 @@ typedef struct RyzLinuxFD {
     enum RyzLinuxNode node;
     int mode, open, cloexec, append, nonblock;
     unsigned int description;
-    unsigned int pipe, vnode, socket;
+    unsigned int pipe, vnode, socket, pty;
     size_t offset;
 } RyzLinuxFD;
 #include "resource_fs.h"
@@ -58,6 +58,16 @@ typedef struct RyzVnode {
 /* Hardlink entries refer directly to an owned inode slot, never a chain. */
 #define RYZ_VFS_INDEX(w,i) ((w)->nodes[(i)].backing?(w)->nodes[(i)].backing-1:(unsigned int)(i))
 #define RYZ_VFS_NODE(w,i) (&(w)->nodes[RYZ_VFS_INDEX(w,i)])
+/* At most two per-world, same-namespace raw PTY pairs. No host PTY access. */
+#define RYZ_WORLD_PTYS 2U
+#define RYZ_PTY_BUFFER 4096U
+#define RYZ_PTY_TOTAL_BYTES (4U*1024U*1024U)
+typedef struct RyzLinuxPty {
+    uint32_t namespace_id, uid;
+    unsigned int used,locked,rows,columns;
+    size_t head[2],size[2];
+    unsigned char bytes[2][RYZ_PTY_BUFFER];
+} RyzLinuxPty;
 #define RYZ_NET_SOCKETS 32U
 #define RYZ_NET_BUFFER 4096U
 #define RYZ_NET_BACKLOG 8U
@@ -83,13 +93,16 @@ typedef struct RyzNetworkResources {
     unsigned int wall_milliseconds;
 } RyzNetworkResources;
 typedef struct RyzLinuxSocket {
-    int used,domain,bound,listening,connected,peer,read_closed,write_closed;
+    int used,domain,type,bound,listening,connected,peer,read_closed,write_closed;
     int reuseaddr,keepalive,nodelay;
     unsigned int external;int external_eof,external_hup,external_error,external_no_fill;int64_t external_handle;
     unsigned int backlog,pending_count,pending[RYZ_NET_BACKLOG];
     unsigned int local_length,remote_length;
     unsigned char local[128],remote[128];
     size_t head,size;
+    /* Separate bounded UDP packets; no conversion into a byte stream. */
+    unsigned int dgram_head,dgram_count,dgram_lengths[4];
+    unsigned char dgram_source_lengths[4],dgram_sources[4][28];
     unsigned char bytes[RYZ_NET_BUFFER];
 } RyzLinuxSocket;
 typedef int64_t (*RyzLinuxRandom)(void *,unsigned char *,size_t);
@@ -111,7 +124,11 @@ typedef struct RyzLinuxWorld {
     unsigned int mapped_nodes[RYZ_VFS_NODES];
     unsigned int memory_barriers[8];
     RyzLinuxDescription descriptions[RYZ_WORLD_DESCRIPTIONS];
+    /* Guest-managed open-file-description high-water, never a host FD count. */
+    unsigned int description_peak;
     RyzLinuxPipe pipes[RYZ_WORLD_PIPES];
+    RyzLinuxPty ptys[RYZ_WORLD_PTYS];
+    uint64_t pty_bytes;
     RyzLinuxSocket sockets[RYZ_NET_SOCKETS];
     uint64_t network_bytes;
     const RyzNetworkResources *network;

@@ -1,0 +1,254 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+"""CLX-04 read-only ELF/RIP attribution tests, no compatibility bypass."""
+import hashlib
+from pathlib import Path
+import struct
+import sys
+import tempfile
+import unittest
+
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/"scripts"))
+from compact_linux_isa_discovery import (
+    MAIN_PIE_BIAS, INTERP_BIAS, create_report, locate_candidate,
+)
+
+
+def minimal_elf(etype=3, vaddr=0x1000, prefix=b"\x0f\x57\xc0\xc3"):
+    raw=bytearray(0x200)
+    raw[:7]=b"\x7fELF\x02\x01\x01"
+    struct.pack_into("<HHI",raw,16,etype,62,1)
+    struct.pack_into("<Q",raw,32,64)
+    struct.pack_into("<HHH",raw,52,64,56,1)
+    struct.pack_into("<IIQQQQQQ",raw,64,1,5,0x100,vaddr,0,len(prefix),len(prefix),0x1000)
+    raw[0x100:0x100+len(prefix)]=prefix
+    return bytes(raw)
+
+
+class IsaDiscoveryTests(unittest.TestCase):
+    def test_pie_main_bytes_bound_to_actual_rip(self):
+        binary=minimal_elf()
+        result=locate_candidate(binary,MAIN_PIE_BIAS+0x1001,bias=MAIN_PIE_BIAS)
+        self.assertEqual(result["candidate_bytes_hex"],"57c0c3")
+        self.assertEqual(result["elf_file_offset"],0x101)
+        self.assertTrue(result["segment_executable"])
+        self.assertTrue(result["bytes_are_only_candidate"])
+
+    def test_pinned_interpreter_fixed_bias(self):
+        binary=minimal_elf()
+        result=locate_candidate(binary,INTERP_BIAS+0x1000,bias=INTERP_BIAS)
+        self.assertEqual(result["candidate_bytes_hex"],"0f57c0c3")
+        self.assertIsNone(locate_candidate(binary,0x1000,bias=INTERP_BIAS))
+
+    def test_elf_bounds_and_unsupported_locations_fail_closed(self):
+        binary=minimal_elf(etype=2)
+        for image,rip,bias in (
+            (binary,0x1000,MAIN_PIE_BIAS),
+            (binary,0x1004,0),
+            (binary,-1,0),
+            (binary,0x1000,-1),
+            (binary[:-0x104],0x1000,0),
+            (b"not-elf",0x1000,0),
+            (binary,0x3000,0),
+        ):
+            with self.subTest(rip=rip,bias=bias):
+                self.assertIsNone(locate_candidate(image,rip,bias=bias))
+
+    def test_report_requires_real_digests_and_tracks_unknown_rip(self):
+        raw=minimal_elf()
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"bin").mkdir()
+            (root/"bin/busybox").write_bytes(raw)
+            target={"target":"busybox","elf":{"sha256":hashlib.sha256(raw).hexdigest()},
+                    "guest_smoke_passed":False,
+                    "guest_actual_result":{"last_rip_hex":hex(0x401000)[2:],"status":3}}
+            result=create_report(root,{"targets":[target]})
+            self.assertFalse(result["guest_linux_v1_complete"])
+            self.assertEqual(result["reports"][0]["candidate"]["image"],"main")
+            self.assertEqual(result["reports"][0]["candidate"]["candidate_bytes_hex"],
+                             "0f57c0c3")
+            successful={**target,"guest_smoke_passed":True}
+            self.assertIsNone(create_report(root,{"targets":[successful]})
+                              ["reports"][0]["candidate"])
+            wrong={**target,"elf":{"sha256":"0"*64}}
+            with self.assertRaises(ValueError):
+                create_report(root,{"targets":[wrong]})
+            gone={**target,"guest_actual_result":{"last_rip_hex":"deadbeef","status":3}}
+            out=create_report(root,{"targets":[gone]})
+            self.assertIsNone(out["reports"][0]["candidate"])
+
+    def test_python_code_probe_has_independent_pinned_candidate(self):
+        image=minimal_elf()
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"usr/bin").mkdir(parents=True)
+            (root/"usr/bin/python3.12").write_bytes(image)
+            target={
+                "target":"python","elf":{"sha256":hashlib.sha256(image).hexdigest()},
+                "guest_smoke_passed":True,"guest_actual_result":{"last_rip_hex":"401000","status":0},
+                "python_code_probe":{"passed":False,"actual":{"last_rip_hex":"401000","status":3}}
+            }
+            result=create_report(root,{"targets":[target]})
+            self.assertEqual(len(result["reports"]),2)
+            self.assertIsNone(result["reports"][0]["candidate"])
+            failed=result["reports"][1]
+            self.assertEqual(failed["target"],"python-code")
+            self.assertEqual(failed["guest_actual_result"]["status"],3)
+            self.assertEqual(failed["candidate"]["candidate_bytes_hex"],"0f57c0c3")
+            self.assertFalse(result["guest_linux_v1_complete"])
+            target["python_code_probe"]["passed"]=True
+            self.assertIsNone(create_report(root,{"targets":[target]})
+                              ["reports"][1]["candidate"])
+            target["python_code_probe"]["passed"]=False
+            target["elf"]["sha256"]="a"*64
+            with self.assertRaises(ValueError):
+                create_report(root,{"targets":[target]})
+
+    def test_large_pie_python_relocates_sha_pinned_musl_in_code_probe(self):
+        from compact_linux_isa_discovery import (
+            relocated_interpreter_bias, bounded_failure_console_lines,
+        )
+        main=minimal_elf(vaddr=0x5f0100)
+        musl=minimal_elf(vaddr=0x1100)
+        # Main ends at 0x9f1000. process.c rounds loader to 0xa00000.
+        self.assertEqual(relocated_interpreter_bias(main),0xa00000)
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"usr/bin").mkdir(parents=True)
+            (root/"lib").mkdir()
+            (root/"usr/bin/python3.12").write_bytes(main)
+            (root/"lib/libc.so").write_bytes(musl)
+            py={"target":"python","elf":{"sha256":hashlib.sha256(main).hexdigest()},
+                "guest_smoke_passed":True,
+                "guest_actual_result":{"last_rip_hex":"4f1000","status":0},
+                "python_code_probe":{"passed":False,
+                    "actual":{"last_rip_hex":"a01100","status":3}}}
+            libc={"target":"musl","elf":{"sha256":hashlib.sha256(musl).hexdigest()},
+                  "guest_smoke_passed":True,"guest_actual_result":{"status":0}}
+            profiles={"targets":[py,libc]}
+            report=create_report(root,profiles)
+            self.assertEqual(report["reports"][1]["candidate"]["image"],
+                             "musl-interpreter")
+            self.assertEqual(report["reports"][1]["candidate"]["load_bias_hex"],
+                             "0xa00000")
+            self.assertEqual(report["reports"][1]["candidate"]["candidate_bytes_hex"],
+                             "0f57c0c3")
+            self.assertFalse(report["guest_linux_v1_complete"])
+            lines=bounded_failure_console_lines(report)
+            self.assertEqual(len(lines),1)
+            self.assertIn('"opcode_failure_verified":false',lines[0])
+            py["python_code_probe"]["actual"]["last_rip_hex"]="801100"
+            self.assertIsNone(create_report(root,profiles)["reports"][1]["candidate"])
+            py["python_code_probe"]["actual"]["last_rip_hex"]="a01100"
+            libc["elf"]["sha256"]="0"*64
+            self.assertIsNone(create_report(root,profiles)["reports"][1]["candidate"])
+
+    def test_loader_relocation_rejects_corrupt_program_headers(self):
+        from compact_linux_isa_discovery import relocated_interpreter_bias
+        image=minimal_elf(vaddr=0x1100)
+        self.assertEqual(relocated_interpreter_bias(image),INTERP_BIAS)
+        misaligned=minimal_elf()  # Offsets and virtual pages disagree.
+        self.assertIsNone(relocated_interpreter_bias(misaligned))
+        self.assertIsNone(relocated_interpreter_bias(image[:-0x104]))
+        self.assertIsNone(relocated_interpreter_bias(b"not elf"))
+        invalid=bytearray(image)
+        # Inflate PT_LOAD memory beyond a valid user address map.
+        struct.pack_into("<Q",invalid,64+40,0xffffffffffffffff)
+        self.assertIsNone(relocated_interpreter_bias(bytes(invalid)))
+        invalid=bytearray(image)
+        struct.pack_into("<I",invalid,64+4,7)  # executable + writable
+        self.assertIsNone(relocated_interpreter_bias(bytes(invalid)))
+
+    def test_step_limit_and_syscall_failure_never_get_opcode_candidates(self):
+        raw=minimal_elf()
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"bin").mkdir()
+            (root/"bin/busybox").write_bytes(raw)
+            for status in (2,4,5):
+                target={"target":"busybox",
+                    "elf":{"sha256":hashlib.sha256(raw).hexdigest()},
+                    "guest_smoke_passed":False,
+                    "guest_actual_result":{"status":status,
+                        "last_rip_hex":"401000","unsupported_syscall_nr":98}}
+                report=create_report(root,{"targets":[target]})
+                self.assertIsNone(report["reports"][0]["candidate"])
+                from compact_linux_isa_discovery import bounded_failure_console_lines
+                import json
+                row=json.loads(bounded_failure_console_lines(report)[0].split(" ",1)[1])
+                self.assertIsNone(row["candidate_elf_bytes_hex"])
+                self.assertEqual(row["vm_status"],status)
+                self.assertFalse(row["opcode_failure_verified"])
+            target["guest_actual_result"]["status"]=3
+            report=create_report(root,{"targets":[target]})
+            self.assertEqual(report["reports"][0]["candidate"]["image"],"main")
+
+    def test_python_code_probe_step_limit_not_misreported_as_isa_error(self):
+        raw=minimal_elf()
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"usr/bin").mkdir(parents=True)
+            (root/"usr/bin/python3.12").write_bytes(raw)
+            target={"target":"python",
+                "elf":{"sha256":hashlib.sha256(raw).hexdigest()},
+                "guest_smoke_passed":True,
+                "guest_actual_result":{"status":0,"last_rip_hex":"401000"},
+                "python_code_probe":{"passed":False,
+                    "actual":{"status":4,"last_rip_hex":"401000"}}}
+            report=create_report(root,{"targets":[target]})
+            self.assertIsNone(report["reports"][1]["candidate"])
+            target["python_code_probe"]["actual"]["status"]=3
+            report=create_report(root,{"targets":[target]})
+            self.assertEqual(report["reports"][1]["candidate"]["image"],"main")
+
+    def test_symlink_must_remain_beneath_locked_root(self):
+        raw=minimal_elf()
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"root"
+            (root/"bin").mkdir(parents=True)
+            real=root/"bin/x86_64-linux-musl-gcc"
+            real.write_bytes(raw)
+            (root/"bin/gcc").symlink_to("x86_64-linux-musl-gcc")
+            record={"target":"gcc","elf":{"sha256":hashlib.sha256(raw).hexdigest()},
+                    "guest_smoke_passed":False,
+                    "guest_actual_result":{"last_rip_hex":"401000","status":3}}
+            self.assertIsNotNone(create_report(root,{"targets":[record]})
+                                 ["reports"][0]["candidate"])
+            (root/"bin/gcc").unlink()
+            outside=Path(d)/"outside"
+            outside.write_bytes(raw)
+            (root/"bin/gcc").symlink_to(outside)
+            with self.assertRaises(ValueError):
+                create_report(root,{"targets":[record]})
+
+    def test_failure_console_lines_never_claim_opcode_support_or_guest_success(self):
+        from compact_linux_isa_discovery import bounded_failure_console_lines
+        report={"reports":[
+            {"target":"busybox","guest_smoke_passed":True,"guest_actual_result":{"status":0}},
+            {"target":"binutils","guest_smoke_passed":False,
+             "guest_actual_result":{"status":5,"last_rip_hex":"1234","unsupported_syscall_nr":999},
+             "candidate":{"image":"main","candidate_bytes_hex":"0f05"}},
+        ]}
+        lines=bounded_failure_console_lines(report)
+        self.assertEqual(len(lines),1)
+        self.assertTrue(lines[0].startswith("CLX04_GUEST_FAILURE "))
+        import json
+        row=json.loads(lines[0].split(" ",1)[1])
+        self.assertEqual(row["target"],"binutils")
+        self.assertEqual(row["unsupported_syscall_nr"],999)
+        self.assertIsNone(row["candidate_elf_bytes_hex"])
+        self.assertEqual(row["failure_kind"],"syscall_unsupported")
+        self.assertFalse(row["opcode_failure_verified"])
+
+    def test_untrusted_names_and_target_collection_denied(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            with self.assertRaises(ValueError):
+                create_report(root,{"targets":[{"target":"../../etc/passwd","elf":{"sha256":"0"*64}}]})
+            with self.assertRaises(ValueError):
+                create_report(root,{"targets":[{}]*17})
+
+
+if __name__=="__main__":
+    unittest.main()

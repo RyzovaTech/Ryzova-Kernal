@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Virtual Linux syscalls through caller-owned bounded resources. */
 #include "syscall.h"
+#include "process.h" /* Shared finite RYZ_PROCESS_IMAGE_MAX. */
 
 /* Linux AMD64 syscall and errno numbers (ABI constants). */
 #define L_READ 0U
@@ -83,6 +84,15 @@ int ryz_linux_process_init(RyzLinuxProcess *p, uint32_t namespace_id,
     p->fds[2].open = 1;
     return 0;
 }
+/* Forked references and duplicate guest FDs refer to the same description.
+ * Record only distinct live world descriptions after transactional updates. */
+static void record_description_peak(RyzLinuxWorld *w)
+{
+    unsigned int i,live=0;
+    for(i=0;i<RYZ_WORLD_DESCRIPTIONS;i++)
+        if(w->descriptions[i].used && w->descriptions[i].refs)live++;
+    if(live>w->description_peak)w->description_peak=live;
+}
 static void world_pull(RyzLinuxProcess *p)
 {
     unsigned int i;int cloexec;
@@ -96,6 +106,7 @@ static void world_pull(RyzLinuxProcess *p)
         p->fds[i].cloexec=cloexec;
     }
 }
+static void pty_cleanup(RyzLinuxWorld *);
 static void net_cleanup(RyzLinuxWorld *);
 static void resource_cleanup(RyzLinuxWorld *);
 static int64_t resource_io(RyzLinuxProcess *,uint64_t,uint64_t,uint64_t,int);
@@ -115,6 +126,7 @@ static void world_finish(RyzLinuxProcess *p,const unsigned int *old)
         if(id)w->descriptions[id-1].fd=p->fds[i];
     }
     for(i=0;i<RYZ_WORLD_DESCRIPTIONS;i++)if(w->descriptions[i].refs==0)w->descriptions[i].used=0;
+    record_description_peak(w);
     for(i=0;i<RYZ_WORLD_PIPES;i++)if(w->pipes[i].used){
         active=0;
         for(j=0;j<RYZ_WORLD_DESCRIPTIONS;j++)
@@ -123,6 +135,7 @@ static void world_finish(RyzLinuxProcess *p,const unsigned int *old)
     }
     resource_cleanup(w);
     net_cleanup(w);
+    pty_cleanup(w);
     if(p->fd_owner)memcpy(owner->fds,p->fds,sizeof p->fds);
     if(p->fs_owner){memcpy(p->fs_owner->resource_cwd,p->resource_cwd,sizeof p->resource_cwd);p->fs_owner->cwd=p->cwd;p->fs_owner->vfs_cwd=p->vfs_cwd;p->fs_owner->file_umask=p->file_umask;}
     w->output_bytes=p->output_bytes;
@@ -135,6 +148,7 @@ void ryz_world_attach(RyzLinuxProcess *p,RyzLinuxWorld *w)
         w->descriptions[p->fds[i].description-1].used=1;
         w->descriptions[p->fds[i].description-1].refs++;
     }
+    record_description_peak(w);
 }
 void ryz_world_fork(RyzLinuxProcess *parent,RyzLinuxProcess *child)
 {
@@ -199,6 +213,8 @@ static int64_t duplicate_min(RyzLinuxProcess *p, uint64_t old, uint64_t minimum,
     return -L_EMFILE;
 }
 static int64_t net_io(RyzLinuxProcess *,uint64_t,uint64_t,uint64_t,uint64_t,int);
+static void encode(unsigned char *,uint64_t,unsigned int);
+#include "syscall_pty.h"
 static int64_t vfs_write(RyzLinuxProcess *,uint64_t,uint64_t,uint64_t);
 static int64_t do_write(RyzLinuxProcess *p, uint64_t fd,
                         uint64_t address, uint64_t count)
@@ -216,6 +232,7 @@ static int64_t do_write(RyzLinuxProcess *p, uint64_t fd,
     if (count != 0 && p->memory_read != NULL &&
         !p->memory_read(p->memory_context, address, count))
         return -L_EFAULT;
+    if((p->fds[fd].node==RYZ_NS_PTY_MASTER || p->fds[fd].node==RYZ_NS_PTY_SLAVE) && p->world)return pty_io(p,fd,buf,count,1);
     if(p->fds[fd].node==RYZ_NS_RESOURCE)return resource_io(p,fd,address,count,1);
     if(p->fds[fd].node==RYZ_NS_VFS)return vfs_write(p,fd,address,count);
     if (p->fds[fd].node == RYZ_NS_STDIN)
@@ -276,6 +293,7 @@ static int64_t do_read(RyzLinuxProcess *p, uint64_t fd,
     if (count != 0 && p->memory_write != NULL &&
         !p->memory_write(p->memory_context, address, count))
         return -L_EFAULT;
+    if((p->fds[fd].node==RYZ_NS_PTY_MASTER || p->fds[fd].node==RYZ_NS_PTY_SLAVE) && p->world)return pty_io(p,fd,buf,count,0);
     if (p->fds[fd].node == RYZ_NS_STDIN)
         return 0; /* Host-independent EOF for unconnected stdin. */
     if (p->fds[fd].mode == 1)
@@ -363,6 +381,7 @@ static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, i
     enum RyzLinuxNode kind=RYZ_NS_NONE;
     unsigned char data[144], *out;
     uint64_t bytes=0, mode=0, device=0, inode;
+    unsigned int pty_slot=0;
     int code;
     if(by_fd){
         if(key>=RYZ_LINUX_FD_MAX || !p->fds[key].open)return -L_EBADF;
@@ -371,12 +390,27 @@ static int64_t do_stat(RyzLinuxProcess *p, uint64_t key, uint64_t destination, i
         else inode=(uint64_t)kind+1;
     }else{
         code=guest_path(p,key,&path,&length);if(code)return code;
-        if(p->world){int trailing;code=ryz_linux_path(p,dirfd,key,canonical,1,&trailing);if(code)return code;path=canonical;length=strlen(path)+1;}
-        code=resolve(p,path,length,&kind,&bytes,&inode);if(code)return code;
-        if(kind!=RYZ_NS_EXEC)inode=(uint64_t)kind+1;
+        if(p->world && dirfd==L_AT_FDCWD && strcmp(path,"/dev/ptmx")==0){
+            kind=RYZ_NS_PTY_MASTER;inode=800;
+        }else if(p->world && dirfd==L_AT_FDCWD && strncmp(path,"/dev/pts/",9)==0
+                 && strlen(path)==10 && path[9]>='0'
+                 && path[9]<'0'+(int)RYZ_WORLD_PTYS){
+            pty_slot=(unsigned int)(path[9]-'0');
+            if(!p->world->ptys[pty_slot].used ||
+               p->world->ptys[pty_slot].namespace_id!=p->ns.namespace_id ||
+               p->world->ptys[pty_slot].uid!=p->ns.uid)return -L_ENOENT;
+            kind=RYZ_NS_PTY_SLAVE;inode=801+pty_slot*2;
+        }else{
+            if(p->world){int trailing;code=ryz_linux_path(p,dirfd,key,canonical,1,&trailing);if(code)return code;path=canonical;length=strlen(path)+1;}
+            code=resolve(p,path,length,&kind,&bytes,&inode);if(code)return code;
+            if(kind!=RYZ_NS_EXEC)inode=(uint64_t)kind+1;
+        }
     }
     if(kind==RYZ_NS_SOCKET){mode=0140000|0777;inode=2000+p->fds[key].socket;}
     if(kind==RYZ_NS_PIPE){mode=0010000|0600;inode=500+p->fds[key].pipe;}
+    if(kind==RYZ_NS_PTY_MASTER || kind==RYZ_NS_PTY_SLAVE){mode=0020000|0600;
+        if(by_fd)inode=800+p->fds[key].pty*2+(kind==RYZ_NS_PTY_SLAVE);
+        device=kind==RYZ_NS_PTY_MASTER?0x502:0x880;}
     if(kind==RYZ_NS_EXEC){mode=0100000|0555;if(by_fd){inode=1000+p->fds[key].vnode;bytes=p->world->execs[p->fds[key].vnode].size;}}
     if(kind==RYZ_NS_INPUT){mode=0100000|0444;bytes=p->files->input_size;}
     if(kind==RYZ_NS_OUTPUT){mode=0100000|0222;bytes=p->files->output_size;}
@@ -403,6 +437,8 @@ static int64_t do_openat(RyzLinuxProcess *p, uint64_t dirfd,
         (flags & ~(uint64_t)(L_O_ACCMODE | L_O_CLOEXEC | L_O_TRUNC | (p->world?04000U|0100000U|0400000U:0) | (p->memory_call?0100U|0200U|02000U:0))) != 0)
         return -L_EINVAL;
     code=guest_path(p,pathaddr,&path,&length);if(code)return code;
+    if(p->world && (strcmp(path,"/dev/ptmx")==0 || strncmp(path,"/dev/pts/",9)==0))
+        return pty_open(p,path,dirfd,flags);
     if(p->world){int trailing;code=ryz_linux_path(p,dirfd,pathaddr,canonical,1,&trailing);if(code)return code;path=canonical;length=strlen(path)+1;}
     code=resolve(p,path,length,&kind,NULL,NULL);if(code)return code;
     if((flags & 0300U)==0300U)return -17;
@@ -577,6 +613,24 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
     if (p->exited)
         return -L_EPERM;
     nr = regs->rax;
+    /* Reserved, namespace-owned virtual PTY endpoints must be resolved
+     * before the generic VFS. Generic VFS has no devpts entry and would
+     * reject them with ENOENT, even when an unlocked pair exists.
+     * Only exact /dev/ptmx or /dev/pts/{N} prefixes are intercepted;
+     * no host or resource mount may silently supply a PTY handle. */
+    if(p->world && (nr==2 || nr==4 || nr==6 || nr==257 || nr==262)){
+        uint64_t at=(nr==257 || nr==262)?regs->rsi:regs->rdi;
+        const char *path=NULL;size_t length=0;int error;
+        error=guest_path(p,at,&path,&length);
+        if(!error && (strcmp(path,"/dev/ptmx")==0 ||
+                      strncmp(path,"/dev/pts/",9)==0)){
+            if(nr==2)return do_openat(p,L_AT_FDCWD,at,regs->rsi);
+            if(nr==257)return do_openat(p,regs->rdi,at,regs->rdx);
+            if(nr==262 && (regs->r10 & ~UINT64_C(256)))return -L_EINVAL;
+            return do_stat(p,at,nr==262?regs->rdx:regs->rsi,0,
+                           nr==262?regs->rdi:L_AT_FDCWD);
+        }
+    }
     if(p->world){
         int handled;int64_t answer=resource_dispatch(p,regs,&handled);
         if(handled)return answer;
@@ -649,7 +703,11 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
         if(regs->rdx>2)return -L_EINVAL;
         base=regs->rdx==0?0:(regs->rdx==1?fd->offset:end);
         if(delta>>63){delta=-delta;if(delta>base)return -L_EINVAL;position=base-delta;}
-        else{if(delta>(fd->node==RYZ_NS_EXEC?4U*1024U*1024U:RYZ_LINUX_FILE_MAX) || base>(fd->node==RYZ_NS_EXEC?4U*1024U*1024U:RYZ_LINUX_FILE_MAX)-delta)return -L_EINVAL;position=base+delta;}
+        else{
+            uint64_t limit=fd->node==RYZ_NS_EXEC?RYZ_PROCESS_IMAGE_MAX:RYZ_LINUX_FILE_MAX;
+            if(delta>limit || base>limit-delta)return -L_EINVAL;
+            position=base+delta;
+        }
         set_offset(p,regs->rdi,(size_t)position);return (int64_t)position;
     }
     case 110:return p->parent_pid?p->parent_pid:1;
@@ -664,7 +722,9 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
     case 19:if(!p->world)return -L_ENOSYS;return do_readv(p,regs);
     case 20:return do_writev(p,regs->rdi,regs->rsi,regs->rdx);
     case 16:
-        return regs->rdi>=RYZ_LINUX_FD_MAX || !p->fds[regs->rdi].open?-L_EBADF:-25;
+        if(regs->rdi>=RYZ_LINUX_FD_MAX || !p->fds[regs->rdi].open)return -L_EBADF;
+        if(p->world && (p->fds[regs->rdi].node==RYZ_NS_PTY_MASTER || p->fds[regs->rdi].node==RYZ_NS_PTY_SLAVE))return pty_ioctl(p,regs);
+        return -25;
     case 22:return do_pipe(p,regs->rdi,0);
     case 293:return do_pipe(p,regs->rdi,regs->rsi);
     case 7:{
@@ -679,6 +739,7 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
             if(!(fd & UINT64_C(0x80000000))){
                 if(fd>=RYZ_LINUX_FD_MAX || !p->fds[fd].open)revents=32;
                 else if(p->fds[fd].node==RYZ_NS_SOCKET && p->world)revents=net_poll(p,fd,(unsigned int)events);
+                else if((p->fds[fd].node==RYZ_NS_PTY_MASTER || p->fds[fd].node==RYZ_NS_PTY_SLAVE) && p->world)revents=pty_poll(p,fd,(unsigned int)events);
                 else if(p->fds[fd].node==RYZ_NS_RESOURCE && p->world && resource_rights(p,p->world->resource_open[p->fds[fd].description-1].mount,1))revents=8;
                 else if(p->fds[fd].node==RYZ_NS_PIPE && p->world){
                     RyzLinuxPipe *pipe=&p->world->pipes[p->fds[fd].pipe];

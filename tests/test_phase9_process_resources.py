@@ -51,6 +51,13 @@ class RuntimeTests(unittest.TestCase):
   for mode in BOUNDED:
    r=self.guest(mode)
    if mode=='arena-budget':self.assertIn(b'arena_peak=16777216 shared_peak=1',r.stderr)
+ def test_guest_descriptor_peak_distinct_from_fd_slots(self):
+  # Three virtual stdio descriptions + open(/dev/null) creates four.
+  # dup/fork share the same description, and EMFILE adds none.
+  stderr=self.guest('nofile').stderr
+  self.assertIn(b'COMPACT_RESOURCE_FDS description_peak=4\n',stderr)
+  self.assertIn(b'COMPACT_RESOURCE_STATS arena_peak=',stderr)
+  self.assertIn(b'COMPACT_RESOURCE_FDS description_peak=3\n',self.guest('nproc').stderr)
  def test_shared_key_pins_reclamation_and_aba_identity(self):
   checker=self.d/'lifetime'
   subprocess.run([*self.flags,*self.sources[:-1],str(ROOT/'tests/phase9_shared_lifetime_test.c'),'-o',str(checker)],check=True,capture_output=True)

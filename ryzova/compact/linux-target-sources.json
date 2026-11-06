@@ -1,0 +1,168 @@
+{
+  "schema": "compact-linux-target-sources/v1",
+  "scope": "Build inputs; no runnable-binary or guest-qualification claim",
+  "build_driver": {
+    "repository": "richfelker/musl-cross-make",
+    "commit": "5e8042e63de29f8473fc3b0b831a587ba284e1a8",
+    "paths": [
+      "litecross/Makefile"
+    ],
+    "patches_applied": []
+  },
+  "sources": [
+    {
+      "id": "busybox",
+      "algorithm": "sha256",
+      "digest": "faeeb244c35a348a334f4a59e44626ee870fb07b6884d68c10ae8bc19f83a694",
+      "archive": "busybox-1.35.0.tar.bz2",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2022.02.1/package/busybox/busybox.hash",
+      "urls": [
+        "https://busybox.net/downloads/busybox-1.35.0.tar.bz2",
+        "https://sources.buildroot.net/busybox/busybox-1.35.0.tar.bz2"
+      ]
+    },
+    {
+      "id": "python",
+      "algorithm": "sha256",
+      "digest": "07ab697474595e06f06647417d3c7fa97ded07afc1a7e4454c5639919b46eaea",
+      "archive": "Python-3.12.10.tar.xz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.02.2/package/python3/python3.hash",
+      "urls": [
+        "https://www.python.org/ftp/python/3.12.10/Python-3.12.10.tar.xz",
+        "https://sources.buildroot.net/python3/Python-3.12.10.tar.xz"
+      ]
+    },
+    {
+      "id": "git",
+      "algorithm": "sha256",
+      "digest": "618190cf590b7e9f6c11f91f23b1d267cd98c3ab33b850416d8758f8b5a85628",
+      "archive": "git-2.49.0.tar.xz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.05-rc1/package/git/git.hash",
+      "urls": [
+        "https://www.kernel.org/pub/software/scm/git/git-2.49.0.tar.xz",
+        "https://sources.buildroot.net/git/git-2.49.0.tar.xz"
+      ]
+    },
+    {
+      "id": "gcc",
+      "algorithm": "sha512",
+      "digest": "932bdef0cda94bacedf452ab17f103c0cb511ff2cec55e9112fc0328cbf1d803b42595728ea7b200e0a057c03e85626f937012e49a7515bc5dd256b2bf4bc396",
+      "archive": "gcc-14.2.0.tar.xz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.02/package/gcc/gcc.hash",
+      "urls": [
+        "https://gcc.gnu.org/pub/gcc/releases/gcc-14.2.0/gcc-14.2.0.tar.xz",
+        "https://sources.buildroot.net/gcc/gcc-14.2.0.tar.xz"
+      ]
+    },
+    {
+      "id": "binutils",
+      "algorithm": "sha512",
+      "digest": "20977ad17729141a2c26d358628f44a0944b84dcfefdec2ba029c2d02f40dfc41cc91c0631044560d2bd6f9a51e1f15846b4b311befbe14f1239f14ff7d57824",
+      "archive": "binutils-2.43.1.tar.xz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2024.11/package/binutils/binutils.hash",
+      "urls": [
+        "https://sourceware.org/pub/binutils/releases/binutils-2.43.1.tar.xz",
+        "https://sources.buildroot.net/binutils/binutils-2.43.1.tar.xz"
+      ]
+    },
+    {
+      "id": "make",
+      "algorithm": "sha256",
+      "digest": "8814ba072182b605d156d7589c19a43b89fc58ea479b9355146160946f8cf6e9",
+      "archive": "make-4.4.1.tar.lz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.02/package/make/make.hash",
+      "urls": [
+        "https://ftp.gnu.org/gnu/make/make-4.4.1.tar.lz",
+        "https://sources.buildroot.net/make/make-4.4.1.tar.lz"
+      ]
+    },
+    {
+      "id": "gmp",
+      "algorithm": "sha256",
+      "digest": "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898",
+      "archive": "gmp-6.3.0.tar.xz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.02/package/gmp/gmp.hash",
+      "urls": [
+        "https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz",
+        "https://sources.buildroot.net/gmp/gmp-6.3.0.tar.xz"
+      ]
+    },
+    {
+      "id": "mpc",
+      "algorithm": "sha256",
+      "digest": "ab642492f5cf882b74aa0cb730cd410a81edcdbec895183ce930e706c1c759b8",
+      "archive": "mpc-1.3.1.tar.gz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.02/package/mpc/mpc.hash",
+      "urls": [
+        "https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz",
+        "https://sources.buildroot.net/mpc/mpc-1.3.1.tar.gz"
+      ]
+    },
+    {
+      "id": "mpfr",
+      "algorithm": "sha256",
+      "digest": "ffd195bd567dbaffc3b98b23fd00aad0537680c9896171e44fe3ff79e28ac33d",
+      "archive": "mpfr-4.1.1.tar.xz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.05/package/mpfr/mpfr.hash",
+      "urls": [
+        "https://ftp.gnu.org/gnu/mpfr/mpfr-4.1.1.tar.xz",
+        "https://sources.buildroot.net/mpfr/mpfr-4.1.1.tar.xz"
+      ]
+    },
+    {
+      "id": "zlib",
+      "algorithm": "sha256",
+      "digest": "38ef96b8dfe510d42707d9c781877914792541133e1870841463bfa73f883e32",
+      "archive": "zlib-1.3.1.tar.xz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.02/package/libzlib/libzlib.hash",
+      "urls": [
+        "https://zlib.net/fossils/zlib-1.3.1.tar.xz",
+        "https://sources.buildroot.net/libzlib/zlib-1.3.1.tar.xz"
+      ]
+    },
+    {
+      "id": "openssl",
+      "algorithm": "sha256",
+      "digest": "002a2d6b30b58bf4bea46c43bdd96365aaf8daa6c428782aa4feee06da197df3",
+      "archive": "openssl-3.4.1.tar.gz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.02/package/libopenssl/libopenssl.hash",
+      "urls": [
+        "https://github.com/openssl/openssl/releases/download/openssl-3.4.1/openssl-3.4.1.tar.gz",
+        "https://sources.buildroot.net/libopenssl/openssl-3.4.1.tar.gz"
+      ]
+    },
+    {
+      "id": "curl",
+      "algorithm": "sha256",
+      "digest": "0341f1ed97a26c811abaebd37d62b833956792b7607ea3f15d001613c76de202",
+      "archive": "curl-8.12.1.tar.xz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.02/package/libcurl/libcurl.hash",
+      "urls": [
+        "https://curl.se/download/curl-8.12.1.tar.xz",
+        "https://sources.buildroot.net/libcurl/curl-8.12.1.tar.xz"
+      ]
+    },
+    {
+      "id": "linux",
+      "algorithm": "sha256",
+      "digest": "e8a099182562aecff781de72ce769461e706d97af42d740dff20eb450dd5771e",
+      "archive": "linux-6.12.28.tar.xz",
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.02.2/linux/linux.hash",
+      "urls": [
+        "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.28.tar.xz",
+        "https://sources.buildroot.net/linux/linux-6.12.28.tar.xz"
+      ]
+    },
+    {
+      "id": "musl",
+      "archive": "musl-1.2.6.tar.gz",
+      "algorithm": "sha256",
+      "digest": "d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a",
+      "urls": [
+        "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+        "https://sources.buildroot.net/musl/musl-1.2.6.tar.gz"
+      ],
+      "checksum_source": "https://github.com/buildroot/buildroot/blob/2025.05/package/musl/musl.hash"
+    }
+  ]
+}

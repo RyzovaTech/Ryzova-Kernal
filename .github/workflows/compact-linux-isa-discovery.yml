@@ -1,0 +1,67 @@
+name: CLX-04 read-only ELF instruction discovery safety
+on:
+  pull_request:
+    branches:
+      - main
+      - feature/compact-linux-phase3-target-profiles
+    paths:
+      - 'ryzova/compat/linux/**'
+      - 'ryzova/compact/linux-*'
+      - 'scripts/compact_linux_*.py'
+      - 'tests/test_compact_linux_*.py'
+      - 'tests/test_phase9_*.py'
+      - '.github/workflows/compact-linux-isa-discovery.yml'
+  workflow_dispatch:
+concurrency:
+  # Cancel only superseded revisions of this PR and this workflow.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
+jobs:
+  candidate-rip:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Verify bounded ELF sample provenance and no fake guest completion
+        run: |
+          python -m unittest discover -s tests -p 'test_compact_linux_isa_discovery.py' -v
+          python -m py_compile scripts/compact_linux_isa_discovery.py
+      - name: Validate bounded ELF image/aggregate budgets and large PIE relocation
+        run: python -m unittest discover -s tests -p 'test_phase9_image_admission.py' -v
+      - name: Differential host Linux vs Ryzova guest SSE2 semantics
+        run: python -m unittest discover -s tests -p 'test_phase9_sse2_differential.py' -v
+      - name: Differential IEEE754 binary32 COMISS and UCOMISS flags with strict faults
+        run: python -m unittest discover -s tests -p 'test_phase9_comiss_differential.py' -v
+      - name: Differential binary64 CVTSI2SD RN-even and MOVSD scalar register/memory
+        run: python -m unittest discover -s tests -p 'test_phase9_double_scalar_differential.py' -v
+      - name: Differential ADDSD and DIVSD pure-integer IEEE binary64 against Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_double_arithmetic_differential.py' -v
+      - name: Differential COMISD and CVTTSD2SI flags/round-to-zero vs native Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_double_compare_trunc_differential.py' -v
+      - name: Differential SSE2 PADDQ modular lanes and aligned m128 against Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_paddq_differential.py' -v
+      - name: Differential PCMPEQD packed equality, register alias and aligned m128
+        run: python -m unittest discover -s tests -p 'test_phase9_pcmpeqd_differential.py' -v
+      - name: Differential STMXCSR and default-only LDMXCSR versus native Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_mxcsr_differential.py' -v
+      - name: Differential MOVHLPS register and unaligned MOVLPS m64 vs native Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_movhlps_differential.py' -v
+      - name: Differential MINSD binary64 NaN signed-zero register memory and flags versus Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_minsd_differential.py' -v
+      - name: Differential ANDPD SSE2 bitwise semantics, alignment and aliases versus Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_andpd_differential.py' -v
+      - name: Differential SSE2 ANDNPD complement-destination, alignment, aliases and flags
+        run: python -m unittest discover -s tests -p 'test_phase9_andnpd_differential.py' -v
+      - name: Differential scalar SSE2 CMPSD predicates, NaNs, m64 and EFLAGS against Linux
+        run: python -m unittest discover -s tests -p 'test_phase9_cmpsd_differential.py' -v

@@ -18,8 +18,14 @@ typedef struct RyzVmResult {
     uint64_t last_rip,pipe_bytes;
     uint64_t arena_peak_bytes;
     uint32_t shared_peak_pages;
+    uint32_t description_peak; /* bounded guest descriptions, not host FDs */
     int exited;
     uint8_t exit_status;
+    /* Diagnostic only, never forward an unsupported guest syscall to host. */
+    uint64_t unsupported_syscall_nr;
+    int unsupported_syscall_valid;
+    /* Monotonic guest-model counters, NOT physical host CPU/RAM/network. */
+    uint64_t network_bytes,resource_bytes,output_bytes;
 } RyzVmResult;
 /*
  * Execute a deliberately tiny x86-64 opcode subset via a software interpreter.

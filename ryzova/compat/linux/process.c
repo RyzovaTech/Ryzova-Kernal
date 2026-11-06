@@ -127,7 +127,17 @@ int ryz_prepare_job(const unsigned char *image,size_t length,unsigned char *aren
     if(path){
         for(i=0;i<world->exec_count;i++)if(strcmp(path,world->execs[i].path)==0)interpreter=&world->execs[i];
         if(!interpreter)return RYZ_VM_BAD_INPUT;
+        /* The fixed 8-MiB loader bias overlaps measured large PIE mains
+         * (e.g. CPython has a 5.8-MiB load span at 4-MiB PIE bias).
+         * Choose a bounded 2-MiB aligned gap after the *mapped* main ELF.
+         * Existing small-PIE layouts keep their historical loader bias. */
+        for(j=0;j<plans[0].load_count;j++)
+            if(plans[0].loads[j].map_end>main_high)main_high=plans[0].loads[j].map_end;
         interp_base=UINT64_C(0x800000);
+        if(main_high>interp_base){
+            if(main_high>UINT64_C(0x0000800000000000)-UINT64_C(0x200000))return RYZ_VM_MAP_ERROR;
+            interp_base=(main_high+UINT64_C(0x1fffff))&~UINT64_C(0x1fffff);
+        }
         if(interpreter->size<64 || le(interpreter->image+16,2)!=3 ||
             ryz_elf64_plan_relocated(interpreter->image,interpreter->size,interp_base,1,&plans[1])!=RYZ_ELF_OK)return RYZ_VM_BAD_INPUT;
         for(i=0;i<le(interpreter->image+56,2);i++)if(le(interpreter->image+(size_t)le(interpreter->image+32,8)+i*56,4)==3)return RYZ_VM_BAD_INPUT;
