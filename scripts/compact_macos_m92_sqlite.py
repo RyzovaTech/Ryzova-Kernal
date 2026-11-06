@@ -13,7 +13,7 @@ from urllib.request import urlopen
 import zipfile
 
 from compact_macos_m8_jq import save_json, source_head
-from compact_macos_m8_loader_check import BASE, Image, R, W, X, UNRESOLVED, changed, commands
+from compact_macos_m8_loader_check import ARENA, BASE, GUARD, Image, R, Stop, W, X, UNRESOLVED, changed, commands
 
 RELEASE = 'https://www.sqlite.org/2026'
 VERSION = '3.54.1'
@@ -245,7 +245,34 @@ def check_map(lib, arch, image, layout):
                 rebases=plan.rebases, libz_imports=12, rejected=sorted(invalid))
 
 
-def audit(lib, references, output):
+def check_execution(lib, arch, image, cases):
+    lib.mac9_run.argtypes = [C.c_void_p, C.c_uint, C.c_void_p, C.c_uint, C.c_ulonglong,
+                            C.c_uint, C.POINTER(C.c_char_p), C.c_uint, C.c_char_p,
+                            C.c_void_p, C.c_uint, C.POINTER(Stop)]
+    arena = C.create_string_buffer(ARENA)
+
+    def run(name, argv, expected):
+        words = [b'sqlite3', *(arg.encode('ascii') for arg in argv)]
+        args = (C.c_char_p*len(words))(*words)
+        stop = Stop()
+        status = lib.mac9_run(image, len(image), arena, len(arena), GUARD, len(args), args,
+                              16777216, None, None, 0, C.byref(stop))
+        stdout = bytes(stop.stdout_data[:stop.stdout_bytes]).hex()
+        stderr = bytes(stop.stderr_data[:stop.stderr_bytes]).hex()
+        if (status, stdout, stderr, stop.exit_code, stop.file_reads) != (
+                2, expected['stdout_hex'], expected['stderr_hex'], expected['exit_code'], 0):
+            symbol = image[stop.name:].split(b'\0', 1)[0] if stop.name else b''
+            raise ValueError(f'{arch} {name}: status {status} at {stop.last_pc:#x}, {symbol!r}; '
+                             f'{stop.steps} steps, stdout {stdout}, stderr {stderr}')
+        return dict(stdout_hex=stdout, stderr_hex=stderr, exit_code=stop.exit_code, steps=stop.steps)
+
+    executions = {name: run(name, reference['argv'], reference) for name, reference in cases.items()}
+    run('alternate SQL', CASES['query'][:-1]+['SELECT 7*8;'],
+        dict(stdout_hex=b'56\n'.hex(), stderr_hex='', exit_code=0))
+    return executions
+
+
+def audit(lib, references, output, execute=False):
     lib = C.CDLL(str(lib.resolve()))
     lib.mac8_load.argtypes = [C.c_void_p, C.c_uint, C.c_void_p, C.c_uint, C.POINTER(Image)]
     lib.mac8_load_bound.argtypes = lib.mac8_load.argtypes+[BIND]
@@ -265,7 +292,9 @@ def audit(lib, references, output):
             raise ValueError(f'{arch}: SQLite receipt provenance differs')
         check_cases(receipt['cases'])
         mapped = check_map(lib, arch, image, layout)
-        results[arch] = dict(reference=receipt, **mapped, guest_execution_verified=False)
+        results[arch] = dict(reference=receipt, **mapped, guest_execution_verified=execute)
+        if execute:
+            results[arch]['hosted_cases'] = check_execution(lib, arch, image, receipt['cases'])
         print(f'{arch}: mapped {mapped["mapped_bytes"]} bytes, {mapped["binds"]} binds, '
               f'{mapped["rebases"]} rebases')
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -282,8 +311,9 @@ if __name__ == '__main__':
     gate = subcommands.add_parser('audit')
     for arg in ('loader', 'references', 'output'):
         gate.add_argument(arg, type=Path)
+    gate.add_argument('--execute', action='store_true')
     args = parser.parse_args()
     if args.command == 'reference':
         reference(args.arch, args.out)
     else:
-        audit(args.loader, args.references, args.output)
+        audit(args.loader, args.references, args.output, args.execute)
