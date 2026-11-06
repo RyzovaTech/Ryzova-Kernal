@@ -15,7 +15,7 @@ struct Mac8Stop {
 };
 
 enum {
-    Mac8StackBytes = 65536, Mac8ServiceBytes = 4096, Mac8WritableBytes = 4096,
+    Mac8InputLimit = 1024*1024, Mac8StackBytes = 65536, Mac8ServiceBytes = 4096, Mac8WritableBytes = 4096,
     Mac8ArenaBytes = Mac8Limit+Mac8StackBytes+Mac8ServiceBytes+Mac8HeapBytes+Mac8WritableBytes
 };
 

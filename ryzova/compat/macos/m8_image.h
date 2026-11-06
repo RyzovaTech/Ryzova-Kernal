@@ -3,7 +3,7 @@
 #define MAC_M8_IMAGE_H
 
 enum {
-    Mac8Limit = 1024*1024, Mac8Segments = 5, Mac8Imports = 256,
+    Mac8Limit = 4*1024*1024, Mac8Segments = 5, Mac8Imports = 256,
     Mac8Read = 1, Mac8Write = 2, Mac8Execute = 4
 };
 
@@ -22,6 +22,7 @@ struct Mac8Image {
     unsigned int bss, bss_bytes;
     unsigned int names[Mac8Imports]; /* Offsets in the original image. */
     Mac8Segment segments[Mac8Segments];
+    unsigned char system_import[Mac8Imports]; /* Eligible for the guest libSystem ABI. */
 };
 
 /* All spans and fixups are validated before any output is modified. The
