@@ -47,10 +47,6 @@ def verify(image, bootstrap, references, output):
     setup = 'ip/ipconfig -d ether /net/ether0; webfs'
     url = 'http://10.0.2.2:8000'
     program = '/amd64/bin/compact-macos-m8'
-    compat = 'cpu loader api crt sync_objects files'.split()
-    runtime = 'm8_native m8_image m8_heap m8_start'.split()
-    files = ' '.join([f'{name}.c' for name in runtime] + [f'../windows/{name}.c' for name in compat])
-    objects = ' '.join(f'{name}.6' for name in runtime+compat)
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(output))
     with ThreadingHTTPServer(('127.0.0.1', 8000), handler) as server:
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -60,8 +56,7 @@ def verify(image, bootstrap, references, output):
                 f'hget {url}/source.tgz > /tmp/m8-source.tgz; sha1sum -2 256 /tmp/m8-source.tgz',
                 'cd /; tar xzf /tmp/m8-source.tgz',
                 'cd /sys/src/cmd/compact-m8/macos; '
-                f'{{ 6c -DMAC_PLAN9 -DCW_PLAN9 {files} && 6l -o {program} {objects}'
-                ' && echo M8_NATIVE_OK } >/tmp/m8-build.log >[2=1]; cat /tmp/m8-build.log',
+                'rc m8_build.rc >/tmp/m8-build.log >[2=1] && echo M8_NATIVE_OK; cat /tmp/m8-build.log',
                 'cd /sys/src/9/pc64; mk >/tmp/m8-kernel.log >[2=1] && echo M8_KERNEL_OK; tail -n 25 /tmp/m8-kernel.log',
                 '9fs 9fat; cd /sys/src/9/pc64; cp 9pc64 /n/9fat/9pc64 && cmp 9pc64 /n/9fat/9pc64 '
                 '&& echo M8_COPY_OK; sha1sum -2 256 9pc64',
@@ -75,12 +70,13 @@ def verify(image, bootstrap, references, output):
             commands = [f"cat '#Z/version'; sha1sum -2 256 {program}", setup]
             markers = {}
             for arch, (name, *_details) in TARGETS.items():
-                path = f'/tmp/{name}'
+                path = f'/tmp/m8-{arch}'
                 commands.append(f'hget {url}/{name} > {path}; sha1sum -2 256 {path}')
                 markers[len(commands)] = f'M8_VERSION_{arch}_OK'
                 commands.append(
                     f'{program} --version {path} > {path}.stdout >[2] {path}.stderr '
-                    f'&& echo {markers[len(commands)]}; sha1sum -2 256 {path}.stdout {path}.stderr')
+                    f'&& echo {markers[len(commands)]}')
+                commands.append(f'sha1sum -2 256 {path}.stdout {path}.stderr')
             run = session(image, commands, output, 'fresh', 120, markers)
         finally:
             server.shutdown()
@@ -89,7 +85,7 @@ def verify(image, bootstrap, references, output):
         raise ValueError('native kernel or runtime identity differs')
     report = {}
     for arch, (name, _, digest, _, _) in TARGETS.items():
-        path = f'/tmp/{name}'
+        path = f'/tmp/m8-{arch}'
         version = versions[arch]
         if digest_line(run, path) != digest:
             raise ValueError(f'{arch}: in-guest executable digest differs')
