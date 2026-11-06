@@ -1,8 +1,8 @@
 #!/bin/rc
 # SPDX-License-Identifier: AGPL-3.0-only
-if(! 6c -DMAC_PLAN9 -DCW_PLAN9 -I../windows m8_native.c m8_image.c m8_heap.c m8_start.c)
+if(! 6c -DMAC_PLAN9 -DCW_PLAN9 -I../windows m8_native.c m8_image.c m8_heap.c m8_fma.c m8_start.c)
     exit compile-macos
 cd ../windows
 if(! 6c -DCW_PLAN9 cpu.c loader.c api.c crt.c sync_objects.c files.c)
     exit compile-amd64
-6l -o /amd64/bin/compact-macos-m8 ../macos/m8_native.6 ../macos/m8_image.6 ../macos/m8_heap.6 ../macos/m8_start.6 cpu.6 loader.6 api.6 crt.6 sync_objects.6 files.6
+6l -o /amd64/bin/compact-macos-m8 ../macos/m8_native.6 ../macos/m8_image.6 ../macos/m8_heap.6 ../macos/m8_fma.6 ../macos/m8_start.6 cpu.6 loader.6 api.6 crt.6 sync_objects.6 files.6

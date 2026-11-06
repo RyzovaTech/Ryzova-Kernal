@@ -4,14 +4,14 @@
 #include "m8_image.h"
 #include "m8_heap.h"
 
-enum { Mac8OutputLimit = 256 };
+enum { Mac8OutputLimit = 256, Mac8MaxBudget = 16777216 };
 
 typedef struct Mac8Stop Mac8Stop;
 struct Mac8Stop {
     unsigned long long pc, last_pc, arg0, arg1;
     unsigned int steps, name, locale_calls, alloc_calls;
-    unsigned int exit_code, stdout_bytes;
-    unsigned char stdout_data[Mac8OutputLimit];
+    unsigned int exit_code, stdout_bytes, stderr_bytes, file_opens, file_reads;
+    unsigned char stdout_data[Mac8OutputLimit], stderr_data[Mac8OutputLimit];
 };
 
 enum {
@@ -26,4 +26,7 @@ enum {
 int mac8_start(const unsigned char *, unsigned int, unsigned char *,
                unsigned int, unsigned long long, Mac8Stop *);
 
+/* The optional immutable input is exposed only as guest input.json. */
+int mac8_run(const unsigned char *, unsigned int, unsigned char *, unsigned int,
+             unsigned long long, unsigned int, const char *const *, unsigned int, const unsigned char *, unsigned int, Mac8Stop *);
 #endif

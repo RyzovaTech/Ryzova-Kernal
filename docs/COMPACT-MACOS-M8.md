@@ -29,17 +29,25 @@ bounded instruction subset. Both stop at the unresolved `_setlocale`
 call, after 15 Intel instructions and 18 ARM64 instructions. Each path
 also rejects an invalid entry opcode before reaching a guest import.
 
-## Version execution
+## jq execution
 
 The opt-in C-locale profile uses a read-only service page for the guest
 stack guard and standard stream pointers. The bounded heap is writable
 and non-executable. Allocation metadata and stream state are private to
-the interpreter. The version path implements the libSystem operations it
-encounters, including the one-string format used by `printf`, and compares
-the bytes emitted by the guest with the macOS reference. The hosted test
-also changes the guest format bytes and checks the corresponding output.
+the interpreter. The hosted gate compares stdout, stderr and exit status with the macOS
+reference for both operations. It also changes the guest version format,
+runs the query with a second input, and verifies that a launch without an
+input capability cannot complete the query.
 
-The native version job builds the runtime and kernel with the guest
+The native jq job builds the runtime and kernel with the guest
 toolchain, verifies the installed kernel digest, reboots, and compares
 separate stdout and stderr digests and successful exit for the exact same
-binaries. The fixed read-only JSON query remains a separate gate.
+binaries. The query launcher opens the supplied input with read-only
+access and exposes its bytes only as guest `input.json`. The native
+receipt verifies that the file has the same SHA-256 before and after both
+query runs.
+
+The qualified profile is jq 1.8.1 for these two workloads. It has one
+guest thread, one read-only input file, bounded output, and bounded
+instruction, heap and stack use. Unknown imports and unsupported
+instructions fail the launch.

@@ -64,12 +64,12 @@ jobs:
           C
           read -r intel_limit arm_limit < <(/tmp/mac-m6-limits)
           python3 scripts/compact_macos_m8_jq.py audit references /tmp/mac-m6 evidence "$intel_limit" "$arm_limit"
-      - name: Verify mapping and hosted guest version parity
+      - name: Verify mapping and hosted guest jq parity
         shell: bash
         run: |
           cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -fPIC -shared \
             -fsanitize=undefined -fno-sanitize-recover=all \
-            ryzova/compat/macos/{m8_image,m8_heap,m8_start}.c \
+            ryzova/compat/macos/{m8_image,m8_heap,m8_fma,m8_start}.c \
             ryzova/compat/windows/{cpu,loader,api,crt,sync_objects,files}.c \
             -o /tmp/mac-m8-loader.so
           python3 scripts/compact_macos_m8_loader_check.py /tmp/mac-m8-loader.so references evidence/loader.json
@@ -78,7 +78,7 @@ jobs:
           name: macos-m8-admission-audit
           path: evidence/
           if-no-files-found: error
-  native-version:
+  native-jq:
     needs: admission-audit
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -100,12 +100,12 @@ jobs:
           echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  bootstrap.qcow2.gz' | sha256sum -c -
           gzip -dc bootstrap.qcow2.gz > bootstrap.qcow2
           qemu-img create -f qcow2 -F qcow2 -b bootstrap.qcow2 mac-m8.qcow2
-      - name: Verify jq version parity on source-built Ryzova
+      - name: Verify jq parity on source-built Ryzova
         run: python3 scripts/compact_macos_m8_native.py mac-m8.qcow2 bootstrap.qcow2.gz references evidence/native
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: macos-m8-native-version
+          name: macos-m8-native-jq
           path: |
             evidence/native/*.json
             evidence/native/*.log

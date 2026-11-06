@@ -3,15 +3,16 @@
 import argparse
 import ctypes as C
 import json
+import random
 from pathlib import Path
 import struct
 
-from compact_macos_m8_jq import TARGETS, save_json, sha256, source_head, verified_image
+from compact_macos_m8_jq import INPUT, TARGETS, save_json, sha256, source_head, verified_image
 
 
 CAP = 1024 * 1024
 STACK = 65536
-HEAP = 512*1024
+HEAP = 4*1024*1024
 ARENA = CAP+STACK+HEAP+8192
 GUARD = 0x1234567800000000
 BASE = 0x200000
@@ -40,8 +41,9 @@ class Image(C.Structure):
 
 class Stop(C.Structure):
     _fields_ = [(name, C.c_ulonglong) for name in ('pc', 'last_pc', 'arg0', 'arg1')
-                ] + [(name, C.c_uint) for name in ('steps', 'name', 'locale_calls', 'alloc_calls', 'exit_code', 'stdout_bytes')] + [
-                    ('stdout_data', C.c_ubyte * 256)]
+                ] + [(name, C.c_uint) for name in ('steps', 'name', 'locale_calls', 'alloc_calls', 'exit_code', 'stdout_bytes', 'stderr_bytes',
+                                           'file_opens', 'file_reads')] + [
+                    ('stdout_data', C.c_ubyte * 256), ('stderr_data', C.c_ubyte * 256)]
 
 
 def commands(image):
@@ -164,7 +166,8 @@ def check_version(lib, arch, image, expected):
         return stop, bytes(stop.stdout_data[:stop.stdout_bytes])
 
     stop, stdout = run(image)
-    if stop.exit_code != expected['exit_code'] or stdout.hex() != expected['stdout_hex'] or expected['stderr_hex']:
+    if stop.exit_code != expected['exit_code'] or stdout.hex() != expected['stdout_hex'] or bytes(
+            stop.stderr_data[:stop.stderr_bytes]).hex() != expected['stderr_hex']:
         raise ValueError(f'{arch}: version differs from the macOS reference')
 
     # Changing guest format bytes changes guest output through the same ABI.
@@ -178,9 +181,57 @@ def check_version(lib, arch, image, expected):
                 locale_calls=stop.locale_calls, allocations=stop.alloc_calls, reference_match=True)
 
 
+def check_query(lib, arch, image, expected):
+    arena = C.create_string_buffer(ARENA)
+    argv = [b'jq', *(arg.encode('ascii') for arg in expected['argv'])]
+    arguments = (C.c_char_p*len(argv))(*argv)
+
+    def run(payload, wanted):
+        source = C.create_string_buffer(payload)
+        stop = Stop()
+        status = lib.mac8_run(image, len(image), arena, len(arena), GUARD,
+                              len(arguments), arguments, 16777216, source, len(payload), C.byref(stop))
+        if status != 2 or stop.exit_code != expected['exit_code']:
+            name = image[stop.name:].split(b'\0', 1)[0] if stop.name else b''
+            raise ValueError(f'{arch}: query stopped at {stop.last_pc:#x}, {name!r}, after {stop.steps} steps')
+        stdout = bytes(stop.stdout_data[:stop.stdout_bytes])
+        stderr = bytes(stop.stderr_data[:stop.stderr_bytes])
+        if (stdout, stderr, stop.file_opens, stop.file_reads, source.raw) != (
+                wanted, bytes.fromhex(expected['stderr_hex']), 1, len(payload), payload+b'\0'):
+            raise ValueError(f'{arch}: query output or read-only input grant differs')
+        return dict(steps=stop.steps, stdout_hex=stdout.hex(), stderr_hex=stderr.hex(),
+                    exit_code=stop.exit_code, file_opens=1, bytes_read=len(payload),
+                    input_sha256=sha256(payload), input_unchanged=True, reference_match=True)
+
+    report = run(INPUT, bytes.fromhex(expected['stdout_hex']))
+    run(b'{"items":[7,8]}\n', b'{"count":2,"sum":15}\n')
+    denied = Stop()
+    status = lib.mac8_run(image, len(image), arena, len(arena), GUARD,
+                          len(arguments), arguments, 16777216, None, 0, C.byref(denied))
+    if denied.file_opens or denied.file_reads or denied.stdout_bytes or (status==2 and not denied.exit_code):
+        raise ValueError(f'{arch}: a query without an input grant succeeded')
+    report['missing_grant_denied'] = True
+    return report
+
+
+def check_fma(lib):
+    word = C.c_ulonglong
+    lib.mac8_fma.argtypes = [word, word, word, C.POINTER(word)]
+    libc_fma = C.CDLL('libm.so.6').fma
+    libc_fma.argtypes = [C.c_double]*3
+    libc_fma.restype = C.c_double
+    bits = lambda value: struct.unpack('<Q', struct.pack('<d', value))[0]
+    rng = random.Random(91)
+    cases = [(1.0+2**-27, 1.0-2**-27, -1.0), (1.0, 1.0, 2**-53), (-0.0, 1.0, -0.0)]
+    cases.extend(tuple(rng.uniform(-10**6, 10**6) for _ in range(3)) for _ in range(300))
+    for case in cases:
+        out = word()
+        if lib.mac8_fma(*(bits(x) for x in case), C.byref(out)) != 1 or out.value != bits(libc_fma(*case)):
+            raise ValueError(f'ARM64 fused arithmetic differs for {case}')
+
 def check_heap(lib):
     class Heap(C.Structure):
-        _fields_ = [('count', C.c_uint), ('blocks', C.c_uint * 1024)]
+        _fields_ = [('count', C.c_uint), ('blocks', C.c_uint * 98304)]
 
     lib.mac8_alloc.argtypes = [C.POINTER(Heap), C.c_ulonglong]
     lib.mac8_alloc.restype = C.c_uint
@@ -204,19 +255,24 @@ def main():
     lib.mac8_load.argtypes = [C.c_void_p, C.c_uint, C.c_void_p, C.c_uint, C.POINTER(Image)]
     lib.mac8_access.argtypes = [C.POINTER(Image), C.c_ulonglong, C.c_uint, C.c_uint]
     lib.mac8_start.argtypes = [C.c_void_p, C.c_uint, C.c_void_p, C.c_uint, C.c_ulonglong, C.POINTER(Stop)]
+    lib.mac8_run.argtypes = [C.c_void_p, C.c_uint, C.c_void_p, C.c_uint, C.c_ulonglong,
+                            C.c_uint, C.POINTER(C.c_char_p), C.c_uint, C.c_void_p, C.c_uint,
+                            C.POINTER(Stop)]
     check_heap(lib)
+    check_fma(lib)
     report = {}
     for arch, (name, _, _, _, _) in TARGETS.items():
         reference = args.references/f'macos-m8-jq-{arch}'
         image = verified_image(arch, (reference/name).read_bytes())
-        expected = json.loads((reference/'reference.json').read_text())['cases']['version']
+        cases = json.loads((reference/'reference.json').read_text())['cases']
         report[arch] = map_and_check(lib, arch, image)
         report[arch]['startup'] = check_start(lib, arch, image)
-        report[arch]['version'] = check_version(lib, arch, image, expected)
+        report[arch]['version'] = check_version(lib, arch, image, cases['version'])
+        report[arch]['query'] = check_query(lib, arch, image, cases['query'])
         print(f'{arch}: mapped {report[arch]["mapped_bytes"]} bytes, checked '
               f'{len(report[arch]["rejected"])} malformed images and traced '
-              f'{report[arch]["startup"]["steps"]} instructions to the first import. Version matches.')
-    save_json(args.output, dict(schema='compact-macos-m8-hosted-version/v1',
+              f'{report[arch]["startup"]["steps"]} instructions to the first import. Version and query match.')
+    save_json(args.output, dict(schema='compact-macos-m8-hosted-jq/v1',
                                source_commit=source_head(), architectures=report))
 
 
