@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Real TLS1.2 guest-facing 9P socket test with upstream mutual TLS1.3."""
 import hashlib
 import socket

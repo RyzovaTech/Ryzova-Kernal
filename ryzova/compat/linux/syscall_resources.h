@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Live filesystem capabilities. No host pathname is constructed in this core. */
 static int resource_find(RyzLinuxWorld *w,const char *path)
 {

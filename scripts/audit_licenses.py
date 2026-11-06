@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Preliminary, reproducible tracked-file license inventory, NOT legal clearance."""
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ REQUIRED = (
     "lib/legal/gpl",
     "lib/legal/ofl",
     "LICENSE.md",
-    "LICENSES/AGPL-3.0-only.txt",
+    "LICENSES/AGPL-3.0-only.txt",  # retained for historical grants and unmigrated files
+    "LICENSES/GPL-3.0-only.txt",
     "COMMERCIAL-LICENSING.md",
     "TRADEMARKS.md",
     "CONTRIBUTING.md",
@@ -67,6 +68,12 @@ def main() -> int:
         if not content.startswith("GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007"):
             errors.append("Bundled AGPL text does not match expected SPDX license opening")
 
+    gpl_file = ROOT / "LICENSES/GPL-3.0-only.txt"
+    if gpl_file.is_file():
+        content = gpl_file.read_text(encoding="utf-8", errors="replace")
+        if not content.startswith("GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007"):
+            errors.append("Bundled GPLv3 text does not match expected SPDX license opening")
+
     copyright_markers = [p for p in paths if MARKER.search(p)]
     spdx_files: list[dict[str, str]] = []
     for name in paths:
@@ -86,8 +93,8 @@ def main() -> int:
     for name in RYZOVA_CODE:
         if name not in tracked:
             errors.append(f"Missing Ryzova script: {name}")
-        elif not any(item["path"] == name and item["spdx"] == "AGPL-3.0-only" for item in spdx_files):
-            errors.append(f"Missing AGPL-3.0-only SPDX identifier on Ryzova script: {name}")
+        elif not any(item["path"] == name and item["spdx"] == "GPL-3.0-only" for item in spdx_files):
+            errors.append(f"Missing GPL-3.0-only SPDX identifier on Ryzova script: {name}")
 
     mapped_exceptions = []
     for prefix, reason in EXCEPTIONS:
@@ -106,6 +113,7 @@ def main() -> int:
             "SPDX identifiers are not a definitive determination of actual license rights.",
             "Unmarked third-party assets may have additional terms; manual review is required.",
             "Commercial license applicability requires specific documented ownership and grants.",
+            "Historical AGPL public grants and inherited third-party licenses remain in force.",
         ],
         "errors": errors,
     }

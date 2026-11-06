@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 typedef unsigned long U;
 /* Force PT_TLS so the extended process loader is selected; freestanding code
  * does not use this TLS object and does not require libc TLS initialization. */

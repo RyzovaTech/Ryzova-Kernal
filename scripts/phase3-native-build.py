@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Build imported Ryzova source inside a disposable 9front AMD64 QEMU guest.
 
 Strict gate: an official prebuilt guest boot and source parity are NOT the same as

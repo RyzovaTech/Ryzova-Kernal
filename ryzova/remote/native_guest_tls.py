@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Bounded TLS1.2 guest-facing 9P ingress for disposable QEMU research only.
 
 The native Ryzova tlsclient checks a pinned SHA256 server leaf certificate.

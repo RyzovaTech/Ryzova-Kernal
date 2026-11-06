@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Bounded admission for loopback research listeners, before thread creation."""
 import socketserver
 import threading

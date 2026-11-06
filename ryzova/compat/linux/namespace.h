@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Phase 5.3: per-process virtual Linux namespace. No host filesystem mounts. */
 #ifndef RYZOVA_LINUX_NAMESPACE_H
 #define RYZOVA_LINUX_NAMESPACE_H

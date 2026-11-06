@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #include "../ryzova/compat/linux/syscall.h"
 #include <stdio.h>
 #define CHECK(x) do { if(!(x)){fprintf(stderr,"shell resource assertion line %d\n",__LINE__);return 1;} } while(0)

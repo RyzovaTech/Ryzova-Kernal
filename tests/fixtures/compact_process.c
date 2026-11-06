@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 typedef unsigned long U;
 extern void _start(void);
 static long call6(long nr,long a,long b,long c,long d,long e,long f)

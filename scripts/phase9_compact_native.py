@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Native Compact execution fixtures and strict serial evidence, not a full ABI."""
 import hashlib
 import re

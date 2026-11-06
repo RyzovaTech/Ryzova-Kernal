@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """CLX-02 first increment: isolated guest root, not live resource mounts."""
 from functools import lru_cache
 import hashlib

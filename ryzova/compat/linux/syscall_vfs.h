@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Internal syscall implementation: invocation-local guest tree, never host paths.
  * Kept in this translation unit so all existing portable ABI consumers use it. */
 #include "filesystem_tree.h"

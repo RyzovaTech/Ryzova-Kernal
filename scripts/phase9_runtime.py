@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Native qualification for real guest signal frames and musl dynamic linking."""
 import hashlib
 from pathlib import Path

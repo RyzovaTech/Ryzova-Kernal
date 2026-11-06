@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Host-independent virtual namespace: no underlying host or Plan 9 files. */
 #include "namespace.h"
 #define L_ENOENT 2

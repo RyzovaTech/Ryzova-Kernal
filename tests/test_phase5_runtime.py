@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Compile portable phase 5 runtime against GCC/Clang. No Linux app executes."""
 import os
 from pathlib import Path

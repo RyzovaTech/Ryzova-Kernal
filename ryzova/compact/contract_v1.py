@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 9.1 host-side Compact contract validation; not a native ABI implementation."""
 from __future__ import annotations
 import re

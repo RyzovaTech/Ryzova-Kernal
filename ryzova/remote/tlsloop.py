@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 6.5: real TLS 1.3 mutual-certificate localhost request/reply PoC.
 
 A developer test server binds ONLY 127.0.0.1. Certs and keys are injected,

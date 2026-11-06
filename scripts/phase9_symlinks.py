@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Source-built native Linux symbolic-link and saved-namespace qualification."""
 from functools import lru_cache
 import hashlib

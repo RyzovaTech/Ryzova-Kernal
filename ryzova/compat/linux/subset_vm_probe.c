@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Host proof harness: real ELF instructions interpreted; NEVER native executed. */
 #include "subset_vm.h"
 #include <stdio.h>

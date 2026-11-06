@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Real separate TCP listeners with TLS1.3 mutual authentication and 9P/CPU.
 
 These local TCP tests do not substitute for isolated-network CI evidence.

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef RYZOVA_COMPAT_SUBSET_VM_H
 #define RYZOVA_COMPAT_SUBSET_VM_H
 #include "portable.h"

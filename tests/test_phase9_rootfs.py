@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """CLX-02 root profile: real guest syscalls, restart and trust-boundary tests."""
 import hashlib
 import os

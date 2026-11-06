@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 8.1: opt-in TLS-bound 9P peer authorization for isolated host tests.
 
 This guard is called ONLY inside a TLS1.3 peer's established, mutually

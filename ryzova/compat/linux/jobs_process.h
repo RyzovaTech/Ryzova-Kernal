@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Namespace-local process groups/sessions and enforced bounded resource limits. */
 static Task *process_find(Jobs *jobs,Task *caller,uint64_t pid)
 {

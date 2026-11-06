@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Source-built native shared file mapping, SIGBUS and persistence qualification."""
 from functools import lru_cache
 import hashlib

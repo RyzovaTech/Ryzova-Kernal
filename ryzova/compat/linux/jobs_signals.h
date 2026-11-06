@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Internal guest-only AMD64 Linux signal ABI. No host signal handlers. */
 #define SIG_UNBLOCKABLE ((UINT64_C(1)<<8)|(UINT64_C(1)<<18))
 #define SIG_RESTART UINT64_C(0x10000000)

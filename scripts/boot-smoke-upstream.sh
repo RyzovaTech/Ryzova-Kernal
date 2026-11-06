@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 # Diagnostic QEMU boot of an official 9front release, NOT a build of the Ryzova source.
 set -euo pipefail
 mkdir -p artifacts/qemu

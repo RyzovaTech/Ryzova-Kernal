@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Minimal read-only 9P2000 TCP server for Ryzova's *native guest* mount test.
 
 This is a deliberately unauthenticated, *loopback-only*, test service. The

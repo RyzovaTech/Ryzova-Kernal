@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Phase 6.0–6.5 source acceptance; NOT certification of remote resources."""
 import argparse
 import hashlib

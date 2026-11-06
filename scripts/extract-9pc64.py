@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Extract a source-built 9front/Ryzova boot kernel from a QEMU disk overlay.
 
 Do not publish the binary until third-party redistribution is cleared.

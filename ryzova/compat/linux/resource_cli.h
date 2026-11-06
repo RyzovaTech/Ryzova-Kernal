@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Explicit launcher capabilities; never populated by guest input. */
 typedef struct ResourceCLI {
     RyzFsResources resources;RyzFsMount mounts[RYZ_FS_MOUNTS];ResourceHost hosts[RYZ_FS_MOUNTS];

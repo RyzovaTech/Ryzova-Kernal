@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Internal coherent mirrors of bounded guest file pages; never host mappings. */
 static unsigned char *file_backing(RyzLinuxWorld *w,const RyzFilePage *f)
 {return f->anonymous_id?w->shared_pages[f->anonymous_id-1].bytes:w->nodes[f->vnode].bytes+(size_t)f->offset;}

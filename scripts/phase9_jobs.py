@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Bounded process groups: fork/vfork, granted exec images, wait and pipes."""
 import hashlib
 from pathlib import Path

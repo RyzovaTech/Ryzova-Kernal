@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Validate repository-wide GitHub Actions PR supersession safety."""
 from pathlib import Path
 import argparse

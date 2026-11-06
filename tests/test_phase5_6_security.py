@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Deterministic hostile input tests for all three parser paths (host-only)."""
 import os
 from pathlib import Path
