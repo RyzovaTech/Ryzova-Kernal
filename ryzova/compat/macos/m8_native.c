@@ -4,7 +4,7 @@
 #include "m8_start.h"
 
 static unsigned char *
-read_file(char *path, unsigned int *size, int empty_ok)
+read_file(char *path, unsigned int *size, unsigned int limit, int empty_ok)
 {
     int fd;
     long bytes;
@@ -12,12 +12,12 @@ read_file(char *path, unsigned int *size, int empty_ok)
     fd = open(path, OREAD);
     if(fd<0)
         sysfatal("open %s: %r", path);
-    data = malloc(Mac8Limit+1);
+    data = malloc(limit+1);
     if(!data)
         sysfatal("allocate bounded file buffer");
-    bytes = readn(fd, data, Mac8Limit+1);
+    bytes = readn(fd, data, limit+1);
     close(fd);
-    if(bytes<0 || (!bytes && !empty_ok) || bytes>Mac8Limit)
+    if(bytes<0 || (!bytes && !empty_ok) || bytes>limit)
         sysfatal("read bounded file %s: %r", path);
     *size = bytes;
     return data;
@@ -63,9 +63,9 @@ main(int argc, char **argv)
         guest_argv = (const char *const *)(argv+at+2);
     }else
         sysfatal("usage: compact-macos-m8 --run [--read-only NAME FILE] MACH-O -- ARGV0 [ARG ...]");
-    image = read_file(image_path, &image_bytes, 0);
+    image = read_file(image_path, &image_bytes, Mac8Limit, 0);
     if(input_path)
-        input = read_file(input_path, &input_bytes, 1);
+        input = read_file(input_path, &input_bytes, Mac8InputLimit, 1);
     arena = malloc(Mac8ArenaBytes);
     if(!arena)
         sysfatal("allocate guest arena");

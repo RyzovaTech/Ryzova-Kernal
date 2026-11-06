@@ -10,7 +10,7 @@
 
 enum {
     Intel64 = 0x01000007, Arm64 = 0x0100000c,
-    StackBase = 0x800000, StackBytes = Mac8StackBytes, StartBudget = 4096,
+    StackBase = 0xC00000, StackBytes = Mac8StackBytes, StartBudget = 4096,
     Argv = 0x100, Envp = 0x1a0, LocaleEnv = 0x1d0, Args = 0x200, ArgLimit = 4096, GuardOffset = 8, StreamsOffset = 16, RuneOffset = 64, ErrnoOffset = 16, PathOffset = 64, PathBytes = 1024
 };
 
@@ -460,7 +460,7 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
                 *result = StackBase+LocaleEnv+7;
         }
     }else if(!strcmp(name, "_memchr")){
-        if(a2>Mac8Limit)
+        if(a2>Mac8InputLimit)
             return -1;
         if(a2){
             left = guest_read(plan, arena, stack, a0, a2, 1);
@@ -471,7 +471,7 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
                 *result = a0+(right-left);
         }
     }else if(!strcmp(name, "_memcpy") || !strcmp(name, "_memmove") || !strcmp(name, "_memcmp")){
-        if(a2>Mac8Limit)
+        if(a2>Mac8InputLimit)
             return -1;
         if(!strcmp(name, "_memcmp")){
             if(!a2)
@@ -496,7 +496,7 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
             a2 = a1;
             a1 = 0;
         }
-        if(a2>Mac8Limit)
+        if(a2>Mac8InputLimit)
             return -1;
         if(a2){
             dest = guest_write(plan, arena, stack, a0, a2, 1);
@@ -567,7 +567,7 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
             *result = INPUT_HANDLE;
         }
     }else if(!strcmp(name, "_fgets")){
-        if(a2!=INPUT_HANDLE || !thread->input_open || a1==0 || a1>Mac8Limit)
+        if(a2!=INPUT_HANDLE || !thread->input_open || a1==0 || a1>Mac8InputLimit)
             return -1;
         if(thread->input_offset==thread->input_bytes){
             thread->input_eof = 1;
@@ -752,7 +752,7 @@ intel_start(const Mac8Image *plan, const unsigned char *image, unsigned char *ar
         if(stop_at_import(plan, out, machine.ip, machine.r[7], machine.r[6])){
             Word sp = machine.r[4], link;
             const char *name = (const char *)image+out->name;
-            if(!services)
+            if(!services || !plan->system_import[(out->pc-MAC8_UNRESOLVED)/16])
                 return 1;
             if(sp%16!=8 || !stack_span(sp, 8))
                 return 0;
@@ -919,7 +919,7 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
         }
         if(stop_at_import(plan, out, pc, r[0], r[1])){
             const char *name = (const char *)image+out->name;
-            if(!services)
+            if(!services || !plan->system_import[(out->pc-MAC8_UNRESOLVED)/16])
                 return 1;
             out->link = r[30];
             out->arg2 = r[2];
@@ -1641,7 +1641,7 @@ mac9_run(const unsigned char *image, unsigned int length, unsigned char *arena,
     Thread thread = {0};
     int status = 0;
     if(!out || !arena || capacity<StackBytes || !argc || argc>(Envp-Argv)/8-1 ||
-       !argv || !budget || budget>Mac8MaxBudget || input_bytes>Mac8Limit ||
+       !argv || !budget || budget>Mac8MaxBudget || input_bytes>Mac8InputLimit ||
        (input ? !mac9_grant_name(input_name) : input_name || input_bytes))
         return 0;
     image_capacity = capacity-StackBytes;

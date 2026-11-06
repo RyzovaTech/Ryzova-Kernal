@@ -1,0 +1,62 @@
+name: Compact macOS M9.2 SQLite admission
+on:
+  pull_request:
+    paths:
+      - 'ryzova/compat/macos/m8_image.*'
+      - 'scripts/compact_macos_m92_sqlite.py'
+      - '.github/workflows/compact-macos-m92.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  macos-reference:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x86_64, runner: macos-15-intel}
+          - {arch: arm64, runner: macos-15}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Capture the official SQLite executable and its reference outputs
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: python3 scripts/compact_macos_m92_sqlite.py reference "$ARCH" evidence
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-m92-sqlite-${{ matrix.arch }}
+          path: evidence/
+          if-no-files-found: error
+  admission:
+    needs: macos-reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: macos-m92-sqlite-*
+          path: references
+      - name: Measure exact SQLite image admission
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -fPIC -shared \
+            -fsanitize=undefined -fno-sanitize-recover=all \
+            ryzova/compat/macos/m8_image.c -o /tmp/mac-m92-loader.so
+          python3 scripts/compact_macos_m92_sqlite.py audit /tmp/mac-m92-loader.so references evidence/admission.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-m92-admission
+          path: evidence/admission.json
+          if-no-files-found: error

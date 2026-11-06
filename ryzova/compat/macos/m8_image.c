@@ -17,6 +17,7 @@ enum {
     DataInCode = 0x29, SourceVersion = 0x2a, BuildVersion = 0x32
 };
 
+#define Rpath 0x8000001cU
 #define Main 0x80000028U
 #define Exports 0x80000033U
 #define Chained 0x80000034U
@@ -92,7 +93,7 @@ mac8_access(const Mac8Image *plan, U64 at, U32 bytes, U32 rights)
     return 0;
 }
 
-/* Validate and retain the five-segment layout used by the M8 references.
+/* Validate and retain the five-segment layout used by the CLI profiles.
  * __PAGEZERO is a guard region and never consumes backing storage. */
 static int
 segment(const Byte *cmd, U32 size, U32 length, U32 i, U64 *preferred,
@@ -121,7 +122,8 @@ segment(const Byte *cmd, U32 size, U32 length, U32 i, U64 *preferred,
     }
     s=&plan->segments[i];
     rva=plan->mapped_bytes;
-    if(va!=*preferred+rva || off!=rva || !vm || vm%plan->page ||
+    if(va!=*preferred+rva || off!=rva || !vm ||
+       (vm%plan->page && (i!=4 || vm!=file)) ||
        !span(Mac8Limit,rva,vm) || !file || file>vm || !span(length,off,file) ||
        (i<4 && file!=vm) || (i==4 && (off+file!=length || sections)))
         return 0;
@@ -138,12 +140,17 @@ segment(const Byte *cmd, U32 size, U32 length, U32 i, U64 *preferred,
             return 0;
         previous=start+bytes;
         if(flags==1){
-            if(i!=3 || plan->bss_bytes || !bytes || u32(sec+48) || !fixed(sec,"__bss"))
+            if(i!=3 || !bytes || u32(sec+48))
                 return 0;
-            plan->bss=start-*preferred;
-            plan->bss_bytes=bytes;
+            if(fixed(sec,"__bss") && !plan->bss_bytes)
+                plan->bss=start-*preferred;
+            else if(!fixed(sec,"__common") || !plan->bss_bytes || j+1!=sections)
+                return 0;
+            plan->bss_bytes=start+bytes-*preferred-plan->bss;
         }else{
-            if((flags!=0 && flags!=2 && flags!=6 && flags!=8) ||
+            if((i==3 && plan->bss_bytes) ||
+               (flags!=0 && flags!=2 && flags!=6 && flags!=8 &&
+                !(flags==11 && i==1 && fixed(sec,"__eh_frame"))) ||
                !within(va,file,start,bytes) || u32(sec+48)!=off+(start-va))
                 return 0;
         }
@@ -165,7 +172,7 @@ linkedit(const Mac8Image *plan, U32 off, U64 size)
 }
 
 static int
-walk_chains(const Byte *image, U32 offset, U32 length, Mac8Image *plan, Byte *arena, Mac8Bind bind)
+walk_chains(const Byte *image, U32 offset, U32 length, Mac8Image *plan, Byte *arena, Mac8Bind bind, U32 system, U32 zlib)
 {
     const Byte *p=image+offset, *record;
     U32 starts, imports, symbols, i, name, at, record_end, rel, pages, page, start, slot;
@@ -186,8 +193,10 @@ walk_chains(const Byte *image, U32 offset, U32 length, Mac8Image *plan, Byte *ar
     plan->imports=i;
     for(i=0; i<plan->imports; i++){
         name=u32(p+imports+4*i);
-        if((name&511)!=1 || !span(length-symbols,name>>9,2))
+        if(((name&511)!=system && (!zlib || (name&511)!=zlib)) ||
+           !span(length-symbols,name>>9,2))
             return 0;
+        plan->system_import[i]=(name&511)==system;
         at=symbols+(name>>9);
         if(p[at]!='_')
             return 0;
@@ -213,7 +222,7 @@ walk_chains(const Byte *image, U32 offset, U32 length, Mac8Image *plan, Byte *ar
         record_end=u32(record);
         pages=u16(record+20);
         s=&plan->segments[i];
-        if(!pages || pages!=s->bytes/plan->page || record_end!=22+pages*2 ||
+        if(!pages || pages>s->bytes/plan->page || record_end!=22+pages*2 ||
            !span(imports,at,record_end) || u16(record+4)!=plan->page ||
            u16(record+6)!=6 || u64(record+8)!=s->offset || u32(record+16))
             return 0;
@@ -239,7 +248,7 @@ walk_chains(const Byte *image, U32 offset, U32 length, Mac8Image *plan, Byte *ar
                     if(ordinal>=plan->imports || ((value>>24)&0x7ffffffULL))
                         return 0;
                     target=MAC8_UNRESOLVED+16*ordinal;
-                    if(arena && bind){
+                    if(arena && bind && plan->system_import[ordinal]){
                         resolved=bind((const char *)image+plan->names[ordinal]);
                         if(resolved)
                             target=resolved;
@@ -278,7 +287,7 @@ mac8_load_bound(const Byte *image, U32 length, Byte *arena, U32 capacity, Mac8Im
     Mac8Image plan;
     const Byte *cmd;
     U32 offset, end, count, kind, size, i, nsegments=0, text_start=0, text_bytes=0;
-    U32 flags, seen=0, bit, fixoff=0, fixbytes=0;
+    U32 flags, seen=0, bit, fixoff=0, fixbytes=0, libraries=0, system=0, zlib=0;
     U64 preferred=0, entry=0;
 
     if(!image || !arena || !out || length<32 || length>Mac8Limit ||
@@ -319,11 +328,21 @@ mac8_load_bound(const Byte *image, U32 length, Byte *arena, U32 capacity, Mac8Im
             if(size!=24 || u64(cmd+16))return 0;
             entry=u64(cmd+8);
             break;
-        case Dylib:case Dyld:
-            bit=kind==Dylib?2:4;
-            if(size<(kind==Dylib?24:16) ||
-               !load_path(cmd,size,kind==Dylib?24:12,
-                          kind==Dylib?"/usr/lib/libSystem.B.dylib":"/usr/lib/dyld"))
+        case Dylib:
+            if(size<24)
+                return 0;
+            if(load_path(cmd,size,24,"/usr/lib/libSystem.B.dylib")){
+                bit=2;
+                system=++libraries;
+            }else if(load_path(cmd,size,24,"/usr/lib/libz.1.dylib")){
+                bit=8192;
+                zlib=++libraries;
+            }else
+                return 0;
+            break;
+        case Dyld:case Rpath:
+            bit=kind==Dyld?4:16384;
+            if(size<16 || !load_path(cmd,size,12,kind==Dyld?"/usr/lib/dyld":"/usr/local/lib"))
                 return 0;
             break;
         case Chained:case Exports:case FunctionStarts:case DataInCode:case Signature:
@@ -363,14 +382,14 @@ mac8_load_bound(const Byte *image, U32 length, Byte *arena, U32 capacity, Mac8Im
        (plan.cpu==0x0100000cU && (!(seen&128) || entry%4)) ||
        !within(text_start,text_bytes,entry,1) || text_start<end ||
        !plan.bss_bytes || capacity<plan.mapped_bytes ||
-       !walk_chains(image,fixoff,fixbytes,&plan,0,0))
+       !walk_chains(image,fixoff,fixbytes,&plan,0,0,system,zlib))
         return 0;
     plan.entry=entry;
     memset(arena,0,plan.mapped_bytes);
     memmove(arena,image,length);
     memset(arena+plan.bss,0,plan.bss_bytes);
     /* The second pass reads identical, caller-owned immutable input. */
-    if(!walk_chains(image,fixoff,fixbytes,&plan,arena,bind))
+    if(!walk_chains(image,fixoff,fixbytes,&plan,arena,bind,system,zlib))
         return 0;
     *out=plan;
     return 1;

@@ -13,7 +13,7 @@ from compact_macos_m8_jq import INPUT, TARGETS, save_json, sha256, source_head, 
 CAP = 1024 * 1024
 STACK = 65536
 HEAP = 4*1024*1024
-ARENA = CAP+STACK+HEAP+8192
+ARENA = 4*CAP+STACK+HEAP+8192
 GUARD = 0x1234567800000000
 BASE = 0x200000
 UNRESOLVED = 0x10000
@@ -36,7 +36,7 @@ class Image(C.Structure):
     _fields_ = [(name, C.c_uint) for name in (
         'cpu', 'page', 'entry', 'mapped_bytes', 'imports', 'binds',
         'rebases', 'fixup_pages', 'bss', 'bss_bytes',
-    )] + [('names', C.c_uint * 256), ('segments', Segment * 5)]
+    )] + [('names', C.c_uint * 256), ('segments', Segment * 5), ('system_import', C.c_ubyte * 256)]
 
 
 class Stop(C.Structure):
