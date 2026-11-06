@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import random
+import re
 from pathlib import Path
 import struct
 import sys
@@ -15,10 +16,12 @@ import test_compact_windows_w2 as w2
 from compact_windows_w3 import APIS, Code, imported_pe, console_fixture, build, execute, compare, STDOUT, STDERR
 from compact_windows_w2 import PREFERRED
 
+API_COUNT=int(re.search(r'#define CW_API_COUNT (\d+)U', (ROOT/'ryzova/compat/windows/api.h').read_text()).group(1))
+
 class Environment(C.Structure):
     _fields_=[('name',C.c_uint16*64),('value',C.c_uint16*256)]
 class Launch(C.Structure):
-    _fields_=[('api_mask',C.c_uint32),('console_mask',C.c_uint32),('environment_count',C.c_uint32),('command_line',C.c_uint16*1024),('environment',Environment*16),('api_mask_high',C.c_uint32*7)]
+    _fields_=[('api_mask',C.c_uint32),('console_mask',C.c_uint32),('environment_count',C.c_uint32),('command_line',C.c_uint16*1024),('environment',Environment*16),('api_mask_high',C.c_uint32*7),('profile_flags',C.c_uint32)]
 class Allocation(C.Structure):
     _fields_=[('first',C.c_uint32),('pages',C.c_uint32)]
 class CrtBlock(C.Structure):
@@ -29,8 +32,10 @@ class SyncHandle(C.Structure):
     _fields_=[('token',C.c_uint64),('object',C.c_uint32),('access',C.c_uint32),('flags',C.c_uint32)]
 class Critical(C.Structure):
     _fields_=[('address',C.c_uint64),('depth',C.c_uint32)]
+class CrtInit(C.Structure):
+    _fields_=[(n,C.c_uint64) for n in ('cursor','end','stack','ret')]+[('checked',C.c_uint32),('code',C.c_uint32)]
 class Services(C.Structure):
-    _fields_=[('launch',Launch),('last_error',C.c_uint32),('output_bytes',C.c_uint32*2),('calls',C.c_uint32*52),('output',(C.c_ubyte*65536)*2),('command_bytes',C.c_ubyte*2048),('command_base',C.c_uint64),('heap_base',C.c_uint64),('heap',C.c_void_p),('heap_bytes',C.c_size_t),('owner',C.c_ubyte*256),('protection',C.c_ubyte*256),('allocations',Allocation*16),('bound_machine',C.c_void_p),('files',C.c_void_p),('console_closed',C.c_uint32),('crt_blocks',CrtBlock*16),('errno_bytes',C.c_ubyte*4),('file_apis_ansi',C.c_uint32),('tls_used',C.c_uint32*2),('tls_values',C.c_uint64*64),('sync_serial',C.c_uint32),('sync_objects',SyncObject*32),('sync_handles',SyncHandle*64),('criticals',Critical*32)]
+    _fields_=[('launch',Launch),('last_error',C.c_uint32),('output_bytes',C.c_uint32*2),('calls',C.c_uint32*API_COUNT),('output',(C.c_ubyte*65536)*2),('command_bytes',C.c_ubyte*2048),('command_base',C.c_uint64),('heap_base',C.c_uint64),('heap',C.c_void_p),('heap_bytes',C.c_size_t),('owner',C.c_ubyte*256),('protection',C.c_ubyte*256),('allocations',Allocation*16),('bound_machine',C.c_void_p),('files',C.c_void_p),('console_closed',C.c_uint32),('crt_blocks',CrtBlock*16),('errno_bytes',C.c_ubyte*4),('file_apis_ansi',C.c_uint32),('tls_used',C.c_uint32*2),('tls_values',C.c_uint64*64),('sync_serial',C.c_uint32),('sync_objects',SyncObject*32),('sync_handles',SyncHandle*64),('criticals',Critical*32),('exception_filter',C.c_uint64),('invalid_parameter_handler',C.c_uint64),('crt_app_type',C.c_uint32),('crt_globals',C.c_ubyte*32),('crt_argv',C.c_ubyte*4096),('crt_environment',C.c_ubyte*12288),('crt_argv_ready',C.c_uint32),('crt_environment_ready',C.c_uint32),('crt_initializers',CrtInit*8),('crt_init_depth',C.c_uint32),('crt_new_mode',C.c_uint32),('crt_exit_callbacks',C.c_uint64*32),('crt_exit_count',C.c_uint32),('dynamic_apis',C.c_uint32*8),('random_read',C.c_void_p),('random_context',C.c_void_p)]
 
 def put_utf16(array,text):
     units=struct.unpack('<'+'H'*(len(text.encode('utf-16le'))//2),text.encode('utf-16le'))
@@ -83,7 +88,7 @@ class WindowsW3Tests(unittest.TestCase):
         self.assertEqual(self.lib.cw_attach_services(C.byref(m),C.byref(s),C.byref(config),heap,len(heap)),10);self.assertFalse(m.services)
         self.assertNotEqual(self.lib.cw_run(C.byref(m),1000),0);self.assertTrue(arena)
     def test_import_names_ordinals_modules_binding_and_descriptors_fail_closed(self):
-        for name in ('writefile','CreateProcessW','NtCreateFile','GetProcAddress'):
+        for name in ('writefile','CreateProcessW','NtCreateFile','LoadLibraryW'):
             self.denied(imported_pe(b'\xc3',names=(name,)))
         blob=imported_pe(b'\xc3')
         for off,fmt,value in [(0x400+4,'I',1),(0x400+8,'I',1),(0x400+20,'I',1),(0x400+16,'I',0x20a1),(0x440,'Q',0x8000000000000001),(0x440,'Q',0x100000000),(0x4a0,'Q',0),(0x98+112+8,'II',(0x2000,20)),(0x98+112+12*8,'II',(0x20a0,8))]:
@@ -175,7 +180,7 @@ class WindowsW3Tests(unittest.TestCase):
         m.ip=0xffffffffff000001;self.assertEqual(self.lib.cw_api_dispatch(C.byref(m)),6)
         m.ip=0xffffffffff000030;m.r[4]=m.initial_sp-1;self.assertEqual(self.lib.cw_api_dispatch(C.byref(m)),9)
     def test_launcher_limits_duplicate_names_invalid_utf16_and_authority_fail(self):
-        for mutate in (lambda c:setattr(c,'environment_count',17),lambda c:c.api_mask_high.__setitem__(0,0x80000000),lambda c:setattr(c,'console_mask',4),lambda c:c.command_line.__setitem__(0,0xd800)):
+        for mutate in (lambda c:setattr(c,'environment_count',17),lambda c:c.api_mask_high.__setitem__(6,0x80000000),lambda c:setattr(c,'console_mask',4),lambda c:c.command_line.__setitem__(0,0xd800)):
             config=launch();mutate(config);m,arena=self.loaded(imported_pe(b'\xc3'));s=Services();heap=C.create_string_buffer(4096)
             self.assertEqual(self.lib.cw_attach_services(C.byref(m),C.byref(s),C.byref(config),heap,4096),10);self.assertFalse(m.services)
         config=launch();config.environment_count=2;put_utf16(config.environment[1].name,'flex_w3_probe');m,arena=self.loaded(imported_pe(b'\xc3'));s=Services();heap=C.create_string_buffer(4096)

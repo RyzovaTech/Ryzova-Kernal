@@ -66,13 +66,13 @@ class WindowsW7StartupTests(unittest.TestCase):
         for bit in (1, 2, 4):self.assertEqual(self.context(LOW_MASK, 7 ^ bit)[0], 10)
 
     def test_reserved_words_and_bits_are_not_authority(self):
-        for word in range(7):
+        for word in range(1,7):
             m, arena = self.loaded(startup_fixture());services = Services();heap = C.create_string_buffer(4096)
             policy = launch();policy.api_mask = LOW_MASK;policy.api_mask_high[0] = 7
             policy.api_mask_high[word] |= 0x80000000
             self.assertEqual(self.lib.cw_attach_services(C.byref(m), C.byref(services), C.byref(policy), heap, len(heap)), 10)
             self.assertFalse(m.services)
-        self.assertEqual([self.lib.cw_api_word_mask(i) for i in (0, 1, 2, 7, 8, 0xffffffff)], [0xffffffff, 0xfffff, 0, 0, 0, 0])
+        self.assertEqual([self.lib.cw_api_word_mask(i) for i in (0, 1, 2, 7, 8, 0xffffffff)], [0xffffffff, 0xffffffff, 1023, 0, 0, 0])
 
     def test_forged_high_thunk_does_not_bypass_declared_imports(self):
         ctx = self.context();_, m, services, arena, heap = ctx

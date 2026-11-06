@@ -2,7 +2,7 @@
 #ifndef RYZ_WINDOWS_API_H
 #define RYZ_WINDOWS_API_H
 #include "runtime.h"
-#define CW_API_COUNT 52U
+#define CW_API_COUNT 74U
 #define CW_SYNC_OBJECTS 32U
 #define CW_SYNC_HANDLES 64U
 #define CW_CRITICAL_LIMIT 32U
@@ -15,6 +15,9 @@
 #define CW_HEAP_LIMIT (1024U*1024U)
 #define CW_ENV_COUNT 16U
 #define CW_COMMAND_UNITS 1024U
+#define CW_CRT_PENDING (-1)
+#define CW_CRT_RETURN UINT64_C(0xffffffffff080000)
+#define CW_CRT_INIT_DEPTH 8U
 #define CW_THUNK_BASE UINT64_C(0xffffffffff000000)
 enum CwApi { CW_GET_STD_HANDLE, CW_WRITE_FILE, CW_EXIT_PROCESS, CW_GET_LAST_ERROR,
     CW_SET_LAST_ERROR, CW_GET_COMMAND_LINE, CW_GET_ENVIRONMENT_VARIABLE,
@@ -28,19 +31,22 @@ enum CwApi { CW_GET_STD_HANDLE, CW_WRITE_FILE, CW_EXIT_PROCESS, CW_GET_LAST_ERRO
     CW_WAIT_SINGLE, CW_WAIT_MULTIPLE, CW_CRITICAL_INIT, CW_CRITICAL_DELETE,
     CW_CRITICAL_ENTER, CW_CRITICAL_LEAVE, CW_CRITICAL_TRY,
     CW_CURRENT_PROCESS, CW_CURRENT_PROCESS_ID, CW_CURRENT_THREAD, CW_CURRENT_THREAD_ID,
-    CW_DUPLICATE_HANDLE };
+    CW_DUPLICATE_HANDLE, CW_SET_UNHANDLED_FILTER, CW_CRT_INVALID_HANDLER, CW_CRT_APP_TYPE, CW_CRT_FMODE, CW_CRT_COMMODE, CW_CRT_INITTERM, CW_CRT_INITTERM_E, CW_CRT_WENV_INIT, CW_CRT_WARGV_CONFIG, CW_CRT_ARGC, CW_CRT_WARGV, CW_CRT_WENV, CW_CRT_NEW_MODE, CW_CRT_ATEXIT, CW_CRT_CEXIT, CW_CRT_EXIT, CW_CRT_QUICK_EXIT, CW_MODULE_HANDLE_A, CW_PROC_ADDRESS, CW_CRT_RAND_S, CW_WIDE_TO_MULTI, CW_CRT_SETLOCALE };
 typedef struct CwEnvironment { uint16_t name[64], value[256]; } CwEnvironment;
 typedef struct CwLaunch {
     uint32_t api_mask, console_mask, environment_count;
     uint16_t command_line[CW_COMMAND_UNITS];
     CwEnvironment environment[CW_ENV_COUNT];
     uint32_t api_mask_high[CW_API_WORDS-1];
+    uint32_t profile_flags;
 } CwLaunch;
 typedef struct CwAllocation { uint32_t first, pages; } CwAllocation;
 typedef struct CwCrtBlock { uint64_t base,size,capacity; } CwCrtBlock;
 typedef struct CwSyncObject { uint32_t type,flags,count,maximum,refs; } CwSyncObject;
 typedef struct CwSyncHandle { uint64_t token;uint32_t object,access,flags; } CwSyncHandle;
 typedef struct CwCritical { uint64_t address;uint32_t depth; } CwCritical;
+typedef int (*CwRandomRead)(void *,unsigned char *,size_t);
+typedef struct CwCrtInit { uint64_t cursor,end,stack,ret;uint32_t checked,code; } CwCrtInit;
 struct CwServices {
     CwLaunch launch;
     uint32_t last_error, output_bytes[2], calls[CW_API_COUNT];
@@ -61,6 +67,20 @@ struct CwServices {
     CwSyncObject sync_objects[CW_SYNC_OBJECTS];
     CwSyncHandle sync_handles[CW_SYNC_HANDLES];
     CwCritical criticals[CW_CRITICAL_LIMIT];
+    uint64_t exception_filter;
+    uint64_t invalid_parameter_handler;
+    uint32_t crt_app_type;
+    unsigned char crt_globals[32];
+    unsigned char crt_argv[4096],crt_environment[12288];
+    uint32_t crt_argv_ready,crt_environment_ready;
+    CwCrtInit crt_initializers[CW_CRT_INIT_DEPTH];
+    uint32_t crt_init_depth;
+    uint32_t crt_new_mode;
+    uint64_t crt_exit_callbacks[32];
+    uint32_t crt_exit_count;
+    uint32_t dynamic_apis[CW_API_WORDS];
+    CwRandomRead random_read;
+    void *random_context;
 };
 /* Zero-initialize services before first attach; a service belongs to one machine.
    Trusted launcher attaches explicit policy/backing, never host env/DLLs. */
@@ -79,7 +99,10 @@ int cw_launch_allows_plan(const CwLaunch *,const CwPlan *);
 uint64_t cw_heap_allocate(CwMachine *,uint64_t);
 int cw_heap_release(CwMachine *,uint64_t);
 int cw_crt_call(CwMachine *,unsigned int,const uint64_t *,uint64_t *);
+int cw_crt_continue(CwMachine *);
 int cw_crt_owned(CwMachine *,uint64_t);
+int cw_crt_export(unsigned int);
+const char *cw_crt_alias(unsigned int);
 int cw_sync_call(CwMachine *,unsigned int,const uint64_t *,uint64_t *);
 int cw_sync_handle_family(uint64_t);
 /* CPU dispatches only exact declared thunk tokens; every call consumes a step. */

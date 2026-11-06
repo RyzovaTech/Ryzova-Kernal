@@ -58,8 +58,8 @@ descriptor. The loader bounds the complete directory to 65536 file-backed
 bytes and the descriptor scan to 16 modules plus a terminator. It checks
 every lookup/IAT span, disallows descriptor/thunk overlap, rejects duplicate
 modules and API bindings, and protects the aggregate IAT after binding.
-The import ceiling is now 256. There are 52 implemented APIs; the remaining
-IDs are reserved and cannot be granted or dispatched.
+The import ceiling is now 256. The runtime registry lists the exports available to an explicit launch grant.
+Unregistered IDs cannot be granted or dispatched.
 
 Only exact DLL contracts and their selected exports are recognized:
 
@@ -95,8 +95,8 @@ The original JSON contract profiles are unchanged; this native C/CLI
 extension does not silently extend their advertised export lists.
 
 The native CLI still grants only the original 28 APIs by default. `-a`
-sets the low word and `-A` explicitly supplies word one. Higher reserved
-words remain zero. New APIs, including those at IDs 31/32, cannot acquire
+sets the low word and `-A` explicitly supplies word one. Use
+`-g word:mask` for words two through seven. Reserved bits remain zero. New APIs, including those at IDs 31/32, cannot acquire
 permission through truncation or a legacy launch mask.
 
 Seven new kernel32 exports have stateful implementations:
@@ -183,3 +183,29 @@ TLS layout and callback semantics follow Microsoft's
 [PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-tls-section).
 
 [Upstream jq 1.8.1 release](https://github.com/jqlang/jq/releases/tag/jq-1.8.1)
+
+
+## W7.1 hosted startup checkpoint
+
+Run the following from a repository checkout, using the SHA-pinned executable
+from the Windows reference artifact:
+
+```sh
+python3 scripts/compact_windows_w7_trace.py path/to/jq.exe --require-startup --out artifacts/w7-audit
+```
+
+The trace uses an explicit diagnostic profile, a bounded instruction budget,
+and a read/seek directory grant. It admits unresolved named imports as stop
+tokens. Calling one halts the machine and records the import, while ordinary
+launches still reject unresolved imports during admission. The trace accepts
+bounded read-only exception metadata as data. It does not deliver exceptions
+or unwind guest frames. The native launcher selects the profile with
+`-P trace` and accepts a separate ASCII Windows command line via `-c`.
+
+The startup gate checks that the pinned image executes its CRT initializers,
+configures wide arguments, converts them to UTF-8 and reaches semaphore calls.
+The recovered checkpoint stops at `LOCK ADD` at guest address `0x140082218`
+after 1,239 counted steps. The hosted receipt keeps startup evidence separate
+from query output parity and native qualification. Its source commit, input
+and binary hashes, API counters and stopping address are included in the CI
+audit artifact.

@@ -8,10 +8,12 @@ on:
       - 'scripts/compact_windows_w7_imports.py'
       - 'scripts/compact_windows_w7_startup.py'
       - 'scripts/compact_windows_w7_sync.py'
+      - 'scripts/compact_windows_w7_trace.py'
       - 'tests/test_compact_windows_w7.py'
       - 'tests/test_compact_windows_w7_imports.py'
       - 'tests/test_compact_windows_w7_startup.py'
       - 'tests/test_compact_windows_w7_sync.py'
+      - 'tests/test_compact_windows_w7_trace.py'
       - 'tests/test_compact_windows_w2.py'
       - 'tests/fixtures/windows_w7_admission.c'
       - 'ryzova/compat/windows/**'
@@ -71,7 +73,10 @@ jobs:
       - run: python3 scripts/compact_windows_w7_imports.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
       - run: python3 scripts/compact_windows_w7_startup.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
       - run: python3 scripts/compact_windows_w7_sync.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
+      - name: Reproduce the pinned jq startup checkpoint
+        run: python3 scripts/compact_windows_w7_trace.py artifacts/w7-reference/jq.exe --require-startup --out artifacts/w7-audit
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: windows-w7-jq-admission-audit
           path: artifacts/w7-audit

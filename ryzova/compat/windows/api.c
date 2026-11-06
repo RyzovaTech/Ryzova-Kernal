@@ -11,12 +11,13 @@
 #define ERR_ENVIRONMENT 203U
 #define ERR_ADDRESS 487U
 #define ERR_NOACCESS 998U
-static const char *const names[CW_API_COUNT]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno","AreFileApisANSI","SetFileApisToANSI","SetFileApisToOEM","TlsAlloc","TlsFree","TlsGetValue","TlsSetValue","CreateEventA","SetEvent","ResetEvent","CreateSemaphoreA","ReleaseSemaphore","WaitForSingleObject","WaitForMultipleObjects","InitializeCriticalSection","DeleteCriticalSection","EnterCriticalSection","LeaveCriticalSection","TryEnterCriticalSection","GetCurrentProcess","GetCurrentProcessId","GetCurrentThread","GetCurrentThreadId","DuplicateHandle"};
+static const char *const names[]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno","AreFileApisANSI","SetFileApisToANSI","SetFileApisToOEM","TlsAlloc","TlsFree","TlsGetValue","TlsSetValue","CreateEventA","SetEvent","ResetEvent","CreateSemaphoreA","ReleaseSemaphore","WaitForSingleObject","WaitForMultipleObjects","InitializeCriticalSection","DeleteCriticalSection","EnterCriticalSection","LeaveCriticalSection","TryEnterCriticalSection","GetCurrentProcess","GetCurrentProcessId","GetCurrentThread","GetCurrentThreadId","DuplicateHandle","SetUnhandledExceptionFilter","_set_invalid_parameter_handler","_set_app_type","__p__fmode","__p__commode","_initterm","_initterm_e","_initialize_wide_environment","_configure_wide_argv","__p___argc","__p___wargv","__p__wenviron","_set_new_mode","_crt_atexit","_cexit","exit","_exit","GetModuleHandleA","GetProcAddress","rand_s","WideCharToMultiByte","setlocale"};
+typedef char CwApiRegistryCount[(sizeof(names)/sizeof(names[0])==CW_API_COUNT)?1:-1];
 int cw_api_id(const char *name) {
-    unsigned int i;for(i=0;i<CW_API_COUNT;i++)if(!strcmp(name,names[i]))return (int)i;
+    unsigned int i;for(i=0;i<CW_API_COUNT;i++)if(names[i] && !strcmp(name,names[i]))return (int)i;
     return -1;
 }
-const char *cw_api_module(unsigned int id) { return id>=CW_API_COUNT?NULL:((id>=CW_MEMCPY && id<=CW_ERRNO)?"ucrtbase.dll":"kernel32.dll"); }
+const char *cw_api_module(unsigned int id) { return id>=CW_API_COUNT?NULL:(cw_crt_export(id)?"ucrtbase.dll":"kernel32.dll"); }
 uint32_t cw_api_word_mask(unsigned int word) {
     unsigned int remaining;
     if(word>=CW_API_WORDS || word*32>=CW_API_COUNT)return 0;
@@ -35,6 +36,7 @@ void cw_plan_add_api(CwPlan *p,unsigned int id) {
 }
 int cw_launch_allows_plan(const CwLaunch *launch,const CwPlan *p) {
     unsigned int i;
+    if((launch->profile_flags&~CW_PROFILE_TRACE) || (p->profile_flags&~launch->profile_flags))return 0;
     if((launch->api_mask&~cw_api_word_mask(0)) || (p->api_mask&~launch->api_mask))return 0;
     for(i=1;i<CW_API_WORDS;i++)if((launch->api_mask_high[i-1]&~cw_api_word_mask(i)) ||
         (p->api_mask_high[i-1]&~launch->api_mask_high[i-1]))return 0;
@@ -43,18 +45,16 @@ int cw_launch_allows_plan(const CwLaunch *launch,const CwPlan *p) {
 int cw_api_module_id(const char *name) {
     static const char *const modules[]={"kernel32.dll","ucrtbase.dll",
         "api-ms-win-crt-heap-l1-1-0.dll","api-ms-win-crt-private-l1-1-0.dll",
-        "api-ms-win-crt-string-l1-1-0.dll","api-ms-win-crt-runtime-l1-1-0.dll"};
+        "api-ms-win-crt-string-l1-1-0.dll","api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll","api-ms-win-crt-environment-l1-1-0.dll","api-ms-win-crt-utility-l1-1-0.dll","api-ms-win-crt-locale-l1-1-0.dll"};
     unsigned int i;for(i=0;i<sizeof(modules)/sizeof(modules[0]);i++)if(!strcmp(name,modules[i]))return (int)i+1;
     return 0;
 }
 int cw_api_module_matches(unsigned int id,const char *module) {
-    int contract=cw_api_module_id(module);
-    if(id>=CW_API_COUNT || !contract)return 0;
-    if(contract<=2)return !strcmp(cw_api_module(id),module);
-    if(contract==3)return id>=CW_MALLOC && id<=CW_FREE;
-    if(contract==4)return id==CW_MEMCPY || id==CW_MEMMOVE || id==CW_MEMCMP;
-    if(contract==5)return id==CW_MEMSET || (id>=CW_STRLEN && id<=CW_WCSLEN);
-    return id==CW_ERRNO;
+    const char *alias;
+    if(id>=CW_API_COUNT || !cw_api_module_id(module))return 0;
+    if(!strcmp(cw_api_module(id),module))return 1;
+    alias=cw_crt_alias(id);return alias && !strcmp(alias,module);
 }
 const char *cw_api_name(unsigned int id) { return id<CW_API_COUNT?names[id]:NULL; }
 uint64_t cw_api_token(unsigned int id) { return id<CW_API_COUNT?CW_THUNK_BASE+16U*id:0; }
@@ -104,7 +104,7 @@ int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigne
            overlap(heap,heap_bytes,s,sizeof(*s)) || overlap(heap,heap_bytes,launch,sizeof(*launch)))return CW_API;
     }
     copy=*launch;
-    memset(s,0,sizeof(*s));s->launch=copy;s->heap=heap;s->heap_bytes=heap_bytes;s->file_apis_ansi=1;
+    memset(s,0,sizeof(*s));s->launch=copy;s->heap=heap;s->heap_bytes=heap_bytes;s->file_apis_ansi=1;s->crt_globals[1]=0x40;
     s->command_base=(m->stack_base+CW_STACK+4096+65535)&~UINT64_C(65535);
     s->heap_base=s->command_base+65536;
     for(i=0;i<=(unsigned int)length;i++){s->command_bytes[2*i]=(unsigned char)copy.command_line[i];s->command_bytes[2*i+1]=(unsigned char)(copy.command_line[i]>>8);}
@@ -112,12 +112,21 @@ int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigne
     s->bound_machine=m;m->services=s;return CW_OK;
 }
 unsigned char *cw_service_memory(CwMachine *m,uint64_t at,size_t n,unsigned int rights) {
+    static unsigned char c_locale[2]={'C',0};
     CwServices *s=m->services;uint64_t off;size_t first,last,i;
     if(!s || s->bound_machine!=m || !n)return NULL;
     if(at>=s->command_base && span(sizeof(s->command_bytes),at-s->command_base,n))
         return rights==CW_R?s->command_bytes+(size_t)(at-s->command_base):NULL;
     if(at>=s->command_base+4096 && span(4,at-s->command_base-4096,n))
         return rights==CW_X?NULL:s->errno_bytes+(size_t)(at-s->command_base-4096);
+    if(at>=s->command_base+4112 && span(sizeof(s->crt_globals),at-s->command_base-4112,n))
+        return (rights&CW_X)?NULL:s->crt_globals+(size_t)(at-s->command_base-4112);
+    if(at>=s->command_base+8192 && span(sizeof(s->crt_argv),at-s->command_base-8192,n))
+        return (rights&CW_X)?NULL:s->crt_argv+(size_t)(at-s->command_base-8192);
+    if(at>=s->command_base+16384 && span(sizeof(s->crt_environment),at-s->command_base-16384,n))
+        return (rights&CW_X)?NULL:s->crt_environment+(size_t)(at-s->command_base-16384);
+    if(at>=s->command_base+6144 && span(2,at-s->command_base-6144,n))
+        return rights==CW_R?c_locale+(size_t)(at-s->command_base-6144):NULL;
     if(at<s->heap_base || !span(s->heap_bytes,at-s->heap_base,n) || rights==CW_X)return NULL;
     off=at-s->heap_base;first=(size_t)(off/4096);last=(size_t)((off+n-1)/4096);
     for(i=first;i<=last;i++)if(!s->owner[i] || !(s->protection[i]&rights))return NULL;
@@ -235,23 +244,107 @@ int cw_heap_release(CwMachine *m,uint64_t at) {
     uint64_t args[3]={at,0,0x8000};int result;uint32_t error=m->services->last_error;
     result=(int)virtual_free(m,args);m->services->last_error=error;return result;
 }
+/* Bounded UTF-16 -> UTF-8 conversion; CP_UTF8 has no default-character channel. */
+static uint64_t wide_to_multi(CwMachine *m,const uint64_t *a) {
+    CwServices *s=m->services;unsigned char *input,*output;uint32_t units,i,needed=0,at=0,c,low,pass;
+    int32_t count=(int32_t)a[3],capacity=(int32_t)a[5];
+    if((uint32_t)a[0]!=65001 || (a[1]&~UINT64_C(0x80)) || a[6] || a[7] || !a[2] || !count || count< -1 || capacity<0)
+        return fail(s,ERR_PARAMETER);
+    if(count==-1) {
+        for(units=0;units<32768;units++) {
+            if(a[2]>UINT64_MAX-(uint64_t)units*2 || !(input=cw_memory(m,a[2]+(uint64_t)units*2,2,CW_R)))return fail(s,ERR_NOACCESS);
+            if(!input[0] && !input[1]){units++;break;}
+        }
+        if(units==32768)return fail(s,ERR_PARAMETER);
+    }else units=(uint32_t)count;
+    if(units>32768 || !(input=cw_memory(m,a[2],(size_t)units*2,CW_R)))return fail(s,ERR_NOACCESS);
+    output=NULL;
+    for(pass=0;pass<2;pass++) {
+        for(i=0;i<units;i++) {
+            c=input[i*2]|(uint32_t)input[i*2+1]<<8;
+            if(c>=0xd800 && c<=0xdbff && i+1<units && (low=input[(i+1)*2]|(uint32_t)input[(i+1)*2+1]<<8)>=0xdc00 && low<=0xdfff) {
+                c=0x10000+((c-0xd800)<<10)+low-0xdc00;i++;
+            }else if(c>=0xd800 && c<=0xdfff){if(a[1]&0x80)return fail(s,1113);c=0xfffd;}
+            if(!pass)needed+=c<128?1:c<2048?2:c<65536?3:4;
+            else {
+                if(c<128)output[at++]=(unsigned char)c;
+                else if(c<2048){output[at++]=(unsigned char)(0xc0|(c>>6));output[at++]=(unsigned char)(0x80|(c&63));}
+                else if(c<65536){output[at++]=(unsigned char)(0xe0|(c>>12));output[at++]=(unsigned char)(0x80|((c>>6)&63));output[at++]=(unsigned char)(0x80|(c&63));}
+                else {output[at++]=(unsigned char)(0xf0|(c>>18));output[at++]=(unsigned char)(0x80|((c>>12)&63));output[at++]=(unsigned char)(0x80|((c>>6)&63));output[at++]=(unsigned char)(0x80|(c&63));}
+            }
+        }
+        if(!pass) {
+            if(!capacity)return needed;
+            if((uint32_t)capacity<needed)return fail(s,122);
+            if(!a[4] || !(output=cw_memory(m,a[4],needed,CW_W)))return fail(s,ERR_NOACCESS);
+            if(a[2]<=a[4]?a[4]-a[2]<(uint64_t)units*2:a[2]-a[4]<needed)return fail(s,ERR_PARAMETER);
+        }
+    }
+    return needed;
+}
+/* Opaque handles identify the sandbox's built-in service contracts, not host DLLs. */
+static int import_string(CwMachine *m,uint64_t at,char *out,unsigned int capacity,int lower) {
+    unsigned int i;unsigned char *p;
+    for(i=0;i<capacity;i++) {
+        if(at>UINT64_MAX-i || !(p=cw_memory(m,at+i,1,CW_R)))return 0;
+        if(*p>127)return 0;
+        out[i]=(char)*p;if(lower && out[i]>='A' && out[i]<='Z')out[i]=(char)(out[i]+32);
+        if(!out[i])return 1;
+    }
+    return 0;
+}
+static int service_module(CwMachine *m,uint64_t at,uint64_t *result) {
+    char name[128];int module;
+    if(!at){*result=m->plan.base;return CW_OK;}
+    if(!import_string(m,at,name,sizeof(name),1))return CW_API;
+    module=cw_api_module_id(name);
+    if(!module){m->services->last_error=126;*result=0;}
+    else *result=UINT64_C(0x20000)+(unsigned int)module;
+    return CW_OK;
+}
+static int service_address(CwMachine *m,const uint64_t *a,uint64_t *result) {
+    static const char *const modules[]={"kernel32.dll","ucrtbase.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll","api-ms-win-crt-private-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll","api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll","api-ms-win-crt-environment-l1-1-0.dll","api-ms-win-crt-utility-l1-1-0.dll","api-ms-win-crt-locale-l1-1-0.dll"};
+    CwServices *s=m->services;char name[128];int id;uint64_t module=a[0]-UINT64_C(0x20001);
+    *result=0;
+    if(module>=sizeof(modules)/sizeof(modules[0])){s->last_error=126;return CW_OK;}
+    if(a[1]<=65535){s->last_error=127;return CW_OK;}
+    if(!import_string(m,a[1],name,sizeof(name),0))return CW_API;
+    id=cw_api_id(name);
+    if(id<0 || !cw_api_module_matches((unsigned int)id,modules[module])){s->last_error=127;return CW_OK;}
+    if(!((id<32?s->launch.api_mask:s->launch.api_mask_high[id/32-1])&(1U<<(id%32)))){s->last_error=5;return CW_OK;}
+    s->dynamic_apis[id/32]|=1U<<(id%32);*result=cw_api_token((unsigned int)id);return CW_OK;
+}
 int cw_api_dispatch(CwMachine *m) {
-    uint64_t token=m->ip;unsigned int id;uint64_t a[7],result=0,ret;unsigned char *stack;
+    uint64_t token=m->ip;unsigned int id;uint64_t a[8],result=0,ret;unsigned char *stack;
     CwServices *s=m->services;
+    if(token==CW_CRT_RETURN)return cw_crt_continue(m);
+    if(token>=CW_MISSING_IMPORT_BASE && token-CW_MISSING_IMPORT_BASE<16U*CW_MAX_IMPORTS && !((token-CW_MISSING_IMPORT_BASE)%16)){
+        unsigned int slot=(unsigned int)((token-CW_MISSING_IMPORT_BASE)/16);
+        if(!s || s->bound_machine!=m || !(m->plan.profile_flags&CW_PROFILE_DEFER_IMPORTS) ||
+           !(s->launch.profile_flags&CW_PROFILE_DEFER_IMPORTS) || slot>=m->plan.import_count ||
+           m->plan.imports[slot].api!=UINT32_MAX)return CW_API;
+        m->stop_import=slot+1;return CW_UNIMPLEMENTED;
+    }
     if(token<CW_THUNK_BASE || token-CW_THUNK_BASE>=16U*CW_API_COUNT || (token-CW_THUNK_BASE)%16)return CW_MEMORY;
     id=(unsigned int)((token-CW_THUNK_BASE)/16);
-    if(!s || s->bound_machine!=m || !cw_plan_has_api(&m->plan,id) ||
+    if(!s || s->bound_machine!=m || !(cw_plan_has_api(&m->plan,id) || (s->dynamic_apis[id/32]&(1U<<(id%32)))) ||
        !((id<32?s->launch.api_mask:s->launch.api_mask_high[id/32-1])&(1U<<(id%32))))return CW_API;
     if((m->r[4]&15)!=8 || m->r[4]<m->stack_base || m->r[4]-m->stack_base>CW_STACK-40 || !(stack=cw_memory(m,m->r[4],40,CW_R)))return CW_ABI;
     if(!cw_memory(m,m->r[4]+8,32,CW_W))return CW_ABI;
-    a[0]=m->r[1];a[1]=m->r[2];a[2]=m->r[8];a[3]=m->r[9];a[4]=a[5]=a[6]=0;
-    if(id==CW_WRITE_FILE || id==CW_READ_FILE || id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE) {
-        unsigned int count=(id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE)?3U:1U,i;
+    a[0]=m->r[1];a[1]=m->r[2];a[2]=m->r[8];a[3]=m->r[9];a[4]=a[5]=a[6]=a[7]=0;
+    if(id==CW_WRITE_FILE || id==CW_READ_FILE || id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE || id==CW_WIDE_TO_MULTI) {
+        unsigned int count=id==CW_WIDE_TO_MULTI?4U:(id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE)?3U:1U,i;
         unsigned char *extra=cw_memory(m,m->r[4]+40,count*8,CW_R);if(!extra)return CW_ABI;
         for(i=0;i<count;i++)a[4+i]=get64(extra+i*8);
     }
     ret=get64(stack);s->calls[id]++;
     switch(id) {
+    case CW_WIDE_TO_MULTI:result=wide_to_multi(m,a);break;
+    case CW_MODULE_HANDLE_A:{int status=service_module(m,a[0],&result);if(status)return status;break;}
+    case CW_PROC_ADDRESS:{int status=service_address(m,a,&result);if(status)return status;break;}
     case CW_GET_STD_HANDLE:
         if((uint32_t)a[0]==UINT32_MAX-10)result=(s->launch.console_mask&1)?0x10001:0;
         else if((uint32_t)a[0]==UINT32_MAX-11)result=(s->launch.console_mask&2)?0x10002:0;
@@ -263,6 +356,9 @@ int cw_api_dispatch(CwMachine *m) {
     case CW_EXIT_PROCESS:cw_files_close_all(m);m->exit_code=(uint32_t)a[0];m->exited=1;m->exit_kind=1;return CW_OK;
     case CW_GET_LAST_ERROR:result=s->last_error;break;
     case CW_SET_LAST_ERROR:s->last_error=(uint32_t)a[0];break;
+    case CW_SET_UNHANDLED_FILTER:
+        if(a[0] && !cw_memory(m,a[0],1,CW_X))return CW_ABI;
+        result=s->exception_filter;s->exception_filter=a[0];break;
     case CW_FILE_APIS_ANSI:result=s->file_apis_ansi;break;
     case CW_FILE_APIS_SET_ANSI:s->file_apis_ansi=1;break;
     case CW_FILE_APIS_SET_OEM:s->file_apis_ansi=0;break;
@@ -293,7 +389,7 @@ int cw_api_dispatch(CwMachine *m) {
     case CW_SET_FILE_POINTER:case CW_GET_FILE_SIZE:case CW_FLUSH_FILE_BUFFERS:
         result=cw_file_call(m,id,a);break;
     default:
-        if(id>=CW_MEMCPY && id<=CW_ERRNO){int status=cw_crt_call(m,id,a,&result);if(status)return status;}
+        if(cw_crt_export(id)){int status=cw_crt_call(m,id,a,&result);if(status==CW_CRT_PENDING)return CW_OK;if(status)return status;}
         else if(id>=CW_CREATE_EVENT && id<=CW_DUPLICATE_HANDLE){int status=cw_sync_call(m,id,a,&result);if(status)return status;}
         else return CW_API;
     }

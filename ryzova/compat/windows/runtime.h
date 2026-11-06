@@ -14,6 +14,10 @@
 #define CW_TLS_CALLBACKS 8U
 #define CW_TLS_RESERVE 8192U
 #define CW_TLS_RETURN (UINT64_MAX-1)
+#define CW_PROFILE_DEFER_IMPORTS 1U
+#define CW_PROFILE_OPAQUE_UNWIND 2U
+#define CW_PROFILE_TRACE (CW_PROFILE_DEFER_IMPORTS|CW_PROFILE_OPAQUE_UNWIND)
+#define CW_MISSING_IMPORT_BASE UINT64_C(0xffffffffff100000)
 #define CW_R 1U
 #define CW_W 2U
 #define CW_X 4U
@@ -38,9 +42,10 @@ typedef struct CwPlan {
     uint32_t tls_present, tls_rva, tls_bytes, tls_zero, tls_index, tls_count;
     uint32_t tls_callbacks[CW_TLS_CALLBACKS];
     uint32_t api_mask_high[CW_API_WORDS-1];
+    uint32_t profile_flags, unresolved_imports;
 } CwPlan;
 enum CwStatus { CW_OK, CW_HEADER, CW_UNSUPPORTED, CW_BOUNDS, CW_MAPPING,
-    CW_RELOCATION, CW_MEMORY, CW_OPCODE, CW_BUDGET, CW_ABI, CW_API, CW_DIVIDE, CW_CRT };
+    CW_RELOCATION, CW_MEMORY, CW_OPCODE, CW_BUDGET, CW_ABI, CW_API, CW_DIVIDE, CW_CRT, CW_UNIMPLEMENTED };
 typedef struct CwMachine {
     CwPlan plan;
     unsigned char *image, *stack;
@@ -52,13 +57,20 @@ typedef struct CwMachine {
     struct CwServices *services;
     uint64_t last_guest_ip;
     uint32_t tls_next;
+    uint32_t stop_import;
+    uint16_t x87_control,x87_status,x87_tag,x87_opcode;
+    uint64_t x87_ip,x87_dp;
+    unsigned char x87[8][10];
+    uint32_t mxcsr;
 } CwMachine;
 /* No allocation, mapping or execution on admission failure. */
 /* The diagnostic reports UINT32_MAX when no unsupported directory is identified. */
 int cw_plan_diagnostic(const unsigned char *, size_t, uint64_t, CwPlan *, uint32_t *);
 int cw_plan(const unsigned char *, size_t, uint64_t, CwPlan *);
+int cw_plan_profile(const unsigned char *,size_t,uint64_t,CwPlan *,uint32_t);
 /* Caller owns arena: exactly plan.image_bytes + CW_STACK required. */
 int cw_load(const unsigned char *, size_t, uint64_t, unsigned char *, size_t, CwMachine *);
+int cw_load_profile(const unsigned char *,size_t,uint64_t,unsigned char *,size_t,CwMachine *,uint32_t);
 /* Rights checked for each access, including instruction fetch; no host syscall. */
 int cw_read(CwMachine *, uint64_t, unsigned char *, size_t, unsigned int);
 int cw_write(CwMachine *, uint64_t, const unsigned char *, size_t);
