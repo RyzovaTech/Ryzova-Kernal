@@ -10,13 +10,15 @@ import subprocess
 import tempfile
 from urllib.request import urlopen
 
+from compact_c1_jq_contract import INPUT, INPUT_NAME, QUERY_ARGS, QUERY_STDOUT as STDOUT, RELEASE
+
 ROOT = Path(__file__).resolve().parents[1]
-URL = "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-windows-amd64.exe"
+URL = f"{RELEASE}/jq-windows-amd64.exe"
 SHA = "23cb60a1354eed6bcc8d9b9735e8c7b388cd1fdcb75726b93bc299ef22dd9334"
 SIZE = 1026560
-INPUT = b'{"items":[2,3,5]}\n'
-STDOUT = b'{"count":3,"sum":10}\n'
-ARGS = ["-b", "-c", "{count: (.items | length), sum: (.items | add)}", "input.json"]
+# Request binary stdout so the Windows CRT preserves the common LF bytes.
+ARGS = ["-b", *QUERY_ARGS]
+
 
 
 def source_head():
@@ -46,9 +48,12 @@ def reference(out):
     binary = out / "jq.exe"
     binary.write_bytes(image)
     with tempfile.TemporaryDirectory() as work:
-        (Path(work) / "input.json").write_bytes(INPUT)
+        input_path = Path(work) / INPUT_NAME
+        input_path.write_bytes(INPUT)
         run = subprocess.run([str(binary.resolve()), *ARGS], cwd=work, capture_output=True,
                              timeout=15, check=False)
+        if input_path.read_bytes() != INPUT:
+            raise ValueError("jq Windows reference changed the input")
     if (run.returncode, run.stdout, run.stderr) != (0, STDOUT, b""):
         raise ValueError(f"jq Windows reference differs: {run!r}")
     write_json(out / "reference.json", {

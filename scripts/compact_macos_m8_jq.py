@@ -10,16 +10,14 @@ import subprocess
 import tempfile
 from urllib.request import urlopen
 
-RELEASE = 'https://github.com/jqlang/jq/releases/download/jq-1.8.1'
+from compact_c1_jq_contract import INPUT, INPUT_NAME, QUERY_ARGS, QUERY_STDOUT, RELEASE, VERSION_STDOUT
 TARGETS = {
     'x86_64': ('jq-macos-amd64', 855272, 'e80dbe0d2a2597e3c11c404f03337b981d74b4a8504b70586c354b7697a7c27f', 0x01000007, '--dynamic'),
     'arm64': ('jq-macos-arm64', 841408, 'a9fe3ea2f86dfc72f6728417521ec9067b343277152b114f4e98d8cb0e263603', 0x0100000c, '--arm64'),
 }
-INPUT = b'{"items":[2,3,5]}\n'
 CASES = {
-    'version': (['--version'], b'jq-1.8.1\n'),
-    'query': (['-c', '{count: (.items | length), sum: (.items | add)}', 'input.json'],
-              b'{"count":3,"sum":10}\n'),
+    'version': (['--version'], VERSION_STDOUT),
+    'query': (QUERY_ARGS, QUERY_STDOUT),
 }
 TOOLS = {'load-commands': ['otool', '-l'], 'libraries': ['otool', '-L'], 'imports': ['nm', '-m', '-u']}
 
@@ -62,7 +60,7 @@ def capture(arch, out):
     cases = {}
     for case, (argv, _) in CASES.items():
         with tempfile.TemporaryDirectory() as work:
-            path = Path(work)/'input.json'
+            path = Path(work)/INPUT_NAME
             path.write_bytes(INPUT)
             run = subprocess.run([binary, *argv], cwd=work, env={'LC_ALL': 'C'},
                                  stdin=subprocess.DEVNULL, capture_output=True, timeout=15)

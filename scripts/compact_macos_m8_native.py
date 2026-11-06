@@ -11,7 +11,8 @@ import tarfile
 import threading
 
 from compact_macos_m2_native import digest_line
-from compact_macos_m8_jq import INPUT, TARGETS, expected_cases, source_head, verified_image
+from compact_c1_jq_contract import INPUT, INPUT_NAME, QUERY
+from compact_macos_m8_jq import TARGETS, expected_cases, source_head, verified_image
 from compact_windows_w6_native import bootstrap_provenance, extract_kernel, session
 
 
@@ -95,7 +96,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
                 commands.extend([
                     f'hget {url}/input.json >/tmp/m8-input; cp /tmp/m8-input /tmp/m8-input-original',
                     'sha1sum -2 256 /tmp/m8-input-original',
-                    "q='{count: (.items | length), sum: (.items | add)}'",
+                    f"q='{QUERY}'",
                 ])
             markers = {}
             for arch, (name, _) in binaries.items():
@@ -111,7 +112,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
                         launch = f'$launch --run {path} -- sqlite3 {guest}'
                     else:
                         args = (f'--run {path} -- jq --version' if case == 'version' else
-                                f'--run --read-only records.json /tmp/m8-input {path} -- jq -c $q records.json')
+                                f'--run --read-only {INPUT_NAME} /tmp/m8-input {path} -- jq -c $q {INPUT_NAME}')
                         launch = f'{program} {args}'
                     commands.append(
                         f'if({launch} >{prefix}.out >[2]{prefix}.err) echo {marker}; '
