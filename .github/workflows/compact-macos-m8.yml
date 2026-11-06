@@ -4,6 +4,7 @@ on:
     paths:
       - 'ryzova/compat/macos/**'
       - 'scripts/compact_macos_m8_jq.py'
+      - 'scripts/compact_macos_m8_loader_check.py'
       - '.github/workflows/compact-macos-m8.yml'
   workflow_dispatch:
 concurrency:
@@ -61,6 +62,12 @@ jobs:
           C
           read -r intel_limit arm_limit < <(/tmp/mac-m6-limits)
           python3 scripts/compact_macos_m8_jq.py audit references /tmp/mac-m6 evidence "$intel_limit" "$arm_limit"
+      - name: Verify mapped segments and chained fixups for both binaries
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -fPIC -shared \
+            -fsanitize=undefined -fno-sanitize-recover=all \
+            ryzova/compat/macos/m8_image.c -o /tmp/mac-m8-loader.so
+          python3 scripts/compact_macos_m8_loader_check.py /tmp/mac-m8-loader.so references evidence/loader.json
       - uses: actions/upload-artifact@v4
         with:
           name: macos-m8-admission-audit

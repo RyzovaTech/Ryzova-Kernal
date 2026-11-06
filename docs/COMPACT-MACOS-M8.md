@@ -11,6 +11,17 @@ hashes. It runs the exact binaries through the original M6 admission
 path. The first boundary is the three-page M6 image cap, 12,288 Intel
 bytes and 49,152 ARM64 bytes. Both binaries exceed those fixture limits.
 
+The separate M8 loader maps both pinned images in a bounded guest address
+range. Its hosted check verifies the entry address, zero-initialized data,
+guest segment permissions, and chained rebases and binds. Binds use
+unresolved guest tokens. The check also rejects malformed images without
+changing the arena or the output plan.
+
+| Image | Mapped bytes | Rebases | Binds |
+| --- | ---: | ---: | ---: |
+| Intel | 856064 | 1221 | 136 |
+| ARM64 | 851968 | 1232 | 135 |
+
 The next gate is `--version` parity in a bounded Mach-O execution profile,
-followed by the fixed JSON query under a read-only file grant. The audit
-receipt records Ryzova execution as unverified.
+followed by the fixed JSON query under a read-only file grant. Guest
+instruction execution and Darwin import handling are still pending.
