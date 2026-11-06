@@ -20,6 +20,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Test pinned source integrity and offline behavior
+        run: python -m unittest discover -s tests -p 'test_pinned_source.py' -v
+      - name: Restore verified musl and TinyCC source cache
+        id: pinned-source-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            artifacts/musl-fixtures/musl-1.2.6.tar.gz
+            artifacts/musl-fixtures/tcc-0.9.27.tar.bz2
+          key: ryzova-phase9-pinned-musl-d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a-tcc-de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c
+      - name: Prefetch SHA256-verified musl and TinyCC archives
+        run: python scripts/phase9_compiler.py --prefetch artifacts/musl-fixtures
+      - name: Save validated source archives for the next CI run
+        if: steps.pinned-source-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            artifacts/musl-fixtures/musl-1.2.6.tar.gz
+            artifacts/musl-fixtures/tcc-0.9.27.tar.bz2
+          key: ryzova-phase9-pinned-musl-d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a-tcc-de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c
       - name: Build checksum-pinned unmodified musl fixtures
         run: python scripts/phase9_compiler.py --build artifacts/musl-fixtures
       - name: Fetch pinned unmodified BusyBox

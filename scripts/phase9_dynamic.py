@@ -6,7 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tarfile
-import urllib.request
+from pinned_source import fetch_pinned
 VERSION='1.2.6'
 SOURCE_SHA256='d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a'
 ROOT=Path(__file__).resolve().parents[1]
@@ -14,16 +14,11 @@ ROOT=Path(__file__).resolve().parents[1]
 def build(directory):
     directory=Path(directory).resolve();directory.mkdir(parents=True,exist_ok=True)
     archive=directory/f'musl-{VERSION}.tar.gz'
-    if not archive.exists():
-        errors=[]
-        for base in ('https://musl.libc.org/releases/','https://distfiles.alpinelinux.org/distfiles/edge/','https://sources.buildroot.net/musl/'):
-            try:
-                data=urllib.request.urlopen(base+archive.name,timeout=60).read()
-                if hashlib.sha256(data).hexdigest()!=SOURCE_SHA256:raise ValueError('musl source SHA256 mismatch')
-                archive.write_bytes(data);break
-            except Exception as error:errors.append(str(error))
-        else:raise RuntimeError('; '.join(errors))
-    if hashlib.sha256(archive.read_bytes()).hexdigest()!=SOURCE_SHA256:raise ValueError('musl source SHA256 mismatch')
+    fetch_pinned(archive, (
+        'https://musl.libc.org/releases/'+archive.name,
+        'https://distfiles.alpinelinux.org/distfiles/edge/'+archive.name,
+        'https://sources.buildroot.net/musl/'+archive.name,
+    ), SOURCE_SHA256, max_bytes=10*1024*1024, timeout=60)
     source=directory/f'musl-{VERSION}';install=directory/'install'
     if not source.exists():
         with tarfile.open(archive) as tar:tar.extractall(directory,filter='data')
