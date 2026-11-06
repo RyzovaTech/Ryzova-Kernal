@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 /* Native Windows reference fixture; no CRT and no proprietary binary is shipped. */
 #if !defined(_WIN64)
 #error This fixture requires the Windows AMD64 compiler target
