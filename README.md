@@ -1,6 +1,6 @@
 # Ryzova Kernel
 
-[![Status: experimental](https://img.shields.io/badge/status-experimental-orange)](docs/RELEASE-NOTES-DRAFT.md) [![9front-derived](https://img.shields.io/badge/base-9front%20%2F%20Plan%209-blue)](https://9front.org/) [![File-level licensing](https://img.shields.io/badge/licenses-file--level%20MIT%20%2F%20GPLv3%20%2F%20AGPLv3-informational)](LICENSE.md) [![Public kernel binary: not released](https://img.shields.io/badge/kernel%20binary-not%20released-lightgrey)](ryzova/release/amd64-preview-candidate.json)
+[![Status: experimental](https://img.shields.io/badge/status-experimental-orange)](docs/RELEASE-NOTES-DRAFT.md) [![9front-derived](https://img.shields.io/badge/base-9front%20%2F%20Plan%209-blue)](https://9front.org/) [![Ryzova code policy: GPLv3](https://img.shields.io/badge/Ryzova%20code%20policy-GPLv3--only-blue)](LICENSE.md) [![Public kernel binary: not released](https://img.shields.io/badge/kernel%20binary-not%20released-lightgrey)](ryzova/release/amd64-preview-candidate.json)
 
 **A New Life for a Forgotten Vision**
 
@@ -112,12 +112,12 @@ For the frozen earlier AMD64 development reference and recovery protocol, see [P
 
 ## Licensing and commercial use
 
-**Licensing is determined per file or asset, not by one repository-wide license.**
+**Current Ryzova licensing decision: GPL-3.0-only for new and eligible Ryzova-controlled code, with optional separately negotiated commercial terms where rights permit.** This decision does not relicense inherited 9front material: actual terms remain file/asset-specific.
 
 - **Inherited 9front/Plan 9 content:** generally MIT-licensed **with important file/asset exceptions** and retained upstream notices. See [`lib/legal/NOTICE`](lib/legal/NOTICE) and [`LICENSE.md`](LICENSE.md).
-- **Ryzova-origin code expressly marked `GPL-3.0-only`:** distributed under GPLv3 only, including compliant commercial use; see [GPLv3 text](LICENSES/GPL-3.0-only.txt).
-- **Historical or remaining Ryzova-origin files marked `AGPL-3.0-only`:** remain subject to their applicable AGPLv3 terms. Previously granted AGPL rights are not revoked by a later GPL offer; see [AGPLv3 text](LICENSES/AGPL-3.0-only.txt).
-- **Optional commercial alternative:** only for specific Ryzova-controlled code where the rights holder has sufficient authority; not a blanket license to third-party 9front material. A paid license is **not required for GPL/AGPL-compliant commercial use**. See [commercial licensing policy](COMMERCIAL-LICENSING.md) and [contributor licensing](docs/CONTRIBUTOR-LICENSING.md).
+- **Ryzova-owned licensing policy:** GPLv3-only is the chosen open-source license for rights-controlled Ryzova code going forward. Files already expressly marked `GPL-3.0-only` are offered on those terms, including compliant commercial use; see [GPLv3 text](LICENSES/GPL-3.0-only.txt).
+- **Migration caveat:** some existing repository files still carry older licensing identifiers (for example, `sys/src/9/port/devryzova.c`). Those headers and contributor rights must be audited and updated where lawful before declaring the **entire current Ryzova-authored tree** GPLv3-only. A README policy statement cannot itself change those file-level grants; earlier recipients retain any valid licenses they already received.
+- **Optional commercial alternative:** only for specific Ryzova-controlled code where the rights holder has sufficient authority; not a blanket license to third-party 9front material. A paid license is **not required for GPLv3-compliant commercial use**. See [commercial licensing policy](COMMERCIAL-LICENSING.md) and [contributor licensing](docs/CONTRIBUTOR-LICENSING.md).
 
 Review the actual file headers and provenance before redistribution. See [license review](docs/LICENSE-REVIEW.md), [contributing](CONTRIBUTING.md), [trademarks](TRADEMARKS.md), and [security policy](SECURITY.md). This summary is not legal clearance for a binary distribution.
 
