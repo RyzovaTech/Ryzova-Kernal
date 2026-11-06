@@ -20,6 +20,8 @@ concurrency:
 
 jobs:
   exact-main-integration-boundary:
+    # PR #88 was the one-time W1-W6 integration. Manual audits remain available.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 88
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
