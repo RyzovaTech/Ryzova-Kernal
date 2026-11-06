@@ -1,0 +1,112 @@
+name: Compact macOS M8 upstream jq admission audit
+on:
+  pull_request:
+    paths:
+      - 'ryzova/compat/macos/**'
+      - 'ryzova/compat/windows/**'
+      - 'scripts/compact_macos_m8_jq.py'
+      - 'scripts/compact_macos_m8_loader_check.py'
+      - 'scripts/compact_macos_m8_native.py'
+      - '.github/workflows/compact-macos-m8.yml'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
+
+jobs:
+  macos-reference:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x86_64, runner: macos-15-intel}
+          - {arch: arm64, runner: macos-15}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Pin and run upstream jq
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: python3 scripts/compact_macos_m8_jq.py reference "$ARCH" evidence
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-m8-jq-${{ matrix.arch }}
+          path: evidence/
+          if-no-files-found: error
+  admission-audit:
+    needs: macos-reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: macos-m8-jq-*
+          path: references
+      - name: Measure M6 admission against both pinned Mach-O files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=undefined -fno-sanitize-recover=all \
+            ryzova/compat/macos/{m2,grant,dynamic,arm64,workload}.c -lcrypto -o /tmp/mac-m6
+          cat <<'C' | cc -std=c11 -Wall -Wextra -Werror -I ryzova/compat/macos -x c - -o /tmp/mac-m6-limits
+          #include <stdio.h>
+          #include "dynamic.h"
+          int main(void) { return printf("%d %d\n", 3*MacPage, MacImageLimit) < 0; }
+          C
+          read -r intel_limit arm_limit < <(/tmp/mac-m6-limits)
+          python3 scripts/compact_macos_m8_jq.py audit references /tmp/mac-m6 evidence "$intel_limit" "$arm_limit"
+      - name: Verify mapping and hosted guest jq parity
+        shell: bash
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -fPIC -shared \
+            -fsanitize=undefined -fno-sanitize-recover=all \
+            ryzova/compat/macos/{m8_image,m8_heap,m8_fma,m8_start}.c \
+            ryzova/compat/windows/{cpu,loader,api,crt,sync_objects,files}.c \
+            -o /tmp/mac-m8-loader.so
+          python3 scripts/compact_macos_m8_loader_check.py /tmp/mac-m8-loader.so references evidence/loader.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-m8-admission-audit
+          path: evidence/
+          if-no-files-found: error
+  native-jq:
+    needs: admission-audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: macos-m8-jq-*
+          path: references
+      - name: Prepare the pinned native build guest
+        run: |
+          sudo apt-get -o Acquire::Retries=2 update -qq
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends qemu-system-x86 qemu-utils mtools
+          bash scripts/verify-foundation.sh
+          curl --fail --location --retry 3 --max-time 600 https://build.9front.org/release/9front-11952.amd64.qcow2.gz -o bootstrap.qcow2.gz
+          echo '3c1b57c4b609525e76cb0abac48bc657f71187fd3506674dba4e49b42141729c  bootstrap.qcow2.gz' | sha256sum -c -
+          gzip -dc bootstrap.qcow2.gz > bootstrap.qcow2
+          qemu-img create -f qcow2 -F qcow2 -b bootstrap.qcow2 mac-m8.qcow2
+      - name: Verify jq parity on source-built Ryzova
+        run: python3 scripts/compact_macos_m8_native.py mac-m8.qcow2 bootstrap.qcow2.gz references evidence/native
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-m8-native-jq
+          path: |
+            evidence/native/*.json
+            evidence/native/*.log
+          if-no-files-found: ignore

@@ -223,6 +223,55 @@ static int fp_nan(uint64_t bits) { return (bits&FP_EXP)==FP_EXP && (bits&FP_FRAC
 static double double_value(uint64_t bits) { double d;memcpy(&d,&bits,8);return d; }
 static uint64_t double_bits(double d) { uint64_t bits;memcpy(&bits,&d,8);return bits; }
 
+static int packed_double(Decode *d,unsigned int op,unsigned int reg,Operand o) {
+    unsigned char source[16], result[16]={0};
+    unsigned int i,predicate=0;
+    uint64_t a,b,value;
+    double x,y;
+    int status,unordered,less,equal,test;
+    if(op==0xc2)predicate=(unsigned int)fetch(d,1)&7;
+    status=xmm_read(d,o,source,d->prefix==0xf3?8:16);
+    if(status)return status;
+    for(i=0;i<2;i++){
+        if(d->prefix==0xf3){
+            xmm_put(result+8*i,8,double_bits((double)(int32_t)xmm_low(source+4*i,4)));
+            continue;
+        }
+        b=xmm_low(source+8*i,8);
+        if(op==0xe6){
+            value=UINT32_C(0x80000000);
+            y=double_value(b);
+            if((b&FP_EXP)!=FP_EXP && y>=-2147483648.0 && y<2147483648.0){
+                value=(uint32_t)(int32_t)y;
+                if((double)(int32_t)value!=y)d->m->mxcsr|=32;
+            }else{
+                if(!(d->m->mxcsr&128))return CW_OPCODE;
+                d->m->mxcsr|=1;
+            }
+            xmm_put(result+4*i,4,value);
+            continue;
+        }
+        a=xmm_low(d->m->xmm[reg]+8*i,8);
+        unordered=fp_nan(a)||fp_nan(b);
+        less=equal=0;
+        if(unordered){
+            if(predicate==1 || predicate==2 || predicate==5 || predicate==6 ||
+               (fp_nan(a) && !(a&UINT64_C(0x8000000000000))) ||
+               (fp_nan(b) && !(b&UINT64_C(0x8000000000000)))){
+                if(!(d->m->mxcsr&128))return CW_OPCODE;
+                d->m->mxcsr|=1;
+            }
+        }else{
+            x=double_value(a);y=double_value(b);less=x<y;equal=x==y;
+        }
+        test=predicate%4==0?equal:predicate%4==1?less:predicate%4==2?less||equal:unordered;
+        if(predicate&4)test=!test;
+        xmm_put(result+8*i,8,test?UINT64_MAX:0);
+    }
+    memcpy(d->m->xmm[reg],result,16);
+    return CW_OK;
+}
+
 static int scalar_double(Decode *d,unsigned int op,unsigned int reg,Operand o,unsigned int width) {
     CwMachine *m=d->m;
     unsigned char source[8],*dst=m->xmm[reg];
@@ -350,7 +399,7 @@ static int packed_integer(Decode *d,unsigned int op,unsigned int reg,Operand o) 
     return CW_OK;
 }
 
-static int tick(CwMachine *m) {
+static int tick(CwMachine *m,int windows_bootstrap) {
     Decode d;Operand o,q;unsigned int op,n,reg=0,group=0,prefixes=0;
     uint64_t a,b,v,target=0;int jump=0;
     memset(&d,0,sizeof(d));d.m=m;d.start=d.cur=m->ip;
@@ -380,7 +429,7 @@ static int tick(CwMachine *m) {
     else if(op==0xc3){
         if(d.rex || (d.prefix && d.prefix!=0xf3))return CW_OPCODE;
         a=m->r[4];v=pop(&d);
-        if(!d.error && v>=CW_TLS_RETURN)return cw_bootstrap_return(m,v,a);
+        if(windows_bootstrap && !d.error && v>=CW_TLS_RETURN)return cw_bootstrap_return(m,v,a);
         else {jump=1;target=v;}
     }
     else if(op==0xc9){if(d.prefix || d.rex)return CW_OPCODE;m->r[4]=m->r[5];v=pop(&d);if(!d.error)m->r[5]=v;}
@@ -475,6 +524,13 @@ static int tick(CwMachine *m) {
         v=shift(&d,group,get(&d,o,n),n,count);put(&d,o,n,v);
     }
     else if(op==0xff){o=operand(&d,&reg,&group,n);if(group==2 || group==4 || group==6){if(d.prefix)return CW_OPCODE;v=get(&d,o,8);if(group==6)push(&d,v);else {if(group==2)push(&d,d.cur);jump=1;target=v;}}else if(group<2){a=m->flags&CF;v=alu(&d,group?5:0,get(&d,o,n),1,n);m->flags=(m->flags&~(uint64_t)CF)|a;put(&d,o,n,v);}else return CW_OPCODE;}
+    else if(op==0xd9){
+        if(d.prefix || d.rex&8)return CW_OPCODE;
+        o=operand(&d,&reg,&group,2);
+        if(o.reg>=0 || (group!=5 && group!=7))return CW_OPCODE;
+        if(group==5)m->x87_control=(uint16_t)get(&d,o,2);
+        else put(&d,o,2,m->x87_control);
+    }
     else if(op==0xdb){
         unsigned int second=(unsigned int)fetch(&d,1);
         if(second!=0xe3 || d.rex || d.prefix)return CW_OPCODE;
@@ -483,13 +539,18 @@ static int tick(CwMachine *m) {
     else if(op==0x0f){
         unsigned int second=(unsigned int)fetch(&d,1);
         if(d.locked && second!=0xb0 && second!=0xb1 && second!=0xab && second!=0xb3 && second!=0xbb && second!=0xba)return CW_OPCODE;
-        if(d.prefix==0xf3 && second!=0x6f && second!=0x7f && second!=0x7e)return CW_OPCODE;
+        if(d.prefix==0xf3 && second!=0x6f && second!=0x7f && second!=0x7e && second!=0xe6)return CW_OPCODE;
         if(d.prefix==0xf2){
             if(second!=0x10 && second!=0x11 && second!=0x2a && second!=0x2c &&
                second!=0x58 && second!=0x59 && second!=0x5c && second!=0x5d &&
                second!=0x5e && second!=0x5f)return CW_OPCODE;
             o=operand(&d,&reg,&group,8);
             d.error=scalar_double(&d,second,reg,o,n);
+        }
+        else if((second==0xe6 && (d.prefix==0x66 || d.prefix==0xf3)) ||
+                (second==0xc2 && d.prefix==0x66)){
+            o=operand(&d,&reg,&group,8);
+            d.error=packed_double(&d,second,reg,o);
         }
         else if(d.prefix==0x66 && (second==0x2e || second==0x2f)){
             o=operand(&d,&reg,&group,8);
@@ -568,6 +629,15 @@ static int tick(CwMachine *m) {
         else if(second==0xaf){uint64_t high;o=operand(&d,&reg,&group,n);product(get(&d,regop(&d,reg,n),n),get(&d,o,n),n,1,&v,&high);multiply_flags(&d,v,high,n,1);put(&d,regop(&d,reg,n),n,v);}
         else if(second==0xbe || second==0xbf){unsigned int small=second==0xbe?1:2;o=operand(&d,&reg,&group,small);put(&d,regop(&d,reg,n),n,sign_extend(get(&d,o,small),small));}
         else if(second==0xb6 || second==0xb7){unsigned int small=second==0xb6?1:2;o=operand(&d,&reg,&group,small);put(&d,regop(&d,reg,n),n,get(&d,o,small));}
+        else if(second==0x50 && (!d.prefix || d.prefix==0x66)){
+            unsigned int stride=d.prefix==0x66?8:4;
+            unsigned int i;
+            o=operand(&d,&reg,&group,8);
+            if(o.reg<0)return CW_OPCODE;
+            v=0;
+            for(i=0;i<16/stride;i++)v|=(uint64_t)(m->xmm[o.reg][(i+1)*stride-1]>>7)<<i;
+            put(&d,regop(&d,reg,4),4,v);
+        }
         else if(second>=0x90 && second<=0x9f){o=operand(&d,&reg,&group,1);put(&d,o,1,(uint64_t)condition(m,second&15));}
         else if(second>=0x40 && second<=0x4f){o=operand(&d,&reg,&group,n);v=get(&d,o,n);if(condition(m,second&15))put(&d,regop(&d,reg,n),n,v);}
         else if((second==0x10 || second==0x11 || second==0x28 || second==0x29) && (!d.prefix || d.prefix==0x66)) {
@@ -583,12 +653,16 @@ static int tick(CwMachine *m) {
     if(d.error)return d.error;
     m->ip=jump?target:d.cur;return CW_OK;
 }
+int cw_cpu_step(CwMachine *m) {
+    return tick(m,0);
+}
+
 int cw_run(CwMachine *m,uint32_t budget) {
     if(!m || !m->image || !m->stack)return CW_HEADER;
     if(m->status)return m->status;
     if(m->exited)return CW_OK;
     if(!budget || budget>CW_STEP_LIMIT(m->plan.profile_flags)){cw_files_close_all(m);return m->status=CW_BUDGET;}
-    while(m->instructions<budget){int status;if(m->ip<CW_THUNK_BASE)m->last_guest_ip=m->ip;m->instructions++;status=m->ip>=CW_THUNK_BASE?cw_api_dispatch(m):tick(m);if(status){cw_files_close_all(m);return m->status=status;}if(m->exited){cw_files_close_all(m);return CW_OK;}}
+    while(m->instructions<budget){int status;if(m->ip<CW_THUNK_BASE)m->last_guest_ip=m->ip;m->instructions++;status=m->ip>=CW_THUNK_BASE?cw_api_dispatch(m):tick(m,1);if(status){cw_files_close_all(m);return m->status=status;}if(m->exited){cw_files_close_all(m);return CW_OK;}}
     cw_files_close_all(m);return m->status=CW_BUDGET;
 }
 

@@ -77,6 +77,8 @@ int cw_load_profile(const unsigned char *,size_t,uint64_t,unsigned char *,size_t
 int cw_read(CwMachine *, uint64_t, unsigned char *, size_t, unsigned int);
 int cw_write(CwMachine *, uint64_t, const unsigned char *, size_t);
 int cw_run(CwMachine *, uint32_t);
+/* Execute one instruction using caller-initialized guest mappings. */
+int cw_cpu_step(CwMachine *);
 /* Trusted synthetic return handling; guest code cannot map these tokens. */
 int cw_bootstrap_return(CwMachine *,uint64_t,uint64_t);
 const char *cw_status_name(int);
