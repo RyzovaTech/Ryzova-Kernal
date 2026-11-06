@@ -214,9 +214,14 @@ def check_query(lib, arch, image, expected):
     return report
 
 
-def check_fma(lib):
+def check_float(lib):
     word = C.c_ulonglong
     lib.mac8_fma.argtypes = [word, word, word, C.POINTER(word)]
+    lib.mac8_fp_div.argtypes = [word, word, C.POINTER(word)]
+    lib.mac8_fp_from_int.argtypes = [word, C.c_uint, C.c_int]
+    lib.mac8_fp_from_int.restype = word
+    lib.mac8_fp_to_int.argtypes = [word, C.c_uint]
+    lib.mac8_fp_to_int.restype = word
     libc_fma = C.CDLL('libm.so.6').fma
     libc_fma.argtypes = [C.c_double]*3
     libc_fma.restype = C.c_double
@@ -228,6 +233,20 @@ def check_fma(lib):
         out = word()
         if lib.mac8_fma(*(bits(x) for x in case), C.byref(out)) != 1 or out.value != bits(libc_fma(*case)):
             raise ValueError(f'ARM64 fused arithmetic differs for {case}')
+
+    for _ in range(300):
+        a, b = (rng.uniform(-10**6, 10**6) for _ in range(2))
+        out = word()
+        if lib.mac8_fp_div(bits(a), bits(b), C.byref(out)) != 1 or out.value != bits(a/b):
+            raise ValueError('ARM64 binary64 division differs')
+        value = rng.getrandbits(64)
+        signed = value if value < 2**63 else value-2**64
+        for is_signed, number in ((0, value), (1, signed)):
+            if lib.mac8_fp_from_int(value, 64, is_signed) != bits(float(number)):
+                raise ValueError('ARM64 integer-to-float conversion differs')
+        if lib.mac8_fp_to_int(bits(a), 64) != int(a) % 2**64:
+            raise ValueError('ARM64 float-to-integer conversion differs')
+
 
 def check_heap(lib):
     class Heap(C.Structure):
@@ -259,7 +278,7 @@ def main():
                             C.c_uint, C.POINTER(C.c_char_p), C.c_uint, C.c_void_p, C.c_uint,
                             C.POINTER(Stop)]
     check_heap(lib)
-    check_fma(lib)
+    check_float(lib)
     report = {}
     for arch, (name, _, _, _, _) in TARGETS.items():
         reference = args.references/f'macos-m8-jq-{arch}'

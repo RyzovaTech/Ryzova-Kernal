@@ -892,7 +892,6 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
     Word access;
     unsigned int flags = 0;
     int handled, wide, sub;
-    double x, y;
     const unsigned char *p;
     unsigned char *dst;
     r[0] = argc;
@@ -1304,27 +1303,13 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
             write_le(fp[rd], 8, v);
         }else if((op&0x7ffffc00U)==0x1e780000U){ /* FCVTZS W/X, D */
             wide = op>>31;
-            memcpy(&x, fp[rn], 8);
-            y = wide ? 9223372036854775808.0 : 2147483648.0;
-            access = (Word)1<<(wide ? 63 : 31);
-            if(x!=x)
-                v = 0;
-            else if(x>=y)
-                v = access-1;
-            else if(x<-y)
-                v = access;
-            else
-                v = (Word)(int64_t)x;
+            v = mac8_fp_to_int(read_le(fp[rn], 8), wide ? 64 : 32);
             if(rd!=31)
                 r[rd] = wide ? v : (unsigned int)v;
         }else if((op&0x7ffefc00U)==0x1e620000U){ /* SCVTF/UCVTF D, W/X */
-            v = rn==31 ? 0 : r[rn];
-            if(op&(1U<<16))
-                x = op>>31 ? (double)v : (double)(unsigned int)v;
-            else
-                x = op>>31 ? (double)(int64_t)v : (double)(int32_t)v;
+            v = mac8_fp_from_int(rn==31 ? 0 : r[rn], op>>31 ? 64 : 32, !(op&(1U<<16)));
             memset(fp[rd], 0, 16);
-            memcpy(fp[rd], &x, 8);
+            write_le(fp[rd], 8, v);
         }else if((op&0xffe00000U)==0x1f400000U){ /* FMADD/FMSUB D */
             rt2 = (op>>16)&31;
             mode = (op>>10)&31;
@@ -1342,43 +1327,39 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
             rt2 = (op>>16)&31;
             if((op&8) && rt2)
                 return 0;
-            memcpy(&x, fp[rn], 8);
-            y = 0.0;
-            if(!(op&8))
-                memcpy(&y, fp[rt2], 8);
-            flags = x!=x || y!=y ? 3 : x==y ? 6 : x<y ? 8 : 2;
+            flags = mac8_fp_compare(read_le(fp[rn], 8), (op&8) ? 0 : read_le(fp[rt2], 8));
         }else if((op&0xffe0ec00U)==0x1e604800U){ /* FMIN/FMAX D */
             rt2 = (op>>16)&31;
             v = read_le(fp[rn], 8);
             access = read_le(fp[rt2], 8);
-            memcpy(&x, fp[rn], 8);
-            memcpy(&y, fp[rt2], 8);
-            if(x!=x || y!=y)
-                v = (x!=x ? v : access)|0x0008000000000000ULL;
-            else if(x==y)
+            cond = mac8_fp_compare(v, access);
+            if(cond==3)
+                v = (mac8_fp_compare(v, v)==3 ? v : access)|0x0008000000000000ULL;
+            else if(cond==6)
                 v = (op&(1U<<12)) ? v|access : v&access;
-            else if((op&(1U<<12)) ? x>y : x<y)
+            else if(cond==((op&(1U<<12)) ? 2U : 8U))
                 v = access;
             memset(fp[rd], 0, 16);
             write_le(fp[rd], 8, v);
         }else if((op&0xffe0fc00U)==0x1e602800U ||
                  (op&0xffe0fc00U)==0x1e600800U || (op&0xffe0fc00U)==0x1e603800U ||
                  (op&0xffe0fc00U)==0x1e601800U){ /* Scalar D arithmetic */
-            rt2 = (op>>16)&31;
-            memcpy(&x, fp[rn], 8);
-            memcpy(&y, fp[rt2], 8);
-            if((op&0xfc00U)==0x1800U){
-                if(!y)
+            Word left = read_le(fp[rn], 8);
+            Word right = read_le(fp[(op>>16)&31], 8);
+            mode = op&0xfc00U;
+            if(mode==0x1800U){
+                if(!mac8_fp_div(left, right, &v))
                     return 0;
-                x /= y;
-            }else if(!(op&(1U<<13)))
-                x *= y;
-            else if(op&(1U<<12))
-                x -= y;
-            else
-                x += y;
+            }else if(mode==0x800U){
+                if(!mac8_fma(left, right, (left^right)&(1ULL<<63), &v))
+                    return 0;
+            }else{
+                right ^= (Word)(op&0x1000U)<<51;
+                if(!mac8_fma(left, 0x3ff0000000000000ULL, right, &v))
+                    return 0;
+            }
             memset(fp[rd], 0, 16);
-            memcpy(fp[rd], &x, 8);
+            write_le(fp[rd], 8, v);
         }else if((op&0xfffffc00U)==0x9e670000U){ /* FMOV D, X */
             memset(fp[rd], 0, 16);
             write_le(fp[rd], 8, rn==31 ? 0 : r[rn]);
