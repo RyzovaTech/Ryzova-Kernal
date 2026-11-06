@@ -83,7 +83,8 @@ def verify(image, bootstrap, references, output):
                     markers[len(commands)] = marker
                     argument = ' /tmp/m8-input' if case == 'query' else ''
                     commands.append(
-                        f'{program} --{case} {path}{argument} >{prefix}.out >[2]{prefix}.err && echo {marker}')
+                        f'if({program} --{case} {path}{argument} >{prefix}.out >[2]{prefix}.err) echo {marker}; '
+                        f'if not cat {prefix}.err')
                     commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
             commands.append('sha1sum -2 256 /tmp/m8-input')
             run = session(image, commands, output, 'fresh', 120, markers)
