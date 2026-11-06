@@ -17,7 +17,7 @@
 #include <string.h>
 #define HOST_OPENS 64U
 typedef struct HostOpen { uint64_t token;int fd;uint32_t access,share;dev_t device;ino_t inode; } HostOpen;
-struct CwFileHost { int roots[CW_DIRECTORY_GRANTS];uint32_t root_count,serial;HostOpen handles[HOST_OPENS]; };
+struct CwFileHost { int roots[CW_DIRECTORY_GRANTS];uint32_t root_count,serial;uint64_t read_bytes,write_bytes;HostOpen handles[HOST_OPENS]; };
 static uint32_t win_error(int e) {
     switch(e){case ENOENT:return 2;case ENOTDIR:return 3;case EEXIST:return 80;
     case EMFILE:case ENFILE:return 4;case ENOSPC:case EDQUOT:return 112;
@@ -128,6 +128,7 @@ static uint32_t read_file(void *context,uint64_t token,uint64_t at,unsigned char
     if(at>CW_FILE_LIMIT || n>CW_FILE_LIMIT)return 87;
     do{got=pread(h->fd,out,n,(off_t)at);}while(got<0 && errno==EINTR);
     if(got<0)return win_error(errno);
+    ((CwFileHost *)context)->read_bytes+=(uint32_t)got;
     *actual=(uint32_t)got;return 0;
 }
 static uint32_t write_file(void *context,uint64_t token,uint64_t at,const unsigned char *in,uint32_t n,uint32_t *actual) {
@@ -137,6 +138,7 @@ static uint32_t write_file(void *context,uint64_t token,uint64_t at,const unsign
     if(at>CW_FILE_LIMIT || n>CW_FILE_LIMIT-at)return 223;
     do{got=pwrite(h->fd,in,n,(off_t)at);}while(got<0 && errno==EINTR);
     if(got<0)return win_error(errno);
+    ((CwFileHost *)context)->write_bytes+=(uint32_t)got;
     *actual=(uint32_t)got;return 0;
 }
 static uint32_t file_size(void *context,uint64_t token,uint64_t *out) {
@@ -163,3 +165,6 @@ void cw_file_host_destroy(CwFileHost *host) {
 }
 uint32_t cw_file_host_open_count(const CwFileHost *host) { uint32_t i,n=0;for(i=0;i<HOST_OPENS;i++)if(host->handles[i].token)n++;return n; }
 const CwFileOps *cw_file_host_ops(void) { static const CwFileOps ops={open_file,read_file,write_file,file_size,flush_file,close_file};return &ops; }
+
+uint64_t cw_file_host_read_bytes(const CwFileHost *host) { return host?host->read_bytes:0; }
+uint64_t cw_file_host_write_bytes(const CwFileHost *host) { return host?host->write_bytes:0; }

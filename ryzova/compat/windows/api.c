@@ -11,13 +11,13 @@
 #define ERR_ENVIRONMENT 203U
 #define ERR_ADDRESS 487U
 #define ERR_NOACCESS 998U
-static const char *const names[]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno","AreFileApisANSI","SetFileApisToANSI","SetFileApisToOEM","TlsAlloc","TlsFree","TlsGetValue","TlsSetValue","CreateEventA","SetEvent","ResetEvent","CreateSemaphoreA","ReleaseSemaphore","WaitForSingleObject","WaitForMultipleObjects","InitializeCriticalSection","DeleteCriticalSection","EnterCriticalSection","LeaveCriticalSection","TryEnterCriticalSection","GetCurrentProcess","GetCurrentProcessId","GetCurrentThread","GetCurrentThreadId","DuplicateHandle","SetUnhandledExceptionFilter","_set_invalid_parameter_handler","_set_app_type","__p__fmode","__p__commode","_initterm","_initterm_e","_initialize_wide_environment","_configure_wide_argv","__p___argc","__p___wargv","__p__wenviron","_set_new_mode","_crt_atexit","_cexit","exit","_exit","GetModuleHandleA","GetProcAddress","rand_s","WideCharToMultiByte","setlocale"};
+static const char *const names[]={"GetStdHandle","WriteFile","ExitProcess","GetLastError","SetLastError","GetCommandLineW","GetEnvironmentVariableW","VirtualAlloc","VirtualFree","CreateFileW","ReadFile","CloseHandle","SetFilePointerEx","GetFileSizeEx","FlushFileBuffers","memcpy","memmove","memset","memcmp","strlen","strcmp","strncmp","wcslen","malloc","calloc","realloc","free","_errno","AreFileApisANSI","SetFileApisToANSI","SetFileApisToOEM","TlsAlloc","TlsFree","TlsGetValue","TlsSetValue","CreateEventA","SetEvent","ResetEvent","CreateSemaphoreA","ReleaseSemaphore","WaitForSingleObject","WaitForMultipleObjects","InitializeCriticalSection","DeleteCriticalSection","EnterCriticalSection","LeaveCriticalSection","TryEnterCriticalSection","GetCurrentProcess","GetCurrentProcessId","GetCurrentThread","GetCurrentThreadId","DuplicateHandle","SetUnhandledExceptionFilter","_set_invalid_parameter_handler","_set_app_type","__p__fmode","__p__commode","_initterm","_initterm_e","_initialize_wide_environment","_configure_wide_argv","__p___argc","__p___wargv","__p__wenviron","_set_new_mode","_crt_atexit","_cexit","exit","_exit","GetModuleHandleA","GetProcAddress","rand_s","WideCharToMultiByte","setlocale","__acrt_iob_func","_fileno","_setmode","_isatty","_get_osfhandle","_wfopen","getc","fread","fgets","feof","ferror","clearerr","fclose","fflush","fputc","fputs","fwrite","putchar","puts","_write","GetConsoleMode","isalpha","isalnum","isspace","strchr","strrchr","memchr","strnlen","wcsnlen","_strdup","strcpy","strncpy","getenv","___lc_codepage_func","MultiByteToWideChar","IsDBCSLeadByteEx","_fullpath","PathIsRelativeA","GetThreadPriority","SetThreadPriority"};
 typedef char CwApiRegistryCount[(sizeof(names)/sizeof(names[0])==CW_API_COUNT)?1:-1];
 int cw_api_id(const char *name) {
     unsigned int i;for(i=0;i<CW_API_COUNT;i++)if(names[i] && !strcmp(name,names[i]))return (int)i;
     return -1;
 }
-const char *cw_api_module(unsigned int id) { return id>=CW_API_COUNT?NULL:(cw_crt_export(id)?"ucrtbase.dll":"kernel32.dll"); }
+const char *cw_api_module(unsigned int id) { return id>=CW_API_COUNT?NULL:id==CW_PATH_IS_RELATIVE?"shlwapi.dll":cw_crt_export(id)?"ucrtbase.dll":"kernel32.dll"; }
 uint32_t cw_api_word_mask(unsigned int word) {
     unsigned int remaining;
     if(word>=CW_API_WORDS || word*32>=CW_API_COUNT)return 0;
@@ -46,7 +46,8 @@ int cw_api_module_id(const char *name) {
     static const char *const modules[]={"kernel32.dll","ucrtbase.dll",
         "api-ms-win-crt-heap-l1-1-0.dll","api-ms-win-crt-private-l1-1-0.dll",
         "api-ms-win-crt-string-l1-1-0.dll","api-ms-win-crt-runtime-l1-1-0.dll",
-        "api-ms-win-crt-stdio-l1-1-0.dll","api-ms-win-crt-environment-l1-1-0.dll","api-ms-win-crt-utility-l1-1-0.dll","api-ms-win-crt-locale-l1-1-0.dll"};
+        "api-ms-win-crt-stdio-l1-1-0.dll","api-ms-win-crt-environment-l1-1-0.dll","api-ms-win-crt-utility-l1-1-0.dll","api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-filesystem-l1-1-0.dll","shlwapi.dll"};
     unsigned int i;for(i=0;i<sizeof(modules)/sizeof(modules[0]);i++)if(!strcmp(name,modules[i]))return (int)i+1;
     return 0;
 }
@@ -88,7 +89,7 @@ int cw_attach_services(CwMachine *m,CwServices *s,const CwLaunch *launch,unsigne
     if(!m || !m->image || !s || !launch || s->bound_machine || m->services || m->instructions || m->exited)return CW_API;
     if(!cw_launch_allows_plan(launch,&m->plan) ||
        (launch->console_mask&~3U) || launch->environment_count>CW_ENV_COUNT ||
-       heap_bytes>CW_HEAP_LIMIT || heap_bytes%4096 || (heap_bytes && !heap) ||
+       heap_bytes>CW_HEAP_LIMIT_FOR(m->plan.profile_flags) || heap_bytes%4096 || (heap_bytes && !heap) ||
        (size_t)m->plan.image_bytes+CW_STACK+4096+heap_bytes>CW_MAX_MEMORY)return CW_API;
     length=utf16_length(launch->command_line,CW_COMMAND_UNITS,0);if(length<0)return CW_API;
     for(i=0;i<launch->environment_count;i++) {
@@ -125,9 +126,13 @@ unsigned char *cw_service_memory(CwMachine *m,uint64_t at,size_t n,unsigned int 
         return (rights&CW_X)?NULL:s->crt_argv+(size_t)(at-s->command_base-8192);
     if(at>=s->command_base+16384 && span(sizeof(s->crt_environment),at-s->command_base-16384,n))
         return (rights&CW_X)?NULL:s->crt_environment+(size_t)(at-s->command_base-16384);
+    if(at>=s->command_base+32768 && span(sizeof(s->crt_narrow_env),at-s->command_base-32768,n))
+        return rights==CW_R?(unsigned char *)s->crt_narrow_env+(size_t)(at-s->command_base-32768):NULL;
     if(at>=s->command_base+6144 && span(2,at-s->command_base-6144,n))
         return rights==CW_R?c_locale+(size_t)(at-s->command_base-6144):NULL;
     if(at<s->heap_base || !span(s->heap_bytes,at-s->heap_base,n) || rights==CW_X)return NULL;
+    if(s->trace_crt_base && (at<=s->trace_crt_base? s->trace_crt_base-at<n :
+       at-s->trace_crt_base<s->trace_crt_size) && !cw_crt_trace_span(s,at,n))return NULL;
     off=at-s->heap_base;first=(size_t)(off/4096);last=(size_t)((off+n-1)/4096);
     for(i=first;i<=last;i++)if(!s->owner[i] || !(s->protection[i]&rights))return NULL;
     return s->heap+(size_t)off;
@@ -282,6 +287,71 @@ static uint64_t wide_to_multi(CwMachine *m,const uint64_t *a) {
     }
     return needed;
 }
+/* Decode one UTF-8 scalar. A malformed prefix consumes only its valid
+ * continuation prefix, leaving the next independent byte for the caller. */
+static uint32_t utf8_scalar(const unsigned char *p,uint32_t n,uint32_t *used) {
+    uint32_t value,need,i,low=0x80,high=0xbf;
+    *used=1;
+    if(p[0]<0x80)return p[0];
+    if(p[0]>=0xc2 && p[0]<=0xdf){value=p[0]&31;need=2;}
+    else if(p[0]>=0xe0 && p[0]<=0xef){
+        value=p[0]&15;need=3;
+        if(p[0]==0xe0)low=0xa0;
+        if(p[0]==0xed)high=0x9f;
+    }else if(p[0]>=0xf0 && p[0]<=0xf4){
+        value=p[0]&7;need=4;
+        if(p[0]==0xf0)low=0x90;
+        if(p[0]==0xf4)high=0x8f;
+    }else return UINT32_MAX;
+    for(i=1;i<need;i++){
+        if(i==n || p[i]<low || p[i]>high)return UINT32_MAX;
+        *used=i+1;
+        value=(value<<6)|(p[i]&63);
+        low=0x80;high=0xbf;
+    }
+    return value;
+}
+
+static uint64_t multi_to_wide(CwMachine *m,const uint64_t *a) {
+    CwServices *s=m->services;
+    unsigned char *src,*dst=NULL;
+    int32_t length=(int32_t)a[3],capacity=(int32_t)a[5];
+    uint32_t n,i,pass,needed=0,at=0,used,c,unit;
+    if((uint32_t)a[0]!=65001 || (a[1]&~UINT64_C(8)) || !a[2] ||
+       !length || length< -1 || capacity<0)return fail(s,ERR_PARAMETER);
+    if(length==-1){
+        for(n=0;n<65536;n++){
+            if(a[2]>UINT64_MAX-n || !(src=cw_memory(m,a[2]+n,1,CW_R)))return fail(s,ERR_NOACCESS);
+            if(!*src){n++;break;}
+        }
+        if(n==65536)return fail(s,ERR_PARAMETER);
+    }else n=(uint32_t)length;
+    if(n>65536 || !(src=cw_memory(m,a[2],n,CW_R)))return fail(s,ERR_NOACCESS);
+    for(pass=0;pass<2;pass++){
+        for(i=0;i<n;i+=used){
+            c=utf8_scalar(src+i,n-i,&used);
+            if(c==UINT32_MAX){
+                if(a[1]&8)return fail(s,1113);
+                c=0xfffd;
+            }
+            if(!pass){needed+=c>=0x10000?2:1;continue;}
+            if(c>=0x10000){
+                c-=0x10000;unit=0xd800+(c>>10);
+                dst[at++]=(unsigned char)unit;dst[at++]=(unsigned char)(unit>>8);
+                c=0xdc00+(c&1023);
+            }
+            dst[at++]=(unsigned char)c;dst[at++]=(unsigned char)(c>>8);
+        }
+        if(!pass){
+            if(!capacity)return needed;
+            if((uint32_t)capacity<needed)return fail(s,122);
+            if(!a[4] || !(dst=cw_memory(m,a[4],needed*2,CW_W)))return fail(s,ERR_NOACCESS);
+            if(a[2]<=a[4]?a[4]-a[2]<n:a[2]-a[4]<needed*2)return fail(s,ERR_PARAMETER);
+        }
+    }
+    return needed;
+}
+
 /* Opaque handles identify the sandbox's built-in service contracts, not host DLLs. */
 static int import_string(CwMachine *m,uint64_t at,char *out,unsigned int capacity,int lower) {
     unsigned int i;unsigned char *p;
@@ -306,7 +376,8 @@ static int service_address(CwMachine *m,const uint64_t *a,uint64_t *result) {
     static const char *const modules[]={"kernel32.dll","ucrtbase.dll",
         "api-ms-win-crt-heap-l1-1-0.dll","api-ms-win-crt-private-l1-1-0.dll",
         "api-ms-win-crt-string-l1-1-0.dll","api-ms-win-crt-runtime-l1-1-0.dll",
-        "api-ms-win-crt-stdio-l1-1-0.dll","api-ms-win-crt-environment-l1-1-0.dll","api-ms-win-crt-utility-l1-1-0.dll","api-ms-win-crt-locale-l1-1-0.dll"};
+        "api-ms-win-crt-stdio-l1-1-0.dll","api-ms-win-crt-environment-l1-1-0.dll","api-ms-win-crt-utility-l1-1-0.dll","api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-filesystem-l1-1-0.dll","shlwapi.dll"};
     CwServices *s=m->services;char name[128];int id;uint64_t module=a[0]-UINT64_C(0x20001);
     *result=0;
     if(module>=sizeof(modules)/sizeof(modules[0])){s->last_error=126;return CW_OK;}
@@ -335,16 +406,35 @@ int cw_api_dispatch(CwMachine *m) {
     if((m->r[4]&15)!=8 || m->r[4]<m->stack_base || m->r[4]-m->stack_base>CW_STACK-40 || !(stack=cw_memory(m,m->r[4],40,CW_R)))return CW_ABI;
     if(!cw_memory(m,m->r[4]+8,32,CW_W))return CW_ABI;
     a[0]=m->r[1];a[1]=m->r[2];a[2]=m->r[8];a[3]=m->r[9];a[4]=a[5]=a[6]=a[7]=0;
-    if(id==CW_WRITE_FILE || id==CW_READ_FILE || id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE || id==CW_WIDE_TO_MULTI) {
-        unsigned int count=id==CW_WIDE_TO_MULTI?4U:(id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE)?3U:1U,i;
+    if(id==CW_WRITE_FILE || id==CW_READ_FILE || id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE || id==CW_WIDE_TO_MULTI || id==CW_MULTI_TO_WIDE) {
+        unsigned int count=id==CW_WIDE_TO_MULTI?4U:id==CW_MULTI_TO_WIDE?2U:(id==CW_CREATE_FILE || id==CW_DUPLICATE_HANDLE)?3U:1U,i;
         unsigned char *extra=cw_memory(m,m->r[4]+40,count*8,CW_R);if(!extra)return CW_ABI;
         for(i=0;i<count;i++)a[4+i]=get64(extra+i*8);
     }
     ret=get64(stack);s->calls[id]++;
     switch(id) {
+    case CW_GET_THREAD_PRIORITY:case CW_SET_THREAD_PRIORITY:{
+        int status=cw_sync_call(m,id,a,&result);if(status)return status;break;
+    }
+    case CW_PATH_IS_RELATIVE:{
+        char path[CW_PATH_LIMIT+1];
+        if(!a[0]){result=1;break;}
+        if(!import_string(m,a[0],path,sizeof(path),0))return CW_API;
+        result=!path[0] || (path[0]!='\\' && path[0]!='/' && path[1]!=':');
+        break;
+    }
+    case CW_DBCS_LEAD_BYTE:
+        /* ACP and OEMCP are single-byte in the current locale profile. */
+        if((uint32_t)a[0]!=0 && (uint32_t)a[0]!=1 &&
+           (uint32_t)a[0]!=1252 && (uint32_t)a[0]!=65001)s->last_error=ERR_PARAMETER;
+        break;
+    case CW_MULTI_TO_WIDE:result=multi_to_wide(m,a);break;
     case CW_WIDE_TO_MULTI:result=wide_to_multi(m,a);break;
     case CW_MODULE_HANDLE_A:{int status=service_module(m,a[0],&result);if(status)return status;break;}
     case CW_PROC_ADDRESS:{int status=service_address(m,a,&result);if(status)return status;break;}
+    case CW_GET_CONSOLE_MODE:
+        /* These handles capture redirected bytes. No terminal mode exists. */
+        result=fail(s,ERR_INVALID_HANDLE);break;
     case CW_GET_STD_HANDLE:
         if((uint32_t)a[0]==UINT32_MAX-10)result=(s->launch.console_mask&1)?0x10001:0;
         else if((uint32_t)a[0]==UINT32_MAX-11)result=(s->launch.console_mask&2)?0x10002:0;

@@ -183,12 +183,179 @@ static uint64_t shift(Decode *d,unsigned int group,uint64_t value,unsigned int n
     }
     return v;
 }
+static uint64_t xmm_low(const unsigned char *p,unsigned int width) {
+    uint64_t result=0;
+    unsigned int i;
+    for(i=0;i<width;i++)result|=(uint64_t)p[i]<<(i*8);
+    return result;
+}
+
+static void xmm_put(unsigned char *p,unsigned int width,uint64_t value) {
+    unsigned int i;
+    for(i=0;i<width;i++)p[i]=(unsigned char)(value>>(i*8));
+}
+
+static int xmm_read(Decode *d,Operand o,unsigned char *out,unsigned int n) {
+    uint64_t at;
+    if(d->error)return d->error;
+    if(o.reg>=0){memcpy(out,d->m->xmm[o.reg],n);return CW_OK;}
+    at=address(d,o);
+    if(d->error)return d->error;
+    return cw_read(d->m,at,out,n,CW_R);
+}
+
+static int xmm_write(Decode *d,Operand o,const unsigned char *src,unsigned int n,int clear) {
+    uint64_t at;
+    if(d->error)return d->error;
+    if(o.reg>=0){
+        memmove(d->m->xmm[o.reg],src,n);
+        if(clear)memset(d->m->xmm[o.reg]+n,0,16-n);
+        return CW_OK;
+    }
+    at=address(d,o);
+    if(d->error)return d->error;
+    return cw_write(d->m,at,src,n);
+}
+
+#define FP_EXP UINT64_C(0x7ff0000000000000)
+#define FP_FRAC UINT64_C(0x000fffffffffffff)
+static int fp_nan(uint64_t bits) { return (bits&FP_EXP)==FP_EXP && (bits&FP_FRAC); }
+static double double_value(uint64_t bits) { double d;memcpy(&d,&bits,8);return d; }
+static uint64_t double_bits(double d) { uint64_t bits;memcpy(&bits,&d,8);return bits; }
+
+static int scalar_double(Decode *d,unsigned int op,unsigned int reg,Operand o,unsigned int width) {
+    CwMachine *m=d->m;
+    unsigned char source[8],*dst=m->xmm[reg];
+    uint64_t a,b,value;
+    double x,y,r,limit;
+    int status,unordered,less,equal;
+    if(op==0x10){
+        status=xmm_read(d,o,source,8);
+        if(status)return status;
+        memcpy(dst,source,8);
+        if(o.reg<0)memset(dst+8,0,8);
+        return CW_OK;
+    }
+    if(op==0x11)return xmm_write(d,o,dst,8,0);
+    if(op==0x2a){
+        value=get(d,o,width);
+        if(d->error)return d->error;
+        if(m->mxcsr&0xe040U)return CW_OPCODE;
+        r=width==8?(double)(int64_t)value:(double)(int32_t)value;
+        xmm_put(dst,8,double_bits(r));
+        return CW_OK;
+    }
+    status=xmm_read(d,o,source,8);
+    if(status)return status;
+    a=xmm_low(dst,8);b=xmm_low(source,8);
+    if(op==0x2c){
+        limit=width==8?9223372036854775808.0:2147483648.0;
+        value=UINT64_C(1)<<(width*8-1);
+        if((b&FP_EXP)!=FP_EXP){
+            y=double_value(b);
+            if(y>=-limit && y<limit){
+                value=(uint64_t)(int64_t)y;
+                if((double)(int64_t)value!=y)m->mxcsr|=32;
+                put(d,regop(d,reg,width),width,value);
+                return CW_OK;
+            }
+        }
+        if(!(m->mxcsr&128))return CW_OPCODE;
+        m->mxcsr|=1;
+        put(d,regop(d,reg,width),width,value);
+        return CW_OK;
+    }
+    unordered=fp_nan(a) || fp_nan(b);
+    if(op==0x2e || op==0x2f){
+        if(unordered){
+            if(op==0x2f || (fp_nan(a) && !(a&UINT64_C(0x8000000000000))) ||
+               (fp_nan(b) && !(b&UINT64_C(0x8000000000000)))){
+                if(!(m->mxcsr&128))return CW_OPCODE;
+                m->mxcsr|=1;
+            }
+            less=equal=1;
+        }else {
+            x=double_value(a);y=double_value(b);less=x<y;equal=x==y;
+        }
+        m->flags=(m->flags&~UINT64_C(0x8d5))|(less?CF:0)|(equal?ZF:0)|(unordered?PF:0);
+        return CW_OK;
+    }
+    if(op==0x5d || op==0x5f){
+        if(unordered){if(!(m->mxcsr&128))return CW_OPCODE;m->mxcsr|=1;value=b;}
+        else {
+            x=double_value(a);y=double_value(b);
+            value=(op==0x5d?x<y:x>y)?a:b;
+        }
+        xmm_put(dst,8,value);
+        return CW_OK;
+    }
+    /* The arithmetic path uses default, masked round-to-nearest binary64.
+     * Keep unsupported exception/rounding configurations fail-stop. */
+    if((m->mxcsr&0xffc0U)!=0x1f80 || (a&FP_EXP)==FP_EXP || (b&FP_EXP)==FP_EXP)return CW_OPCODE;
+    x=double_value(a);y=double_value(b);
+    switch(op){
+    case 0x58:r=x+y;break;
+    case 0x59:r=x*y;break;
+    case 0x5c:r=x-y;break;
+    case 0x5e:if(!y)return CW_OPCODE;r=x/y;break;
+    default:return CW_OPCODE;
+    }
+    value=double_bits(r);
+    if((value&FP_EXP)==FP_EXP)return CW_OPCODE;
+    xmm_put(dst,8,value);
+    return CW_OK;
+}
+
+static int packed_integer(Decode *d,unsigned int op,unsigned int reg,Operand o) {
+    unsigned char src[16],out[16],*dst=d->m->xmm[reg];
+    unsigned int i,width,high,imm=0;
+    uint64_t value;
+    int status;
+    if(op==0x70)imm=(unsigned int)fetch(d,1);
+    if(op==0x6e || op==0x7e){
+        width=(d->rex&8)?8:4;
+        if(op==0x7e)put(d,o,width,xmm_low(dst,width));
+        else {
+            value=get(d,o,width);
+            if(d->error)return d->error;
+            memset(dst,0,16);
+            xmm_put(dst,width,value);
+        }
+        return d->error;
+    }
+    if(op==0xd6)return xmm_write(d,o,dst,8,1);
+    status=xmm_read(d,o,src,16);
+    if(status)return status;
+    if(op==0x70){
+        for(i=0;i<4;i++)memcpy(out+i*4,src+((imm>>(i*2))&3)*4,4);
+    }else if((op>=0x60 && op<=0x62) || (op>=0x68 && op<=0x6a) || op==0x6c || op==0x6d){
+        width=op>=0x6c?8:1U<<(op&3);
+        high=(op>=0x68 && op<=0x6a) || op==0x6d?8:0;
+        for(i=0;i<8;i+=width){
+            memcpy(out+2*i,dst+high+i,width);
+            memcpy(out+2*i+width,src+high+i,width);
+        }
+    }else if(op>=0x74 && op<=0x76){
+        width=1U<<(op-0x74);
+        for(i=0;i<16;i+=width)memset(out+i,!memcmp(dst+i,src+i,width)?255:0,width);
+    }else{
+        for(i=0;i<16;i++){
+            if(op==0x54 || op==0xdb)out[i]=dst[i]&src[i];
+            else if(op==0x55 || op==0xdf)out[i]=(unsigned char)(~dst[i]&src[i]);
+            else if(op==0x56 || op==0xeb)out[i]=dst[i]|src[i];
+            else out[i]=dst[i]^src[i];
+        }
+    }
+    memcpy(dst,out,16);
+    return CW_OK;
+}
+
 static int tick(CwMachine *m) {
     Decode d;Operand o,q;unsigned int op,n,reg=0,group=0,prefixes=0;
     uint64_t a,b,v,target=0;int jump=0;
     memset(&d,0,sizeof(d));d.m=m;d.start=d.cur=m->ip;
     op=(unsigned int)fetch(&d,1);
-    while((op>=0x40 && op<=0x4f) || op==0x66 || op==0xf3 || op==0x65 || op==0x67 || op==0x2e || op==0xf0) {
+    while((op>=0x40 && op<=0x4f) || op==0x66 || op==0xf2 || op==0xf3 || op==0x65 || op==0x67 || op==0x2e || op==0xf0) {
         if(++prefixes>14){d.error=CW_OPCODE;break;}
         if(op>=0x40 && op<=0x4f){if(d.rex){d.error=CW_OPCODE;break;}d.rex=op;}
         else if(op==0x65 || op==0x2e){if(d.rex){d.error=CW_OPCODE;break;}d.gs=op==0x65;}
@@ -199,8 +366,9 @@ static int tick(CwMachine *m) {
     }
     n=(d.rex&8)?8:(d.prefix==0x66?2:4);
     if(d.error)return d.error;
-    if(d.prefix==0xf3 && op!=0x0f && op!=0x90 && op!=0xc3)return CW_OPCODE;
-    if(d.locked && op!=0x0f && op!=0x86 && op!=0x87)return CW_OPCODE;
+    if(d.prefix==0xf2 && op!=0x0f)return CW_OPCODE;
+    if(d.prefix==0xf3 && op!=0x0f && op!=0x90 && op!=0xc3 && op!=0xa4 && op!=0xa5 && op!=0xaa && op!=0xab)return CW_OPCODE;
+    if(d.locked && op!=0x0f && op!=0x86 && op!=0x87 && op!=0x80 && op!=0x81 && op!=0x83)return CW_OPCODE;
     if(op>=0xb8 && op<=0xbf){v=fetch(&d,n);put(&d,regop(&d,(op-0xb8)+((d.rex&1)?8:0),n),n,v);}
     else if(op>=0xb0 && op<=0xb7){v=fetch(&d,1);put(&d,regop(&d,(op-0xb0)+((d.rex&1)?8:0),1),1,v);}
     else if(op>=0x50 && op<=0x57){if(d.prefix)return CW_OPCODE;push(&d,m->r[(op-0x50)+((d.rex&1)?8:0)]);}
@@ -233,7 +401,49 @@ static int tick(CwMachine *m) {
         else {o=regop(&d,0,n);b=fetch(&d,n==8?4:n);if(n==8)b=(uint64_t)(int64_t)(int32_t)b;a=get(&d,o,n);}
         v=alu(&d,kind,a,b,n);if(kind!=7)put(&d,o,n,v);
     }
-    else if(op==0x80 || op==0x81 || op==0x83){if(op==0x80)n=1;o=operand(&d,&reg,&group,n);b=fetch(&d,op==0x83?1:(n==8?4:n));if(op==0x83)b=(uint64_t)(int64_t)(int8_t)b;else if(n==8)b=(uint64_t)(int64_t)(int32_t)b;a=get(&d,o,n);v=alu(&d,group,a,b,n);if(group!=7)put(&d,o,n,v);}
+    else if(op==0x80 || op==0x81 || op==0x83){
+        if(op==0x80)n=1;
+        o=operand(&d,&reg,&group,n);
+        b=fetch(&d,op==0x83?1:(n==8?4:n));
+        if(d.error)return d.error;
+        if(d.locked){
+            if(o.reg>=0 || group==7)return CW_OPCODE;
+            if(!cw_memory(m,address(&d,o),n,CW_W))return CW_MEMORY;
+        }
+        if(op==0x83)b=(uint64_t)(int64_t)(int8_t)b;
+        else if(n==8)b=(uint64_t)(int64_t)(int32_t)b;
+        a=get(&d,o,n);
+        if(d.error)return d.error;
+        v=alu(&d,group,a,b,n);
+        if(group!=7)put(&d,o,n,v);
+    }
+    else if(op==0xfc || op==0xfd){
+        if(d.rex || d.prefix)return CW_OPCODE;
+        if(op==0xfc)m->flags&=~UINT64_C(0x400);
+        else m->flags|=0x400;
+    }
+    else if(op==0xa4 || op==0xa5 || op==0xaa || op==0xab){
+        unsigned int index_width=d.addr32?4:8;
+        uint64_t count=m->r[1]&mask(index_width);
+        uint64_t dest=m->r[7]&mask(index_width),source=m->r[6]&mask(index_width);
+        int move=op==0xa4 || op==0xa5;
+        if(!(op&1))n=1;
+        if(d.prefix==0xf3 && !count){m->ip=d.cur;return CW_OK;}
+        a=m->r[0]&mask(n);
+        if(move){
+            memset(&q,0,sizeof(q));q.reg=-1;q.at=source;
+            a=guest_read(&d,address(&d,q),n,CW_R);
+        }
+        writen(&d,dest,n,a);
+        if(d.error)return d.error;
+        b=(m->flags&0x400)?UINT64_MAX-(n-1):n;
+        put(&d,regop(&d,7,index_width),index_width,dest+b);
+        if(move)put(&d,regop(&d,6,index_width),index_width,source+b);
+        if(d.prefix==0xf3){
+            put(&d,regop(&d,1,index_width),index_width,--count);
+            if(count){jump=1;target=d.start;} /* Charge each element to the execution budget. */
+        }
+    }
     else if(op==0xa8 || op==0xa9){if(op==0xa8)n=1;b=fetch(&d,n==8?4:n);if(n==8)b=(uint64_t)(int64_t)(int32_t)b;(void)alu(&d,4,m->r[0],b,n);}
     else if(op==0x84 || op==0x85){if(op==0x84)n=1;o=operand(&d,&reg,&group,n);(void)alu(&d,4,get(&d,o,n),get(&d,regop(&d,reg,n),n),n);}
     else if(op==0x86 || op==0x87){
@@ -272,9 +482,78 @@ static int tick(CwMachine *m) {
     }
     else if(op==0x0f){
         unsigned int second=(unsigned int)fetch(&d,1);
-        if(d.locked && second!=0xb0 && second!=0xb1)return CW_OPCODE;
-        if(d.prefix==0xf3 && second!=0x6f && second!=0x7f)return CW_OPCODE;
-        if(second>=0x80 && second<=0x8f){if(d.prefix || d.rex)return CW_OPCODE;b=(uint64_t)(int64_t)(int32_t)fetch(&d,4);if(condition(m,second&15)){jump=1;target=d.cur+b;}}
+        if(d.locked && second!=0xb0 && second!=0xb1 && second!=0xab && second!=0xb3 && second!=0xbb && second!=0xba)return CW_OPCODE;
+        if(d.prefix==0xf3 && second!=0x6f && second!=0x7f && second!=0x7e)return CW_OPCODE;
+        if(d.prefix==0xf2){
+            if(second!=0x10 && second!=0x11 && second!=0x2a && second!=0x2c &&
+               second!=0x58 && second!=0x59 && second!=0x5c && second!=0x5d &&
+               second!=0x5e && second!=0x5f)return CW_OPCODE;
+            o=operand(&d,&reg,&group,8);
+            d.error=scalar_double(&d,second,reg,o,n);
+        }
+        else if(d.prefix==0x66 && (second==0x2e || second==0x2f)){
+            o=operand(&d,&reg,&group,8);
+            d.error=scalar_double(&d,second,reg,o,n);
+        }
+        else if(d.prefix==0xf3 && second==0x7e){
+            unsigned char data[8];
+            o=operand(&d,&reg,&group,8);
+            d.error=xmm_read(&d,o,data,8);
+            if(!d.error){memcpy(m->xmm[reg],data,8);memset(m->xmm[reg]+8,0,8);}
+        }
+        else if((!d.prefix || d.prefix==0x66) && (second==0x12 || second==0x13 || second==0x16 || second==0x17)){
+            unsigned char data[8];
+            o=operand(&d,&reg,&group,8);
+            if(second==0x13 || second==0x17){
+                if(o.reg>=0)return CW_OPCODE;
+                d.error=xmm_write(&d,o,m->xmm[reg]+(second==0x17?8:0),8,0);
+            }else {
+                if(o.reg>=0 && d.prefix)return CW_OPCODE;
+                if(o.reg>=0)memcpy(data,m->xmm[o.reg]+(second==0x12?8:0),8);
+                else d.error=xmm_read(&d,o,data,8);
+                if(!d.error)memcpy(m->xmm[reg]+(second==0x16?8:0),data,8);
+            }
+        }
+        else if(((!d.prefix || d.prefix==0x66) && second>=0x54 && second<=0x57) ||
+                (d.prefix==0x66 && ((second>=0x60 && second<=0x62) ||
+                 ((second>=0x68 && second<=0x6a) || (second>=0x6c && second<=0x6e)) || second==0x70 ||
+                 (second>=0x74 && second<=0x76) || second==0x7e ||
+                 second==0xd6 || second==0xdb || second==0xdf || second==0xeb || second==0xef))){
+            o=operand(&d,&reg,&group,8);
+            d.error=packed_integer(&d,second,reg,o);
+        }
+        else if(d.prefix==0x66 && (second==0x6f || second==0x7f)){
+            o=operand(&d,&reg,&group,8);
+            if(o.reg<0 && (address(&d,o)&15))return CW_MEMORY;
+            if(!d.error)vector(&d,o,reg,second==0x7f);
+        }
+        else if(second>=0x80 && second<=0x8f){if(d.prefix || d.rex)return CW_OPCODE;b=(uint64_t)(int64_t)(int32_t)fetch(&d,4);if(condition(m,second&15)){jump=1;target=d.cur+b;}}
+        else if(second==0xa3 || second==0xab || second==0xb3 || second==0xbb || second==0xba){
+            unsigned int operation;
+            o=operand(&d,&reg,&group,n);
+            if(second==0xba){
+                if(group<4)return CW_OPCODE;
+                operation=group-4;
+                b=fetch(&d,1);
+            }else{
+                operation=(second-0xa3)/8;
+                b=m->r[reg]&mask(n);
+                if(o.reg<0){
+                    int64_t index=(int64_t)sign_extend(b,n);
+                    int64_t width=(int64_t)n*8;
+                    int64_t words=index/width-(index%width<0);
+                    o.at+=(uint64_t)words*n;
+                }
+            }
+            if(d.error)return d.error;
+            if(d.locked && (!operation || o.reg>=0))return CW_OPCODE;
+            if(operation && o.reg<0 && !cw_memory(m,address(&d,o),n,CW_W))return CW_MEMORY;
+            a=get(&d,o,n);
+            if(d.error)return d.error;
+            b=UINT64_C(1)<<(b&(n*8-1));
+            m->flags=(m->flags&~(uint64_t)CF)|((a&b)?CF:0);
+            if(operation)put(&d,o,n,operation==1?a|b:operation==2?a&~b:a^b);
+        }
         else if(second==0xb0 || second==0xb1){
             if(second==0xb0)n=1;
             o=operand(&d,&reg,&group,n);
@@ -297,7 +576,6 @@ static int tick(CwMachine *m) {
             if(!d.error)vector(&d,o,reg,second==0x11 || second==0x29);
         }
         else if((second==0x6f || second==0x7f) && d.prefix==0xf3){o=operand(&d,&reg,&group,8);if(!d.error)vector(&d,o,reg,second==0x7f);}
-        else if(second==0xef && d.prefix==0x66){unsigned int k;o=operand(&d,&reg,&group,8);if(o.reg<0)return CW_OPCODE;for(k=0;k<16;k++)m->xmm[reg][k]^=m->xmm[o.reg][k];}
         else if(second==0x1f){o=operand(&d,&reg,&group,n);if(group)return CW_OPCODE;}
         else return CW_OPCODE; /* SYSCALL/SYSENTER, privileged and unknown opcodes fail closed. */
     }
@@ -309,7 +587,7 @@ int cw_run(CwMachine *m,uint32_t budget) {
     if(!m || !m->image || !m->stack)return CW_HEADER;
     if(m->status)return m->status;
     if(m->exited)return CW_OK;
-    if(!budget || budget>CW_MAX_STEPS){cw_files_close_all(m);return m->status=CW_BUDGET;}
+    if(!budget || budget>CW_STEP_LIMIT(m->plan.profile_flags)){cw_files_close_all(m);return m->status=CW_BUDGET;}
     while(m->instructions<budget){int status;if(m->ip<CW_THUNK_BASE)m->last_guest_ip=m->ip;m->instructions++;status=m->ip>=CW_THUNK_BASE?cw_api_dispatch(m):tick(m);if(status){cw_files_close_all(m);return m->status=status;}if(m->exited){cw_files_close_all(m);return CW_OK;}}
     cw_files_close_all(m);return m->status=CW_BUDGET;
 }

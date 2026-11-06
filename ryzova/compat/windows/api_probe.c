@@ -39,7 +39,7 @@ static int number(const char *text,uint32_t max,uint32_t *out) {
 static void hex(const unsigned char *bytes,uint32_t n) { uint32_t i;for(i=0;i<n;i++)printf("%02x",bytes[i]); }
 int main(int argc,char **argv) {
     FILE *file;long length;unsigned char *input,*arena=NULL,*heap=NULL;
-    CwMachine m;CwPlan plan;CwLaunch launch;CwServices *s;uint32_t budget=CW_MAX_STEPS,profile=0;int status;
+    CwMachine m;CwPlan plan;CwLaunch launch;CwServices *s;uint32_t budget=CW_MAX_STEPS,profile=0,heap_limit;int status;
     unsigned int i;
 #ifdef CW_TRACE_PROFILE
     int random_fd=-1;
@@ -53,11 +53,12 @@ int main(int argc,char **argv) {
     profile=CW_PROFILE_TRACE;
 #endif
     launch.profile_flags=profile;
+    heap_limit=CW_HEAP_LIMIT_FOR(profile);
     if(!utf16(argc>2?argv[2]:"flex.exe",launch.command_line,CW_COMMAND_UNITS))return 64;
     if(argc>4){if(!utf16(argv[3],launch.environment[0].name,64) || !utf16(argv[4],launch.environment[0].value,256))return 64;launch.environment_count=1;}
     if(argc>5 && !number(argv[5],3,&launch.console_mask))return 64;
     if(argc>6 && !number(argv[6],CW_LOW_API_MASK,&launch.api_mask))return 64;
-    if(argc>7 && !number(argv[7],CW_MAX_STEPS,&budget))return 64;
+    if(argc>7 && !number(argv[7],CW_STEP_LIMIT(profile),&budget))return 64;
 #ifndef CW_FILES_PROBE
     if(argc>15)return 64;
     for(i=8;i<(unsigned int)argc;i++)if(!number(argv[i],cw_api_word_mask(i-7),&launch.api_mask_high[i-8]))return 64;
@@ -71,12 +72,12 @@ int main(int argc,char **argv) {
     status=cw_plan_profile(input,(size_t)length,0,&plan,profile);
     if(status){printf("{\"status\":%d,\"executed\":false,\"allocation_bytes\":0}\n",status);free(input);return 1;}
     if(!cw_launch_allows_plan(&launch,&plan)){printf("{\"status\":10,\"executed\":false,\"allocation_bytes\":0}\n");free(input);return 1;}
-    if((size_t)plan.image_bytes+CW_STACK+4096+CW_HEAP_LIMIT>CW_MAX_MEMORY){free(input);return 66;}
+    if((size_t)plan.image_bytes+CW_STACK+4096+heap_limit>CW_MAX_MEMORY){free(input);return 66;}
     arena=(unsigned char *)malloc((size_t)plan.image_bytes+CW_STACK);
-    heap=(unsigned char *)malloc(CW_HEAP_LIMIT);s=(CwServices *)calloc(1,sizeof(*s));
+    heap=(unsigned char *)malloc(heap_limit);s=(CwServices *)calloc(1,sizeof(*s));
     if(!arena || !heap || !s){free(arena);free(heap);free(s);free(input);return 66;}
     status=cw_load_profile(input,(size_t)length,0,arena,(size_t)plan.image_bytes+CW_STACK,&m,profile);
-    if(!status)status=cw_attach_services(&m,s,&launch,heap,CW_HEAP_LIMIT);
+    if(!status)status=cw_attach_services(&m,s,&launch,heap,heap_limit);
 #ifdef CW_FILES_PROBE
     if(!status && argc>=9) {
         CwDirectoryGrant grant;int root;
@@ -107,7 +108,9 @@ int main(int argc,char **argv) {
     printf("\",\"api_calls\":{");
     for(i=0;i<CW_API_COUNT;i++)printf("%s\"%s\":%" PRIu32,i?",":"",cw_api_name(i),m.services?s->calls[i]:0);
 #ifdef CW_FILES_PROBE
-    printf("},\"provider_open_files\":%" PRIu32 ",\"native_kernel_qualified\":false}\n",host?cw_file_host_open_count(host):0);
+    printf("},\"provider_open_files\":%" PRIu32 ",\"provider_read_bytes\":%" PRIu64
+           ",\"provider_write_bytes\":%" PRIu64 ",\"native_kernel_qualified\":false}\n",
+           host?cw_file_host_open_count(host):0,cw_file_host_read_bytes(host),cw_file_host_write_bytes(host));
     cw_files_close_all(&m);cw_file_host_destroy(host);free(ns);
 #else
     printf("},\"native_kernel_qualified\":false}\n");

@@ -102,6 +102,23 @@ static uint64_t create_file(CwMachine *m,const uint64_t *a) {
     if(mode==2 || mode==4)s->last_error=notice;
     return ns->handles[slot].token;
 }
+uint32_t cw_file_read_bytes(CwMachine *m,uint64_t token,unsigned char *buffer,uint32_t n,uint32_t *actual) {
+    CwFileNamespace *ns=namespace_for(m);
+    CwFileHandle *h=handle(ns,token);
+    uint32_t error,read=0;
+    *actual=0;
+    if(!h)return 6;
+    if(!(h->access&CW_FILE_READ))return 5;
+    if(n>CW_FILE_LIMIT)return 87;
+    if(!n)return 0;
+    error=ns->ops->read(ns->context,h->resource,h->position,ns->scratch,n,&read);
+    if(error)return error;
+    if(read>n || read>CW_FILE_LIMIT-h->position)return 13;
+    if(read)memcpy(buffer,ns->scratch,read);
+    h->position+=read;
+    *actual=read;
+    return 0;
+}
 uint64_t cw_file_call(CwMachine *m,unsigned int id,const uint64_t *a) {
     CwServices *s=m->services;CwFileNamespace *ns=namespace_for(m);CwFileHandle *h;
     unsigned char *count=NULL,*buffer=NULL,*result=NULL;uint32_t error=0,actual=0,n=(uint32_t)a[2];uint64_t value=0,base;
@@ -127,11 +144,15 @@ uint64_t cw_file_call(CwMachine *m,unsigned int id,const uint64_t *a) {
         if(id==CW_WRITE_FILE && n>CW_FILE_LIMIT-h->position)return failed(s,223,0);
         if(n && !(buffer=cw_memory(m,a[1],n,id==CW_READ_FILE?CW_W:CW_R)))return failed(s,998,0);
         if(!n)return 1;
-        if(id==CW_READ_FILE)error=ns->ops->read(ns->context,h->resource,h->position,ns->scratch,n,&actual);
-        else {memcpy(ns->scratch,buffer,n);error=ns->ops->write(ns->context,h->resource,h->position,ns->scratch,n,&actual);}
+        if(id==CW_READ_FILE){
+            error=cw_file_read_bytes(m,h->token,buffer,n,&actual);
+            if(error)return failed(s,error,0);
+            put(count,actual,4);return 1;
+        }
+        memcpy(ns->scratch,buffer,n);
+        error=ns->ops->write(ns->context,h->resource,h->position,ns->scratch,n,&actual);
         if(error)return failed(s,error,0);
         if(actual>n || actual>CW_FILE_LIMIT-h->position)return failed(s,13,0);
-        if(id==CW_READ_FILE && actual)memcpy(buffer,ns->scratch,actual);
         h->position+=actual;put(count,actual,4);return 1;
     }
     if(id==CW_GET_FILE_SIZE) {

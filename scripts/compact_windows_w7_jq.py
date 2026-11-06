@@ -61,7 +61,7 @@ def reference(out):
     })
 
 
-def audit(ref, out):
+def verify_reference(ref):
     binary = ref / "jq.exe"
     with binary.open("rb") as file:
         verify_image(file.read(SIZE+1))
@@ -76,7 +76,12 @@ def audit(ref, out):
             receipt.get("arch") not in ("AMD64", "X86_64") or
             not str(receipt.get("platform", "")).startswith("Windows-")):
         raise ValueError("Windows reference receipt mismatch")
+    return receipt
 
+
+def audit(ref, out):
+    receipt = verify_reference(ref)
+    binary = ref / "jq.exe"
     out.mkdir(parents=True, exist_ok=True)
     runtime = ROOT / "ryzova/compat/windows"
     with tempfile.TemporaryDirectory() as directory:

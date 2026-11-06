@@ -15,6 +15,7 @@ on:
       - 'tests/test_compact_windows_w7_sync.py'
       - 'tests/test_compact_windows_w7_trace.py'
       - 'tests/test_compact_windows_w2.py'
+      - 'tests/test_compact_windows_w4.py'
       - 'tests/fixtures/windows_w7_admission.c'
       - 'ryzova/compat/windows/**'
       - '.github/workflows/compact-windows-w7.yml'
@@ -69,12 +70,13 @@ jobs:
           path: artifacts/w7-reference
       - run: python3 scripts/compact_windows_w7_jq.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
       - run: python3 -m unittest discover -s tests -p 'test_compact_windows_w7*.py' -v
+      - run: python3 -m unittest discover -s tests -p 'test_compact_windows_w4.py' -v
       - run: python3 scripts/compact_windows_w7_tls.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
       - run: python3 scripts/compact_windows_w7_imports.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
       - run: python3 scripts/compact_windows_w7_startup.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
       - run: python3 scripts/compact_windows_w7_sync.py audit --reference artifacts/w7-reference --out artifacts/w7-audit
-      - name: Reproduce the pinned jq startup checkpoint
-        run: python3 scripts/compact_windows_w7_trace.py artifacts/w7-reference/jq.exe --require-startup --out artifacts/w7-audit
+      - name: Verify the hosted jq query against the Windows reference
+        run: python3 scripts/compact_windows_w7_trace.py artifacts/w7-reference/jq.exe --require-startup --require-query --reference artifacts/w7-reference --out artifacts/w7-audit
       - uses: actions/upload-artifact@v4
         if: always()
         with:

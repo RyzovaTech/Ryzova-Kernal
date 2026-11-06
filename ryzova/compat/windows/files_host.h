@@ -9,4 +9,6 @@ int cw_file_host_add_root(CwFileHost *,int); /* duplicates an already authorized
 void cw_file_host_destroy(CwFileHost *);
 const CwFileOps *cw_file_host_ops(void);
 uint32_t cw_file_host_open_count(const CwFileHost *);
+uint64_t cw_file_host_read_bytes(const CwFileHost *);
+uint64_t cw_file_host_write_bytes(const CwFileHost *);
 #endif

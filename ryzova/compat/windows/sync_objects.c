@@ -156,6 +156,23 @@ int cw_sync_call(CwMachine *m,unsigned int id,const uint64_t *a,uint64_t *result
     CwServices *s=m->services;CwSyncHandle *h;CwSyncObject *o;
     *result=0;
     switch(id){
+    case CW_GET_THREAD_PRIORITY:case CW_SET_THREAD_PRIORITY:{
+        int get=id==CW_GET_THREAD_PRIORITY;
+        int32_t priority=(int32_t)a[1];
+        if(get)*result=0x7fffffff;
+        if(a[0]!=UINT64_MAX-1){
+            h=handle(s,a[0]);o=object(s,h);
+            if(!o || o->type!=THREAD){fail(s,6);return CW_OK;}
+            if(!(h->access&(get?0x840U:0x420U))){fail(s,5);return CW_OK;}
+        }
+        if(get)*result=(uint32_t)s->thread_priority;
+        else {
+            if(priority!= -15 && priority!=15 && (priority< -2 || priority>2)){fail(s,87);return CW_OK;}
+            s->thread_priority=priority;
+            *result=1;
+        }
+        return CW_OK;
+    }
     case CW_CURRENT_PROCESS:*result=UINT64_MAX;return CW_OK;
     case CW_CURRENT_THREAD:*result=UINT64_MAX-1;return CW_OK;
     case CW_CURRENT_PROCESS_ID:case CW_CURRENT_THREAD_ID:*result=1;return CW_OK;

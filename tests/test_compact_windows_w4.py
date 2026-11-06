@@ -16,6 +16,7 @@ sys.path[:0]=[str(ROOT/'scripts'),str(ROOT/'tests')]
 import test_compact_windows_w2 as w2
 import test_compact_windows_w3 as w3
 from compact_windows_w3 import imported_pe,Code
+from compact_windows_w5 import imported_pe_modules
 from compact_windows_w4 import ALL_APIS,FILE_APIS,build,execute,compare,PAYLOAD,STDOUT
 from compact_windows_w2 import PREFERRED
 INVALID=0xffffffffffffffff
@@ -39,6 +40,7 @@ class WindowsW4Tests(unittest.TestCase):
         cls.host.cw_file_host_destroy.argtypes=[C.c_void_p]
         cls.host.cw_file_host_open_count.argtypes=[C.c_void_p];cls.host.cw_file_host_open_count.restype=C.c_uint32
         cls.lib.cw_attach_files.argtypes=[C.POINTER(w2.Machine),C.POINTER(Namespace),C.POINTER(Grant),C.c_uint32,C.c_void_p,C.c_void_p]
+        cls.lib.cw_api_id.argtypes=[C.c_char_p]
         cls.lib.cw_files_close_all.argtypes=[C.POINTER(w2.Machine)]
         cls.probe4=build(cls.directory/'file-probe')
     @classmethod
@@ -51,11 +53,10 @@ class WindowsW4Tests(unittest.TestCase):
     def tearDown(self):
         for ctx in reversed(self.resources):
             self.lib.cw_files_close_all(C.byref(ctx[0]));self.host.cw_file_host_destroy(ctx[5])
-    def context(self,rights=31,drive='C',root=None,blob=None,provider=None):
-        config=w3.launch();config.api_mask=32767
+    def context(self,rights=31,drive='C',root=None,blob=None,provider=None,config=None):
+        if config is None:
+            config=w3.launch();config.api_mask=32767
         m,s,arena,heap=w3.WindowsW3Tests.context(self,config=config,blob=blob or imported_pe(b'\xc3',names=FILE_IMPORTS,payload=bytes(512)))
-        # W3 launch enables nine APIs only; W4 requires the additional explicit bits.
-        s.launch.api_mask=32767
         if root is None:root=Path(tempfile.mkdtemp(prefix='root-',dir=self.directory))
         root=Path(root);root.mkdir(exist_ok=True)
         host=provider or self.host.cw_file_host_new();fd=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
@@ -67,7 +68,9 @@ class WindowsW4Tests(unittest.TestCase):
         self.assertEqual(self.lib.cw_attach_files(C.byref(m),C.byref(ns),C.byref(grant),1,self.host.cw_file_host_ops(),host),0)
         ctx=(m,s,arena,heap,ns,host,root);self.resources.append(ctx);return ctx
     def api(self,ctx,name,args=()):
-        m=ctx[0];m.exited=0;m.status=0;m.r[4]=m.initial_sp-96;m.ip=0xffffffffff000000+ALL_APIS.index(name)*16
+        ident=self.lib.cw_api_id(name.encode('ascii'))
+        self.assertGreaterEqual(ident,0)
+        m=ctx[0];m.exited=0;m.status=0;m.r[4]=m.initial_sp-96;m.ip=0xffffffffff000000+ident*16
         for reg,value in zip((1,2,8,9),(*args,0,0,0,0)):m.r[reg]=value
         self.assertEqual(self.lib.cw_write(C.byref(m),m.r[4],struct.pack('<Q',PREFERRED+0x1000),8),0)
         for i in range(3):
@@ -97,6 +100,44 @@ class WindowsW4Tests(unittest.TestCase):
         h=self.open(ctx,'c:\\dOcS\\cAsE.txt',access=0x80000000,mode=3);self.assertNotEqual(h,INVALID)
         self.assertEqual(self.io(ctx,'ReadFile',h,n=8),(1,4));self.assertEqual(self.read(ctx,PREFERRED+0x2500,4),b'case')
         self.assertEqual(self.open(ctx,'D:\\Docs\\Case.txt',access=0x80000000,mode=3),INVALID);self.assertEqual(self.err(ctx),5)
+    def test_crt_read_only_stream_uses_the_same_directory_grant(self):
+        names=['_wfopen','fread','fclose']
+        image=imported_pe_modules(b'\xc3',{'ucrtbase.dll':names},bytes(512))
+        config=w3.launch()
+        for name in names:
+            ident=self.lib.cw_api_id(name.encode('ascii'))
+            self.assertGreaterEqual(ident,31)
+            config.api_mask_high[ident//32-1] |= 1<<(ident%32)
+        ctx=self.context(rights=9,blob=image,config=config)
+        root=ctx[6]
+        (root/'input.json').write_bytes(b'abcdef')
+        outside=root.parent/(root.name+'-outside.json')
+        outside.write_bytes(b'outside')
+        (root/'link.json').symlink_to(outside)
+        path=PREFERRED+0x2c00
+        mode=path+128
+        data=path+192
+
+        def open_stream(name,kind):
+            self.write(ctx,path,name.encode('utf-16le')+bytes(2))
+            self.write(ctx,mode,kind.encode('utf-16le')+bytes(2))
+            return self.api(ctx,'_wfopen',(path,mode))
+
+        handle=open_stream('input.json','rb')
+        self.assertNotEqual(handle,0)
+        self.assertEqual(self.api(ctx,'fread',(data,2,4,handle)),3)
+        self.assertEqual(self.read(ctx,data,6),b'abcdef')
+        self.assertEqual(self.api(ctx,'fclose',(handle,)),0)
+        self.assertEqual(open_stream('input.json','wb'),0)
+        self.assertEqual(open_stream('new.json','wb'),0)
+        self.assertEqual(open_stream('..\\'+outside.name,'rb'),0)
+        self.assertEqual(open_stream('D:\\input.json','rb'),0)
+        self.assertEqual(open_stream('link.json','rb'),0)
+        self.assertEqual((root/'input.json').read_bytes(),b'abcdef')
+        self.assertEqual(outside.read_bytes(),b'outside')
+        self.assertFalse((root/'new.json').exists())
+        self.assertEqual(self.host.cw_file_host_open_count(ctx[5]),0)
+
     def test_read_only_grant_denies_destructive_open_create_and_write(self):
         ctx=self.context(rights=9);file=ctx[6]/'keep.bin';file.write_bytes(b'keep')
         for mode in (1,2,4,5):self.assertEqual(self.open(ctx,'keep.bin',mode=mode),INVALID)

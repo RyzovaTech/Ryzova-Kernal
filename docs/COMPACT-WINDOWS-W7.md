@@ -209,3 +209,34 @@ after 1,239 counted steps. The hosted receipt keeps startup evidence separate
 from query output parity and native qualification. Its source commit, input
 and binary hashes, API counters and stopping address are included in the CI
 audit artifact.
+
+
+## W7.2 hosted query parity
+
+The same pinned upstream executable now completes the fixed file query in
+the hosted runtime. The CI gate compares stdout, stderr and exit status with
+the Windows reference and records the actual file provider byte counts. The
+guest must read all 18 bytes of `input.json`, write no provider bytes, and
+leave no provider handles open. Standard output is captured separately from
+the read-only directory grant.
+
+```sh
+python3 scripts/compact_windows_w7_trace.py path/to/jq.exe --require-query
+```
+
+When running with a source-matched Windows reference artifact, add
+`--reference path/to/w7-reference --out path/to/evidence`.
+
+The runtime adds a bounded subset of CRT streams and UTF-8 path conversion.
+Read streams open through the same capability and path validation as
+`CreateFileW`. The hosted fixture checks a valid read and denies write-mode
+opens, parent traversal, an ungranted drive and a symlink escape. The
+diagnostic profile can use up to 16,777,216 counted steps and a 4 MiB heap.
+Its CRT heap uses a bounded suballocator whose live-block checks prevent
+access to released gaps and spans crossing allocations. Strict launches
+retain the older instruction and heap limits. Numeric execution covers the
+AMD64 instructions needed by this workload, including finite binary64
+arithmetic with masked exceptions and default rounding.
+
+The receipt records hosted parity. Native qualification of the unchanged
+jq workload is the W7.3 gate.

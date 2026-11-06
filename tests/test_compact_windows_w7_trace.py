@@ -87,6 +87,52 @@ class WindowsW7TraceTests(unittest.TestCase):
         self.assertEqual(self.lib.cw_load_profile(image,len(image),0,arena,len(arena),C.byref(m),4),2)
         self.assertEqual(arena.raw,before);self.assertFalse(m.image)
 
+    def test_locked_arithmetic_checks_writable_memory_before_changes(self):
+        code = b'\xf0\x83\x03\x01\xc3'  # lock add dword [rbx], 1
+        ctx = self.context(w2.pe(code, struct.pack('<I', 9)))
+        m = ctx[0]
+        m.r[3] = m.plan.base + 0x2000
+        self.assertEqual(self.lib.cw_run(C.byref(m), 10), 0)
+        self.assertEqual(self.read(m, m.r[3], 4), struct.pack('<I', 10))
+        ctx = self.context(w2.pe(code))
+        m = ctx[0]
+        m.r[3] = m.plan.base + 0x1000
+        flags = m.flags
+        self.assertEqual(self.lib.cw_run(C.byref(m), 10), 6)
+        self.assertEqual(m.flags, flags)
+        ctx = self.context(w2.pe(b'\xf0\x83\xc0\x01\xc3'))
+        self.assertEqual(self.lib.cw_run(C.byref(ctx[0]), 10), 7)
+
+    def test_rep_store_is_charged_per_element(self):
+        ctx = self.context(w2.pe(b'\xf3\x48\xab\xc3', bytes(32)))
+        m = ctx[0]
+        target = m.plan.base + 0x2000
+        m.r[0], m.r[1], m.r[7] = 42, 4, target
+        self.assertEqual(self.lib.cw_run(C.byref(m), 2), 8)
+        self.assertEqual(self.read(m, target, 32), struct.pack('<QQQQ', 42, 42, 0, 0))
+        self.assertEqual((m.r[1], m.r[7]), (2, target+16))
+
+    def test_trace_crt_heap_checks_live_blocks_and_zeroes_reused_ranges(self):
+        names = {'ucrtbase.dll': ['malloc', 'calloc', 'free', 'realloc']}
+        ctx = self.context(imported_pe_modules(b'\xc3', names), profile=3)
+        m = ctx[0]
+        addresses = []
+        for _ in range(24):
+            self.assertEqual(self.api(ctx, 'malloc', 16), 0)
+            self.assertNotEqual(m.r[0], 0)
+            addresses.append(m.r[0])
+        first, second = addresses[:2]
+        self.assertEqual(second, first+16)
+        out = C.create_string_buffer(32)
+        self.assertNotEqual(self.lib.cw_read(C.byref(m), first, out, 32, 1), 0)
+        self.assertEqual(self.lib.cw_write(C.byref(m), first, b'private', 7), 0)
+        self.assertEqual(self.api(ctx, 'realloc', first, 64), 0)
+        self.assertEqual(self.read(m, m.r[0], 7), b'private')
+        self.assertNotEqual(self.lib.cw_read(C.byref(m), first, out, 1, 1), 0)
+        self.assertEqual(self.api(ctx, 'calloc', 2, 8), 0)
+        self.assertEqual(m.r[0], first)
+        self.assertEqual(self.read(m, first, 16), bytes(16))
+
     def test_handler_metadata_is_opaque_and_requires_read_only_backing(self):
         data = bytearray(64)
         struct.pack_into('<III', data, 0, 0x1000, 0x1001, 0x2010)
