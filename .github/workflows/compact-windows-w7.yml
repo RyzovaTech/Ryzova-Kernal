@@ -20,6 +20,9 @@ on:
       - 'ryzova/compat/windows/**'
       - '.github/workflows/compact-windows-w7.yml'
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:
