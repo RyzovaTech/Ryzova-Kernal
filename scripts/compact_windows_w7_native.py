@@ -14,7 +14,7 @@ import threading
 from compact_c1_jq_contract import INPUT_NAME, VERSION_STDOUT
 from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, CREATED_NAME, MUTATION_OPERATIONS, PARENT_ESCAPE
 from compact_c2_windows_fixture import fixture as mutation_fixture
-from compact_c3_remote import FILENAME as REMOTE_FILE, MOUNT as REMOTE_ROOT, mount_commands, payload, route_fixture, transport_evidence
+from compact_c3_remote import FILENAME as REMOTE_FILE, MOUNT as REMOTE_ROOT, SECONDARY_MOUNT, mount_commands, payload, recovery_commands, route_fixture, transport_evidence
 from compact_windows_w2 import ROOT, PREFERRED
 from compact_windows_w6_native import bootstrap_provenance, digest, extract_kernel, parse_cases, session, standalone
 from compact_windows_w7_tls import tls_fixture, verify_reference
@@ -124,6 +124,12 @@ def main():
     remote = payload(commit)
     cases['jq-remote'] = jq_case(dict(exit_code=0, stdout_hex=remote.hex(), stderr_hex=''),
                                  ['-b', '-c', '.', REMOTE_FILE], root=REMOTE_ROOT)
+    remote_denied = f'jq: error: Could not open file {REMOTE_FILE}: Permission denied\n'.encode()
+    cases['jq-remote-denied'] = jq_case(dict(exit_code=2, stdout_hex='', stderr_hex=remote_denied.hex()),
+                                        ['-b', '-c', '.', REMOTE_FILE])
+    recovered = payload(commit, 'b')
+    cases['jq-remote-recovered'] = jq_case(dict(exit_code=0, stdout_hex=recovered.hex(), stderr_hex=''),
+                                           ['-b', '-c', '.', REMOTE_FILE], root=SECONDARY_MOUNT)
     images['mutation'] = mutation_fixture()
     cases['mutation'] = dict(image='mutation', status=0, code=0, out='', err='',
                              args=f'-r {JQ_ROOT} -R {JQ_READ_ONLY}')
@@ -132,7 +138,9 @@ def main():
     # Keep the serial command short. The full quoted Windows argv and policy
     # travel in a checked guest script instead of through the UART.
     launchers = {}
-    for name in ('jq-readonly', 'jq-version', 'jq-no-grant', 'jq-parent-escape', 'jq-remote'):
+    for name in cases:
+        if not name.startswith('jq-'):
+            continue
         launcher = out/f'{name}.rc'
         launcher.write_text(f"/amd64/bin/compact-windows {cases[name]['args']} /tmp/cw-jq.exe\n",
                             encoding='ascii')
@@ -179,13 +187,15 @@ def main():
             for name, spec in cases.items():
                 if name == 'jq-remote':
                     commands.extend(mount_commands(route))
+                elif name == 'jq-remote-recovered':
+                    commands.extend(recovery_commands(route))
                 command = (f'rc /tmp/{name}.rc' if name in launchers else
                            f"/amd64/bin/compact-windows {spec.get('args', '')} /tmp/cw-{spec['image']}.exe")
                 commands.append(f'echo CW_CASE_{name}_BEGIN; {command}; echo CW_CASE_{name}_END')
             commands.append(f'if(! test -e {JQ_ROOT}/{CREATED_NAME}) echo CW_C2_CREATED_ABSENT')
             commands.append(f'sha1sum -2 256 {JQ_INPUT_PATH} {CANARY_PATH}')
-            fresh = session(args.image, commands, out, 'fresh', 180)
-            remote_route = transport_evidence(route, commit)
+            fresh = session(args.image, commands, out, 'fresh', 240)
+            remote_route = transport_evidence(route, commit, fresh)
         if b'Ryzova Kernel 0.1.0-dev' not in fresh or b'9front-derived' not in fresh or not standalone(fresh, 'CW_IDENTITY_END'):
             raise ValueError('fresh source-built guest identity')
         if not re.search(rb'(?m)^'+runtimes[0]+rb'\s+/amd64/bin/compact-windows\r?$', fresh):
@@ -215,10 +225,11 @@ def main():
         jq_record = records['jq-readonly']
         verify_jq_io(jq_record, len(JQ_INPUT))
         verify_jq_io(records['jq-remote'], len(remote))
+        verify_jq_io(records['jq-remote-recovered'], len(recovered))
         for name in launchers:
             case, record = cases[name], records[name]
             record.update(stdout_hex=case['out'], stderr_hex=case['err'])
-            if name not in ('jq-readonly', 'jq-remote'):
+            if name not in ('jq-readonly', 'jq-remote', 'jq-remote-recovered'):
                 rights = JQ_READ_ONLY if name == 'jq-parent-escape' else 0
                 if record.get('rights') != rights or any(record.get(key) != 0 for key in (
                         'read_bytes', 'write_bytes', 'peak_handles')):

@@ -23,6 +23,12 @@ ALLOWED_9P = frozenset((100, 104, 108, 110, 112, 116, 120, 124))
 TIMEOUT = 5.0
 
 
+def bounded_io_timeout(value):
+    if type(value) not in (int, float) or not 0 < value <= 30:
+        raise ValueError("9P I/O timeout must be within 30 seconds")
+    return value
+
+
 class BridgeDenied(Exception):
     pass
 
@@ -70,7 +76,7 @@ class _PeerHandler(socketserver.BaseRequestHandler):
     def handle(self):
         server = self.server
         connection = Native9PConnection(server.files, max_fids=server.max_fids)
-        self.request.settimeout(TIMEOUT)
+        self.request.settimeout(server.io_timeout)
         try:
             with server.context.wrap_socket(self.request, server_side=True) as tls:
                 _tls13_version(tls)
@@ -115,7 +121,9 @@ class SecureReadOnly9PPeer(BoundedTCPServer):
 
     def __init__(self, files, context, client_pin, port=0,
                  research_policy=None, policy_peer_id="gateway", *,
-                 max_sessions=8, max_frames_per_session=256, max_fids=256):
+                 max_sessions=8, max_frames_per_session=256, max_fids=256,
+                 listen_host="127.0.0.1", io_timeout=TIMEOUT):
+        self.io_timeout = bounded_io_timeout(io_timeout)
         self.max_fids = bounded_limit(max_fids, 4096, "FID limit")
         if research_policy is not None and type(research_policy) is not ResearchTrustPolicy:
             raise ValueError("research trust policy required")
@@ -136,7 +144,7 @@ class SecureReadOnly9PPeer(BoundedTCPServer):
         self.policy_denials = 0
         self.frames = 0
         self.secure_sessions = 0
-        super().__init__(("127.0.0.1", port), _PeerHandler,
+        super().__init__((listen_host, port), _PeerHandler,
                          max_sessions=max_sessions,
                          max_frames_per_session=max_frames_per_session)
 
@@ -144,11 +152,11 @@ class SecureReadOnly9PPeer(BoundedTCPServer):
 class _GatewayHandler(socketserver.BaseRequestHandler):
     def handle(self):
         server = self.server
-        self.request.settimeout(TIMEOUT)
+        self.request.settimeout(server.io_timeout)
         try:
-            with socket.create_connection(("127.0.0.1", server.upstream_port),
-                                          timeout=TIMEOUT) as raw:
-                raw.settimeout(TIMEOUT)
+            with socket.create_connection((server.upstream_host, server.upstream_port),
+                                          timeout=server.io_timeout) as raw:
+                raw.settimeout(server.io_timeout)
                 with server.context.wrap_socket(raw, server_hostname="localhost") as tls:
                     _tls13_version(tls)
                     if _fingerprint(tls.getpeercert(binary_form=True)) != server.server_pin:
@@ -187,12 +195,15 @@ class Local9PTLSGateway(BoundedTCPServer):
     allow_reuse_address = True
 
     def __init__(self, context, server_pin, upstream_port, port=15640, *,
-                 max_sessions=8, max_frames_per_session=256):
+                 max_sessions=8, max_frames_per_session=256,
+                 upstream_host="127.0.0.1", io_timeout=TIMEOUT):
         if not isinstance(context, ssl.SSLContext) or not 0 < upstream_port < 65536:
             raise ValueError("invalid gateway configuration")
         self.context = context
         self.server_pin = _pin(server_pin)
         self.upstream_port = upstream_port
+        self.upstream_host = upstream_host
+        self.io_timeout = bounded_io_timeout(io_timeout)
         self.forwarded_frames = 0
         self.verified_tls_sessions = 0
         self.denied_writes = 0
