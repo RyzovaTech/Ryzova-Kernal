@@ -2,6 +2,7 @@ name: Compact Windows W7 jq baseline
 on:
   pull_request:
     paths:
+      - 'scripts/compact_c2_*.py'
       - 'scripts/compact_c1_jq_contract.py'
       - 'scripts/compact_windows_w7_jq.py'
       - 'scripts/compact_windows_w7_tls.py'

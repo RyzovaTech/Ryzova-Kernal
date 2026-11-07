@@ -522,6 +522,7 @@ int cw_crt_call(CwMachine *m,unsigned int id,const uint64_t *a,uint64_t *result)
         switch((uint32_t)a[0]){
         case 2:message="No such file or directory";break;
         case 13:message="Permission denied";break;
+        case 22:message="Invalid argument";break;
         default:message="Unknown error";break;
         }
         memcpy(s->crt_error_text,message,strlen(message)+1);

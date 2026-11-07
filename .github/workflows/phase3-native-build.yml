@@ -4,6 +4,8 @@ on:
   push:
     branches: [main, 'phase7/**']
     paths:
+      - 'scripts/compact_c2_*.py'
+      - 'tests/fixtures/compact_c2_linux_mutation.c'
       - 'sys/src/9/**'
       - 'sys/include/**'
       - 'amd64/include/**'
@@ -28,8 +30,10 @@ on:
       - 'scripts/verify-foundation.sh'
       - '.github/workflows/phase3-native-build.yml'
   pull_request:
-    branches: [main]
+    branches: [main, 'feature/compact-c*-*']
     paths:
+      - 'scripts/compact_c2_*.py'
+      - 'tests/fixtures/compact_c2_linux_mutation.c'
       - 'sys/src/9/**'
       - 'sys/include/**'
       - 'amd64/include/**'
