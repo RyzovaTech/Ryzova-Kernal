@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/compact_c2_*.py'
       - 'scripts/compact_c3_*.py'
+      - 'tests/test_compact_c3_remote.py'
       - 'tests/fixtures/compact_c2_linux_mutation.c'
       - 'sys/src/9/**'
       - 'sys/include/**'
@@ -35,6 +36,7 @@ on:
     paths:
       - 'scripts/compact_c2_*.py'
       - 'scripts/compact_c3_*.py'
+      - 'tests/test_compact_c3_remote.py'
       - 'tests/fixtures/compact_c2_linux_mutation.c'
       - 'sys/src/9/**'
       - 'sys/include/**'
@@ -77,6 +79,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Test Compact C3 evidence and timeout bounds
+        run: python3 -m unittest discover -s tests -p test_compact_c3_remote.py -v
       - name: Install isolated QEMU dependencies
         timeout-minutes: 8
         run: |
