@@ -72,7 +72,7 @@ class WindowsW7StartupTests(unittest.TestCase):
             policy.api_mask_high[word] |= 0x80000000
             self.assertEqual(self.lib.cw_attach_services(C.byref(m), C.byref(services), C.byref(policy), heap, len(heap)), 10)
             self.assertFalse(m.services)
-        self.assertEqual([self.lib.cw_api_word_mask(i) for i in (0, 1, 2, 3, 7, 8, 0xffffffff)], [0xffffffff, 0xffffffff, 0xffffffff, 262143, 0, 0, 0])
+        self.assertEqual([self.lib.cw_api_word_mask(i) for i in (0, 1, 2, 3, 7, 8, 0xffffffff)], [0xffffffff, 0xffffffff, 0xffffffff, 2097151, 0, 0, 0])
 
     def test_forged_high_thunk_does_not_bypass_declared_imports(self):
         ctx = self.context();_, m, services, arena, heap = ctx

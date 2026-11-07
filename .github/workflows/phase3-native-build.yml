@@ -18,6 +18,7 @@ on:
       - 'scripts/phase7_secure_closeout.py'
       - 'scripts/phase7_native_guest_tls.py'
       - 'scripts/phase8_guest_identity.py'
+      - 'scripts/compact_c1_*.py'
       - 'scripts/phase9_compact_native.py'
       - 'scripts/phase9_linux_environment.py'
       - 'scripts/phase9_process.py'
@@ -43,6 +44,7 @@ on:
       - 'scripts/phase7_secure_closeout.py'
       - 'scripts/phase7_native_guest_tls.py'
       - 'scripts/phase8_guest_identity.py'
+      - 'scripts/compact_c1_*.py'
       - 'scripts/phase9_compact_native.py'
       - 'scripts/phase9_linux_environment.py'
       - 'scripts/phase9_process.py'
@@ -144,6 +146,7 @@ jobs:
             artifacts/phase3/phase7-secure-bridge.json
             artifacts/phase3/phase7-native-guest-tls.json
             artifacts/phase3/phase8-guest-identity.json
+            artifacts/phase3/compact-c1-linux-jq.json
             artifacts/phase3/phase9-compact-native.json
             artifacts/phase3/phase9-linux-environment.json
             artifacts/phase3/phase9-linux-process.json

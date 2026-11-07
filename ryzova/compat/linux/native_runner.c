@@ -85,6 +85,8 @@ main(int argc, char **argv)
     }
     if(rfork(RFNAMEG|RFENVG) < 0)
         sysfatal("private process namespace: %r");
+    /* The guest scalar SSE subset uses round-to-nearest and masked exceptions. */
+    setfcr(FPRNR);
     if(network.count){network_prepare();config.network=&network;}
     if(stateinpath || stateoutpath)config.filesystem=&filesystem;
     if(stateinpath){statein=readimage(stateinpath,RYZ_FS_SNAPSHOT_MAX,&filesystem.input_size);filesystem.input=statein;}

@@ -1,0 +1,29 @@
+name: Compact C1 jq baseline
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/compact-c1-jq.yml'
+      - 'scripts/compact_c1_*.py'
+      - 'ryzova/compat/linux/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  linux-reference-and-hosted-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 scripts/compact_c1_linux_jq.py evidence/linux-jq.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compact-c1-linux-jq
+          path: evidence/linux-jq.json
+          if-no-files-found: error

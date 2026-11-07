@@ -208,8 +208,11 @@ def check_query(lib, arch, image, expected):
     denied = Stop()
     status = lib.mac8_run(image, len(image), arena, len(arena), GUARD,
                           len(arguments), arguments, 16777216, None, 0, C.byref(denied))
-    if denied.file_opens or denied.file_reads or denied.stdout_bytes or (status==2 and not denied.exit_code):
-        raise ValueError(f'{arch}: a query without an input grant succeeded')
+    name = expected['argv'][-1]
+    stderr = f'jq: error: Could not open file {name}: No such file or directory\n'.encode()
+    if (status, denied.exit_code, denied.file_opens, denied.file_reads, denied.stdout_bytes,
+            bytes(denied.stderr_data[:denied.stderr_bytes])) != (2, 2, 0, 0, 0, stderr):
+        raise ValueError(f'{arch}: unexpected jq result without an input grant')
     report['missing_grant_denied'] = True
     return report
 

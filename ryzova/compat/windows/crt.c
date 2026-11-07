@@ -6,9 +6,9 @@
 #include <string.h>
 #endif
 #define CRT_LIMIT 65536U
-int cw_crt_export(unsigned int id) { return (id>=CW_MEMCPY && id<=CW_ERRNO) || (id>=CW_CRT_INVALID_HANDLER && id<=CW_CRT_QUICK_EXIT) || id==CW_CRT_RAND_S || id==CW_CRT_SETLOCALE || (id>=CW_CRT_IOB && id<=CW_CRT_WRITE) || (id>=CW_CRT_ISALPHA && id<=CW_CRT_STRNCPY) || id==CW_CRT_GETENV || id==CW_CRT_LOCALE_CODEPAGE || id==CW_CRT_FULLPATH; }
+int cw_crt_export(unsigned int id) { return (id>=CW_MEMCPY && id<=CW_ERRNO) || (id>=CW_CRT_INVALID_HANDLER && id<=CW_CRT_QUICK_EXIT) || id==CW_CRT_RAND_S || id==CW_CRT_SETLOCALE || (id>=CW_CRT_IOB && id<=CW_CRT_WRITE) || (id>=CW_CRT_ISALPHA && id<=CW_CRT_STRNCPY) || id==CW_CRT_GETENV || id==CW_CRT_LOCALE_CODEPAGE || id==CW_CRT_FULLPATH || (id>=CW_CRT_STRERROR && id<=CW_CRT_UNLOCK_FILE); }
 const char *cw_crt_alias(unsigned int id) {
-    if(id==CW_CRT_FULLPATH)return "api-ms-win-crt-filesystem-l1-1-0.dll";
+    if(id==CW_CRT_FULLPATH || id==CW_CRT_LOCK_FILE || id==CW_CRT_UNLOCK_FILE)return "api-ms-win-crt-filesystem-l1-1-0.dll";
     if(id>=CW_CRT_STRCHR && id<=CW_CRT_MEMCHR)return "api-ms-win-crt-private-l1-1-0.dll";
     if(id>=CW_CRT_ISALPHA && id<=CW_CRT_STRNCPY)return "api-ms-win-crt-string-l1-1-0.dll";
     if(id>=CW_CRT_IOB && id<=CW_CRT_WRITE)return "api-ms-win-crt-stdio-l1-1-0.dll";
@@ -20,7 +20,7 @@ const char *cw_crt_alias(unsigned int id) {
     if(id==CW_MEMSET || (id>=CW_STRLEN && id<=CW_WCSLEN))return "api-ms-win-crt-string-l1-1-0.dll";
     if(id==CW_CRT_WENV || id==CW_CRT_GETENV)return "api-ms-win-crt-environment-l1-1-0.dll";
     if(id==CW_CRT_FMODE || id==CW_CRT_COMMODE)return "api-ms-win-crt-stdio-l1-1-0.dll";
-    if(id==CW_ERRNO || (id>=CW_CRT_INVALID_HANDLER && id<=CW_CRT_APP_TYPE) || id==CW_CRT_INITTERM || (id>=CW_CRT_INITTERM_E && id<=CW_CRT_WARGV) || (id>=CW_CRT_ATEXIT && id<=CW_CRT_QUICK_EXIT))return "api-ms-win-crt-runtime-l1-1-0.dll";
+    if(id==CW_ERRNO || id==CW_CRT_STRERROR || (id>=CW_CRT_INVALID_HANDLER && id<=CW_CRT_APP_TYPE) || id==CW_CRT_INITTERM || (id>=CW_CRT_INITTERM_E && id<=CW_CRT_WARGV) || (id>=CW_CRT_ATEXIT && id<=CW_CRT_QUICK_EXIT))return "api-ms-win-crt-runtime-l1-1-0.dll";
     return NULL;
 }
 static void error_number(CwServices *s,uint32_t value) { unsigned int i;for(i=0;i<4;i++)s->errno_bytes[i]=(unsigned char)(value>>(8*i)); }
@@ -514,6 +514,20 @@ int cw_crt_call(CwMachine *m,unsigned int id,const uint64_t *a,uint64_t *result)
     if(id>=CW_CRT_IOB && id<=CW_CRT_WRITE)return stdio_call(m,id,a,result);
     switch(id) {
     case CW_CRT_FULLPATH:return full_path(m,a,result);
+    case CW_CRT_LOCK_FILE:case CW_CRT_UNLOCK_FILE:
+        /* FILE operations have one execution thread in this runtime. */
+        return stream_for(s,a[0])?CW_OK:CW_CRT;
+    case CW_CRT_STRERROR:{
+        const char *message;
+        switch((uint32_t)a[0]){
+        case 2:message="No such file or directory";break;
+        case 13:message="Permission denied";break;
+        default:message="Unknown error";break;
+        }
+        memcpy(s->crt_error_text,message,strlen(message)+1);
+        *result=s->command_base+CW_CRT_ERROR_TEXT_OFFSET;
+        return CW_OK;
+    }
     case CW_CRT_LOCALE_CODEPAGE:
         return CW_OK; /* C locale reports CP_ACP, not a configured UTF-8 locale. */
     case CW_CRT_GETENV:{
