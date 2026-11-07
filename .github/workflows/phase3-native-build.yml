@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, 'phase7/**']
     paths:
+      - '.github/workflows/compact-*.yml'
       - 'scripts/compact_c2_*.py'
       - 'scripts/compact_c3_*.py'
       - 'tests/test_compact_c3_remote.py'
