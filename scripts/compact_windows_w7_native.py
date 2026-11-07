@@ -11,6 +11,7 @@ import subprocess
 import tarfile
 import threading
 
+from compact_c1_jq_contract import INPUT_NAME, VERSION_STDOUT
 from compact_windows_w2 import ROOT, PREFERRED
 from compact_windows_w6_native import bootstrap_provenance, digest, extract_kernel, parse_cases, session, standalone
 from compact_windows_w7_tls import tls_fixture, verify_reference
@@ -22,19 +23,20 @@ from compact_windows_w7_sync import verify_reference as verify_sync_reference, s
 
 
 JQ_ROOT = '/tmp/cw-w7-jq'
-JQ_INPUT_PATH = JQ_ROOT + '/input.json'
-JQ_LAUNCHER_PATH = '/tmp/cw-w7-jq.rc'
+JQ_INPUT_PATH = JQ_ROOT + '/' + INPUT_NAME
+JQ_DENIED = f'jq: error: Could not open file {INPUT_NAME}: Permission denied\n'.encode()
 JQ_READ_ONLY = 9  # CW_GRANT_READ | CW_GRANT_METADATA
 JQ_BUDGET = 16777216
 
 
-def jq_case(reference):
+def jq_case(reference, argv, *, grant=False):
     # The inner string follows Windows argv quoting. rc receives it as one word.
-    command = subprocess.list2cmdline(['jq.exe', *JQ_ARGS])
+    command = subprocess.list2cmdline(['jq.exe', *argv])
     rc_command = "'" + command.replace("'", "''") + "'"
     words = api_grant_words()
     extra = ''.join(f' -g {i}:{mask}' for i, mask in enumerate(words) if i >= 2 and mask)
-    args = (f'-P trace -b {JQ_BUDGET} -r {JQ_ROOT} -R {JQ_READ_ONLY} '
+    root = f'-r {JQ_ROOT} -R {JQ_READ_ONLY} ' if grant else ''
+    args = (f'-P trace -b {JQ_BUDGET} {root}'
             f'-a {words[0]} -A {words[1]}{extra} -c {rc_command}')
     return dict(image='jq', status=0, code=reference['exit_code'],
                 out=reference['stdout_hex'], err=reference['stderr_hex'], args=args)
@@ -108,14 +110,19 @@ def main():
     receipt, api_receipt, startup_receipt, sync_receipt, images, cases = images_and_cases(args.reference)
     jq_reference = verify_jq_reference(args.reference)
     images['jq'] = (args.reference/'jq.exe').read_bytes()
-    cases['jq-readonly'] = jq_case(jq_reference)
-    (out/'input.json').write_bytes(JQ_INPUT)
+    cases['jq-readonly'] = jq_case(jq_reference, JQ_ARGS, grant=True)
+    cases['jq-version'] = jq_case(dict(exit_code=0, stdout_hex=VERSION_STDOUT.hex(), stderr_hex=''),
+                                  ['-b', '--version'])
+    cases['jq-no-grant'] = jq_case(dict(exit_code=2, stdout_hex='', stderr_hex=JQ_DENIED.hex()), JQ_ARGS)
+    (out/INPUT_NAME).write_bytes(JQ_INPUT)
     # Keep the serial command short. The full quoted Windows argv and policy
     # travel in a checked guest script instead of through the UART.
-    launcher = out/'jq-launch.rc'
-    launcher.write_text(f"/amd64/bin/compact-windows {cases['jq-readonly']['args']} /tmp/cw-jq.exe\n",
-                        encoding='ascii')
-    launcher_sha = digest(launcher)
+    launchers = {}
+    for name in ('jq-readonly', 'jq-version', 'jq-no-grant'):
+        launcher = out/f'{name}.rc'
+        launcher.write_text(f"/amd64/bin/compact-windows {cases[name]['args']} /tmp/cw-jq.exe\n",
+                            encoding='ascii')
+        launchers[name] = digest(launcher)
     for name, data in images.items():
         (out/(name+'.exe')).write_bytes(data)
     archive = out/'source.tgz'
@@ -150,10 +157,11 @@ def main():
                     'sha1sum -2 256 /amd64/bin/compact-windows']
         for name in images:
             commands.append(f'hget http://10.0.2.2:8000/{name}.exe > /tmp/cw-{name}.exe; sha1sum -2 256 /tmp/cw-{name}.exe')
-        commands.append(f'mkdir -p {JQ_ROOT}; hget http://10.0.2.2:8000/input.json > {JQ_INPUT_PATH}; sha1sum -2 256 {JQ_INPUT_PATH}')
-        commands.append(f'hget http://10.0.2.2:8000/jq-launch.rc > {JQ_LAUNCHER_PATH}; sha1sum -2 256 {JQ_LAUNCHER_PATH}')
+        commands.append(f'mkdir -p {JQ_ROOT}; hget http://10.0.2.2:8000/{INPUT_NAME} > {JQ_INPUT_PATH}; sha1sum -2 256 {JQ_INPUT_PATH}')
+        for name in launchers:
+            commands.append(f'hget http://10.0.2.2:8000/{name}.rc > /tmp/{name}.rc; sha1sum -2 256 /tmp/{name}.rc')
         for name, spec in cases.items():
-            command = (f'rc {JQ_LAUNCHER_PATH}' if name == 'jq-readonly' else
+            command = (f'rc /tmp/{name}.rc' if name in launchers else
                        f"/amd64/bin/compact-windows {spec.get('args', '')} /tmp/cw-{spec['image']}.exe")
             commands.append(f'echo CW_CASE_{name}_BEGIN; {command}; echo CW_CASE_{name}_END')
         commands.append(f'sha1sum -2 256 {JQ_INPUT_PATH}')
@@ -166,16 +174,23 @@ def main():
         for name, sha in hashes.items():
             if not re.search(rb'(?m)^'+sha.encode()+rb'\s+/tmp/cw-'+name.encode()+rb'\.exe\r?$', fresh):
                 raise ValueError(f'native executable hash mismatch: {name}')
-        launcher_hashes = re.findall(rb'(?m)^([0-9a-f]{64})[ \t]+' +
-                                     re.escape(JQ_LAUNCHER_PATH.encode()) + rb'\r?$', fresh)
-        if launcher_hashes != [launcher_sha.encode()]:
-            raise ValueError('native jq launcher hash mismatch')
-        jq_log = verify_guest_input(fresh, jq_reference['input_sha256'])
+        for name, launcher_sha in launchers.items():
+            launcher_path = re.escape(f'/tmp/{name}.rc'.encode())
+            launcher_hashes = re.findall(rb'(?m)^([0-9a-f]{64})[ \t]+' + launcher_path + rb'\r?$', fresh)
+            if launcher_hashes != [launcher_sha.encode()]:
+                raise ValueError(f'native {name} launcher hash mismatch')
+        verify_guest_input(fresh, jq_reference['input_sha256'])
         records = parse_cases(fresh, cases)
         jq_record = records['jq-readonly']
         verify_jq_io(jq_record)
-        jq_record['stdout_hex'] = re.search(rb'(?m)^CW_OUT ([0-9a-f]*)\r?$', jq_log)[1].decode()
-        jq_record['stderr_hex'] = re.search(rb'(?m)^CW_ERR ([0-9a-f]*)\r?$', jq_log)[1].decode()
+        for name in launchers:
+            case, record = cases[name], records[name]
+            record.update(stdout_hex=case['out'], stderr_hex=case['err'])
+            if name != 'jq-readonly':
+                if any(record.get(key) != 0 for key in ('rights', 'read_bytes', 'write_bytes', 'peak_handles')):
+                    raise ValueError(f'native {name} unexpectedly accessed a file capability')
+                if record['calls'].get('_wfopen', 0) != int(name == 'jq-no-grant'):
+                    raise ValueError(f'native {name} did not take the expected file-open path')
         if records['api-set']['calls'] != EXPECTED_CALLS:
             raise ValueError('native API-set dispatch counts differ')
         if records['startup-api']['calls'] != STARTUP_CALLS:
@@ -195,7 +210,8 @@ def main():
                       native_amd64_qemu_tls_startup_verified=True, jq_execution_verified=True,
                       jq_reference=jq_reference, jq_input_sha256=jq_reference['input_sha256'],
                       jq_executable_sha256=hashes['jq'], jq_root_rights=JQ_READ_ONLY,
-                      jq_launcher_sha256=launcher_sha,
+                      jq_launcher_sha256=launchers['jq-readonly'], jq_launcher_sha256_by_case=launchers,
+                      native_jq_missing_grant_verified=True,
                       jq_input_unchanged=True, native_jq_query_parity_verified=True,
                       physical_hardware_qualified=False, full_w7_complete=False)
         (out/'qualification.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')

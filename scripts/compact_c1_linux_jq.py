@@ -101,7 +101,7 @@ def native_commands():
     query = f"-c $c1filter {GUEST_INPUT}"
     for name, argv in (("version", "--version"), ("query", query), ("without_input_grant", query)):
         base = f"/tmp/c1-{name}"
-        grant = f"-M r:{GUEST_DIRECTORY}={NATIVE_ROOT} " if name == "query" else ""
+        grant = f"-M 'r:{GUEST_DIRECTORY}={NATIVE_ROOT}' " if name == "query" else ""
         commands += [
             f"$c1 -r -b 16777216 {grant}{NATIVE_JQ} {argv} >{base}.out >[2]{base}.log",
             f"echo C1_{name}_BEGIN; grep '^COMPACT_LINUX_RESULT ' {base}.log",

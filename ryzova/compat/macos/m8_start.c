@@ -11,7 +11,7 @@
 enum {
     Intel64 = 0x01000007, Arm64 = 0x0100000c,
     StackBase = 0xC00000, StackBytes = Mac8StackBytes, StartBudget = 4096,
-    Argv = 0x100, Envp = 0x1a0, LocaleEnv = 0x1d0, HomeEnv = 0x1e0, Args = 0x200, ArgLimit = 4096, GuardOffset = 8, StreamsOffset = 16, RuneOffset = 64, ZoneOffset = 3328, ErrnoOffset = 16, PathOffset = 64, PathBytes = 1024
+    Argv = 0x100, Envp = 0x1a0, LocaleEnv = 0x1d0, HomeEnv = 0x1e0, Args = 0x200, ArgLimit = 4096, GuardOffset = 8, StreamsOffset = 16, RuneOffset = 64, ZoneOffset = 3328, ErrnoOffset = 16, ErrorTextOffset = 32, PathOffset = 64, PathBytes = 1024
 };
 
 typedef unsigned long long Word;
@@ -184,7 +184,8 @@ enum { DirectArg, StackArgs, IntelVaList };
 
 static int
 format_guest(const Mac8Image *plan, const unsigned char *arena, const unsigned char *stack,
-             Word format, Word arguments, int arg_kind, unsigned char *buf, unsigned int room)
+             Word format, Word arguments, int arg_kind, const Word *direct, unsigned int direct_count,
+             unsigned char *buf, unsigned int room)
 {
     const unsigned char *p;
     unsigned char spec, digits[10];
@@ -205,9 +206,9 @@ format_guest(const Mac8Image *plan, const unsigned char *arena, const unsigned c
             spec = *p;
             if(spec!='%'){
                 if(arg_kind==DirectArg){
-                    if(used)
+                    if(used>=direct_count)
                         return -1;
-                    arg = arguments;
+                    arg = direct[used];
                 }else{
                     at = arguments+8*used;
                     if(arg_kind==IntelVaList){
@@ -375,6 +376,15 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
         out->locale_calls++;
     }else if(!strcmp(name, "___error")){
         *result = ERRNO_ADDRESS;
+    }else if(!strcmp(name, "_strerror")){
+        const char *message;
+        switch((unsigned int)a0){
+        case 2: message = "No such file or directory"; break;
+        case 13: message = "Permission denied"; break;
+        default: message = "Unknown error"; break;
+        }
+        *result = WRITABLE_BASE+ErrorTextOffset;
+        memcpy(arena+(*result-MAC8_BASE), message, strlen(message)+1);
     }else if(!strcmp(name, "_malloc") || zero){
         Word bytes = a0;
         if(zero)
@@ -776,22 +786,32 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
         if(thread->closed&2)
             return -1;
         count = format_guest(plan, arena, stack, a0, varargs ? varargs : a1,
-                             varargs ? StackArgs : DirectArg, formatted,
+                             varargs ? StackArgs : DirectArg, &a1, 1, formatted,
                              Mac8OutputLimit-out->stdout_bytes);
         if(count<0)
             return -1;
         memcpy(out->stdout_data+out->stdout_bytes, formatted, count);
         out->stdout_bytes += count;
         *result = count;
+    }else if(!strcmp(name, "_fprintf")){
+        Word direct[3];
+        direct[0] = a2;
+        direct[1] = a3;
+        direct[2] = a4;
+        count = format_guest(plan, arena, stack, a1, varargs, varargs ? StackArgs : DirectArg,
+                             direct, 3, formatted, Mac8OutputLimit);
+        if(count<0 || !write_stream(thread, out, a0, formatted, count))
+            return -1;
+        *result = count;
     }else if(!strcmp(name, "_vfprintf")){
         count = format_guest(plan, arena, stack, a1, a2, varargs ? StackArgs : IntelVaList,
-                             formatted, Mac8OutputLimit);
+                             0, 0, formatted, Mac8OutputLimit);
         if(count<0 || !write_stream(thread, out, a0, formatted, count))
             return -1;
         *result = count;
     }else if(!strcmp(name, "_vsnprintf")){
         count = format_guest(plan, arena, stack, a2, a3, varargs ? StackArgs : IntelVaList,
-                             formatted, Mac8OutputLimit);
+                             0, 0, formatted, Mac8OutputLimit);
         if(count<0)
             return -1;
         if(a1){

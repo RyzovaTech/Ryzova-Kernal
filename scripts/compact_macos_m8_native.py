@@ -5,6 +5,7 @@ import functools
 import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
+import re
 from pathlib import Path
 import subprocess
 import tarfile
@@ -118,6 +119,11 @@ def verify(image, bootstrap, references, output, sqlite=False):
                         f'if({launch} >{prefix}.out >[2]{prefix}.err) echo {marker}; '
                         f'if not cat {prefix}.err')
                     commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
+                if not sqlite:
+                    prefix = f'{path}-no-grant'
+                    launch = f'{program} --run {path} -- jq -c $q {INPUT_NAME}'
+                    commands.append(f'{launch} >{prefix}.out >[2]{prefix}.err; echo M8_{arch}_DENIED_STATUS $status')
+                    commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
             if not sqlite:
                 commands.append('sha1sum -2 256 /tmp/m8-input')
             run = session(image, commands, output, 'fresh', 120, markers)
@@ -137,6 +143,15 @@ def verify(image, bootstrap, references, output, sqlite=False):
                 if digest_line(run, f'{path}-{case}.{suffix}') != expected_digest:
                     raise ValueError(f'{arch}: native {case} {stream} differs')
         report[arch] = dict(sha256=digest, cases=cases_by_arch[arch])
+        if not sqlite:
+            expected_stderr = f'jq: error: Could not open file {INPUT_NAME}: No such file or directory\n'.encode()
+            status = re.findall(rb'(?m)^M8_' + arch.encode() + rb'_DENIED_STATUS ([^\r\n]*)\r?$', run)
+            if (status != [b'guest exit 2'] or
+                    digest_line(run, f'{path}-no-grant.out') != hashlib.sha256(b'').hexdigest() or
+                    digest_line(run, f'{path}-no-grant.err') != hashlib.sha256(expected_stderr).hexdigest()):
+                raise ValueError(f'{arch}: native query without a grant did not exit with the expected error')
+            report[arch]['missing_grant'] = dict(exit_code=2, stdout_hex='', stderr_hex=expected_stderr.hex())
+
     schema = 'compact-macos-m93-native-sqlite/v1' if sqlite else 'compact-macos-m8-native-jq/v1'
     receipt = dict(schema=schema, source_commit=commit,
                    source_archive_sha256=source_sha, bootstrap_sha256=base_sha, kernel_sha256=kernel_sha,
