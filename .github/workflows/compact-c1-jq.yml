@@ -2,7 +2,8 @@ name: Compact C1 jq baseline
 on:
   pull_request:
     paths:
-      - 'scripts/compact_c2_file_contract.py'
+      - 'scripts/compact_c2_*.py'
+      - 'tests/fixtures/compact_c2_linux_mutation.c'
       - '.github/workflows/compact-c1-jq.yml'
       - 'scripts/compact_c1_*.py'
       - 'ryzova/compat/linux/**'

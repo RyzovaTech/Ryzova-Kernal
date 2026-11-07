@@ -68,7 +68,7 @@ archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).s
     "Archive includes kernel, nusb user-space source, sys/include and amd64/include from exact commit.\n"
 )
 print("SOURCE_SHA", SOURCE_SHA, "ARCHIVE_SHA256", archive_hash, flush=True)
-c1_fixtures(OUT)
+c1_mutation_sha = c1_fixtures(OUT)
 fetch_busybox(OUT)
 fetch_shell(OUT)
 jobs_fixture_sha256=jobs_fixtures(OUT)
@@ -512,7 +512,7 @@ m4_legacy_enabled=(ROOT / "ryzova/drivers/m4-legacy-qualification.json").is_file
 m2_pci_ok=(not m2_enabled or run_probe(
     cmd, SER, MON, OUT, memory_mib=384 if m4_legacy_enabled else None
 ))
-c1_evidence = inspect_c1(bytes(bootlog), SOURCE_SHA)
+c1_evidence = inspect_c1(bytes(bootlog), SOURCE_SHA, c1_mutation_sha)
 (OUT / "compact-c1-linux-jq.json").write_text(json.dumps(c1_evidence, indent=2) + "\n")
 print("NATIVE COMPACT C1 LINUX JQ", c1_evidence["passed"], flush=True)
 compact_evidence = inspect_compact(bytes(raw), bytes(bootlog), SOURCE_SHA)

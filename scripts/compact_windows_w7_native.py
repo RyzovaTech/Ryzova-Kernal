@@ -12,7 +12,8 @@ import tarfile
 import threading
 
 from compact_c1_jq_contract import INPUT_NAME, VERSION_STDOUT
-from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, PARENT_ESCAPE
+from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, CREATED_NAME, MUTATION_OPERATIONS, PARENT_ESCAPE
+from compact_c2_windows_fixture import fixture as mutation_fixture
 from compact_windows_w2 import ROOT, PREFERRED
 from compact_windows_w6_native import bootstrap_provenance, digest, extract_kernel, parse_cases, session, standalone
 from compact_windows_w7_tls import tls_fixture, verify_reference
@@ -119,6 +120,9 @@ def main():
     cases['jq-no-grant'] = jq_case(dict(exit_code=2, stdout_hex='', stderr_hex=JQ_DENIED.hex()), JQ_ARGS)
     cases['jq-parent-escape'] = jq_case(dict(exit_code=2, stdout_hex='', stderr_hex=JQ_ESCAPE_DENIED.hex()),
                                          [*JQ_ARGS[:-1], PARENT_ESCAPE], grant=True)
+    images['mutation'] = mutation_fixture()
+    cases['mutation'] = dict(image='mutation', status=0, code=0, out='', err='',
+                             args=f'-r {JQ_ROOT} -R {JQ_READ_ONLY}')
     (out/INPUT_NAME).write_bytes(JQ_INPUT)
     (out/CANARY_NAME).write_bytes(CANARY)
     # Keep the serial command short. The full quoted Windows argv and policy
@@ -171,6 +175,7 @@ def main():
             command = (f'rc /tmp/{name}.rc' if name in launchers else
                        f"/amd64/bin/compact-windows {spec.get('args', '')} /tmp/cw-{spec['image']}.exe")
             commands.append(f'echo CW_CASE_{name}_BEGIN; {command}; echo CW_CASE_{name}_END')
+        commands.append(f'if(! test -e {JQ_ROOT}/{CREATED_NAME}) echo CW_C2_CREATED_ABSENT')
         commands.append(f'sha1sum -2 256 {JQ_INPUT_PATH} {CANARY_PATH}')
         fresh = session(args.image, commands, out, 'fresh', 180)
         if b'Ryzova Kernel 0.1.0-dev' not in fresh or b'9front-derived' not in fresh or not standalone(fresh, 'CW_IDENTITY_END'):
@@ -192,6 +197,13 @@ def main():
         if canary_digests != [CANARY_SHA256.encode()] * 2:
             raise ValueError('native C2 outside canary digest mismatch')
         records = parse_cases(fresh, cases)
+        mutation = records['mutation']
+        if (mutation.get('rights') != JQ_READ_ONLY or mutation.get('error') != 5 or
+                mutation.get('read_bytes') != 0 or mutation.get('write_bytes') != 0 or
+                mutation.get('peak_handles') != 1 or not standalone(fresh, 'CW_C2_CREATED_ABSENT') or
+                mutation['calls'] != dict(CreateFileW=3, WriteFile=1, GetLastError=3, CloseHandle=1, ExitProcess=1)):
+            raise ValueError('native C2 read-only mutation receipt mismatch')
+        mutation.update(operations=MUTATION_OPERATIONS, fixture_sha256=hashes['mutation'])
         jq_record = records['jq-readonly']
         verify_jq_io(jq_record)
         for name in launchers:

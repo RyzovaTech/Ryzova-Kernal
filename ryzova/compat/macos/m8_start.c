@@ -283,7 +283,7 @@ struct Thread {
     const unsigned char *input;
     const char *input_name;
     unsigned int input_bytes, input_offset;
-    unsigned int allocated, closed, cleanup_count, input_open, input_eof, zone, null_open, null_eof;
+    unsigned int allocated, closed, cleanup_count, input_open, input_eof, input_error, zone, null_open, null_eof;
 };
 
 static GuestMutex *
@@ -848,7 +848,7 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
             write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 24); /* EMFILE */
         else {
             thread->input_open = 1;
-            thread->input_offset = thread->input_eof = 0;
+            thread->input_offset = thread->input_eof = thread->input_error = 0;
             out->file_opens++;
             *result = INPUT_HANDLE;
         }
@@ -891,6 +891,11 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
         if(a1 && a2>Mac8OutputLimit/a1)
             return -1;
         i = a1*a2;
+        if(i && a3==INPUT_HANDLE && thread->input_open){
+            thread->input_error = 1;
+            write_le(arena+(ERRNO_ADDRESS-MAC8_BASE), 4, 9); /* EBADF */
+            return 1;
+        }
         if(i){
             left = guest_read(plan, arena, stack, a0, i, 1);
             if(!left || !write_stream(thread, out, a3, left, i))
@@ -931,6 +936,8 @@ service_call(const Mac8Image *plan, unsigned char *arena, unsigned char *stack,
         if(a0==INPUT_HANDLE && thread->input_open){
             if(!strcmp(name, "_fclose"))
                 thread->input_open = 0;
+            else if(!strcmp(name, "_ferror"))
+                *result = thread->input_error;
             return 1;
         }
         if(a0==0 && !strcmp(name, "_fflush"))

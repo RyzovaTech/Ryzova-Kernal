@@ -12,7 +12,8 @@ from urllib.request import urlopen
 
 from compact_c1_jq_contract import INPUT, INPUT_NAME, QUERY_ARGS, QUERY_STDOUT, RELEASE, VERSION_STDOUT
 
-from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, PARENT_ESCAPE
+from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, CREATED_NAME, MUTATION_OPERATIONS, PARENT_ESCAPE
+from phase9_process import FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 URL = f"{RELEASE}/jq-linux-amd64"
@@ -27,6 +28,8 @@ ESCAPE_STDERR = f"jq: error: Could not open file {GUEST_ESCAPE}: No such file or
 NATIVE_CANARY = f"/tmp/{CANARY_NAME}"
 NATIVE_ROOT = "/tmp/c1-share"
 NATIVE_JQ = "/tmp/c1-jq"
+MUTATION_NAME = "c2-mutation.elf"
+NATIVE_MUTATION = f"/tmp/{MUTATION_NAME}"
 NATIVE_CASES = {"version": (0, VERSION_STDOUT, b""),
                 "query": (0, QUERY_STDOUT, b""),
                 "without_input_grant": (2, b"", DENIED_STDERR),
@@ -91,10 +94,18 @@ def fetch_image():
     return image
 
 
+def build_mutation(output):
+    fixtures = ROOT / "tests/fixtures"
+    subprocess.run(["cc", *FLAGS, fixtures / "compact_process_start.S",
+                    fixtures / "compact_c2_linux_mutation.c", "-o", output], check=True, timeout=120)
+    return sha(output.read_bytes())
+
+
 def native_fixtures(directory):
     (directory / "c1-jq-amd64").write_bytes(fetch_image())
     (directory / "c1-input.json").write_bytes(INPUT)
     (directory / CANARY_NAME).write_bytes(CANARY)
+    return build_mutation(directory / MUTATION_NAME)
 
 
 def native_commands():
@@ -119,11 +130,17 @@ def native_commands():
             f"grep -v '^COMPACT_(LINUX_RESULT|JOBS_STATS|RESOURCE_STATS) ' {base}.log >{base}.err",
             f"sha1sum -2 256 {base}.out {base}.err; cat {base}.out {base}.err; echo C1_{name}_END",
         ]
-    commands += [f"sha1sum -2 256 {path} {NATIVE_CANARY}", "echo COMPACT_C1_LINUX_DONE"]
+    commands += [
+        f"hget {url}/{MUTATION_NAME} >{NATIVE_MUTATION}; sha1sum -2 256 {NATIVE_MUTATION}",
+        f"$c1 -r -M 'r:{GUEST_DIRECTORY}={NATIVE_ROOT}' {NATIVE_MUTATION} >[2]/tmp/c2-mutation.log",
+        "echo C2_LINUX_MUTATION_BEGIN; cat /tmp/c2-mutation.log; echo C2_LINUX_MUTATION_END",
+        f"if(! test -e {NATIVE_ROOT}/{CREATED_NAME}) echo C2_LINUX_CREATED_ABSENT",
+        f"sha1sum -2 256 {path} {NATIVE_CANARY}", "echo COMPACT_C1_LINUX_DONE",
+    ]
     return commands
 
 
-def inspect_native(serial, commit):
+def inspect_native(serial, commit, mutation_sha):
     def digests(data, path):
         return re.findall(rb"(?m)^([0-9a-f]{64})[ \t]+" + re.escape(path.encode()) + rb"\r?$", data)
 
@@ -150,7 +167,14 @@ def inspect_native(serial, commit):
         cases[name] = dict(passed=passed, result=[list(map(int, values)) for values in state],
                            stdout_sha256=[value.decode() for value in out],
                            stderr_sha256=[value.decode() for value in err])
-    return dict(schema="compact-c1-linux-native-jq/v1", source_commit=commit,
+    mutation = re.search(rb"(?ms)^C2_LINUX_MUTATION_BEGIN\r?\n(.*?)^C2_LINUX_MUTATION_END\r?$", serial)
+    checks["mutation_fixture_sha256"] = digests(serial, NATIVE_MUTATION) == [mutation_sha.encode()]
+    checks["mutation_denied"] = bool(mutation and re.search(
+        rb"(?m)^COMPACT_LINUX_RESULT status=0 exited=1 exit=0 steps=[1-9]\d* syscalls=6\r?$",
+        mutation[1]))
+    checks["created_absent"] = re.search(rb"(?m)^C2_LINUX_CREATED_ABSENT\r?$", serial) is not None
+    return dict(schema="compact-c1-linux-native-jq/v1", mutation_fixture_sha256=mutation_sha,
+                mutation_operations=MUTATION_OPERATIONS, source_commit=commit,
                 binary_sha256=SHA, input_sha256=input_digest, checks=checks, cases=cases,
                 passed=all(checks.values()) and all(case["passed"] for case in cases.values()))
 
@@ -181,11 +205,20 @@ def main():
                         *(source / f"{name}.c" for name in SOURCES), "-o", runner],
                        check=True, timeout=120)
         hosted_cases = probe(runner, binary, share)
+        mutation = directory / MUTATION_NAME
+        mutation_sha = build_mutation(mutation)
+        result = run([runner, "-r", "-M", f"r:{GUEST_DIRECTORY}={share}", mutation], share)
+        state = DIAGNOSTICS.fullmatch(result.stderr)
+        if (result.returncode or result.stdout or not state or
+                tuple(map(int, state.groups()[:3])) != (0, 1, 0) or int(state[5]) != 6 or
+                (share / CREATED_NAME).exists()):
+            raise ValueError(f"Compact Linux read-only mutation probe failed: {result!r}")
         if (input_path.read_bytes(), canary_path.read_bytes(), binary.read_bytes()) != (INPUT, CANARY, image):
             raise ValueError("Compact probe changed a fixture")
     report = dict(schema="compact-c1-linux-jq/v1", source_commit=commit, architecture="x86_64",
                   binary_url=URL, binary_sha256=SHA, input_sha256=sha(INPUT), input_unchanged=True,
                   outside_canary_sha256=CANARY_SHA256, linux_reference=reference_cases,
+                  mutation_fixture_sha256=mutation_sha, mutation_operations=MUTATION_OPERATIONS,
                   hosted_compact_interpreter=hosted_cases)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     output = json.dumps(report, indent=2) + "\n"

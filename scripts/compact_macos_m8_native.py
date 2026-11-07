@@ -13,7 +13,8 @@ import threading
 
 from compact_macos_m2_native import digest_line
 from compact_c1_jq_contract import INPUT, INPUT_NAME, QUERY
-from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, PARENT_ESCAPE
+from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, CREATED_NAME, MUTATION_OPERATIONS, PARENT_ESCAPE
+from compact_c2_macos_fixture import fixture as mutation_fixture
 from compact_macos_m8_jq import TARGETS, expected_cases, source_head, verified_image
 from compact_windows_w6_native import bootstrap_provenance, extract_kernel, session
 
@@ -33,6 +34,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
     commit = source_head()
     cases_by_arch = {}
     binaries = {}
+    mutations = {}
     if sqlite:
         from compact_macos_m92_sqlite import IMAGE_SHA256, check_cases, inventory
         for arch, digest in IMAGE_SHA256.items():
@@ -54,7 +56,12 @@ def verify(image, bootstrap, references, output, sqlite=False):
         (output/CANARY_NAME).write_bytes(CANARY)
         for arch, (name, _, digest, _, _) in TARGETS.items():
             ref = references/f'macos-m8-jq-{arch}'
-            (output/name).write_bytes(verified_image(arch, (ref/name).read_bytes()))
+            jq = verified_image(arch, (ref/name).read_bytes())
+            (output/name).write_bytes(jq)
+            mutation_name = f'c2-mutation-{arch}'
+            mutation = mutation_fixture(arch, jq)
+            (output/mutation_name).write_bytes(mutation)
+            mutations[arch] = mutation_name, hashlib.sha256(mutation).hexdigest()
             receipt = json.loads((ref/'reference.json').read_text())
             cases = receipt['cases']
             if (receipt['source_commit'], receipt['sha256'], receipt['architecture'], cases) != (
@@ -134,7 +141,17 @@ def verify(image, bootstrap, references, output, sqlite=False):
                         launch = f'{program} --run {grant}{path} -- jq -c $q {filename}'
                         commands.append(f'{launch} >{prefix}.out >[2]{prefix}.err; echo M8_{arch}_{case}_STATUS $status')
                         commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
+                    mutation_name, _ = mutations[arch]
+                    mutation = f'/tmp/{mutation_name}'
+                    commands.append(f'hget {url}/{mutation_name} >{mutation}; sha1sum -2 256 {mutation}')
+                    prefix = f'{path}-mutation'
+                    launch = f'{program} --run --read-only {INPUT_NAME} {GUEST_INPUT} {mutation} -- probe'
+                    marker = f'M8_{arch}_MUTATION_OK'
+                    markers[len(commands)] = marker
+                    commands.append(f'if({launch} >{prefix}.out >[2]{prefix}.err) echo {marker}; if not cat {prefix}.err')
+                    commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
             if not sqlite:
+                commands.append(f'if(! test -e /tmp/c2m/{CREATED_NAME}) echo M8_C2_CREATED_ABSENT')
                 commands.append(f'sha1sum -2 256 {GUEST_INPUT} {CANARY_PATH}')
             run = session(image, commands, output, 'fresh', 120, markers)
         finally:
@@ -164,6 +181,13 @@ def verify(image, bootstrap, references, output, sqlite=False):
                         digest_line(run, f'{prefix}.err') != hashlib.sha256(stderr).hexdigest()):
                     raise ValueError(f'{arch}: unexpected native {case} result')
                 report[arch][case] = dict(exit_code=2, stdout_hex='', stderr_hex=stderr.hex())
+            mutation_name, mutation_sha = mutations[arch]
+            if digest_line(run, f'/tmp/{mutation_name}') != mutation_sha or any(
+                    digest_line(run, f'{path}-mutation.{stream}') != hashlib.sha256(b'').hexdigest()
+                    for stream in ('out', 'err')):
+                raise ValueError(f'{arch}: native read-only mutation evidence mismatch')
+            report[arch]['mutation'] = dict(operations=MUTATION_OPERATIONS, fixture_sha256=mutation_sha,
+                                            exit_code=0, stdout_hex='', stderr_hex='')
 
     schema = 'compact-macos-m93-native-sqlite/v1' if sqlite else 'compact-macos-m8-native-jq/v1'
     receipt = dict(schema=schema, source_commit=commit,
@@ -180,6 +204,8 @@ def verify(image, bootstrap, references, output, sqlite=False):
                                     re.escape(CANARY_PATH.encode()) + rb'\r?$', run)
         if canary_digests != [CANARY_SHA256.encode()] * 2:
             raise ValueError('native C2 outside canary digest mismatch')
+        if not re.search(rb'(?m)^M8_C2_CREATED_ABSENT\r?$', run):
+            raise ValueError('native C2 unexpected created file')
         receipt.update(outside_canary_sha256=CANARY_SHA256, input_sha256=input_digest, input_unchanged=True, jq_profile_qualified=True,
                        guest_input_alias=INPUT_NAME)
     (output/'qualification.json').write_text(json.dumps(receipt, indent=2)+'\n')
