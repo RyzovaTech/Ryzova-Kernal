@@ -12,6 +12,8 @@ from urllib.request import urlopen
 
 from compact_c1_jq_contract import INPUT, INPUT_NAME, QUERY_ARGS, QUERY_STDOUT, RELEASE, VERSION_STDOUT
 
+from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, PARENT_ESCAPE
+
 ROOT = Path(__file__).resolve().parents[1]
 URL = f"{RELEASE}/jq-linux-amd64"
 SIZE = 2255816
@@ -20,11 +22,15 @@ GUEST_DIRECTORY = "/home/share"
 GUEST_INPUT = f"{GUEST_DIRECTORY}/{INPUT_NAME}"
 GUEST_QUERY = [*QUERY_ARGS[:-1], GUEST_INPUT]
 DENIED_STDERR = f"jq: error: Could not open file {GUEST_INPUT}: No such file or directory\n".encode()
+GUEST_ESCAPE = f"{GUEST_DIRECTORY}/{PARENT_ESCAPE}"
+ESCAPE_STDERR = f"jq: error: Could not open file {GUEST_ESCAPE}: No such file or directory\n".encode()
+NATIVE_CANARY = f"/tmp/{CANARY_NAME}"
 NATIVE_ROOT = "/tmp/c1-share"
 NATIVE_JQ = "/tmp/c1-jq"
 NATIVE_CASES = {"version": (0, VERSION_STDOUT, b""),
                 "query": (0, QUERY_STDOUT, b""),
-                "without_input_grant": (2, b"", DENIED_STDERR)}
+                "without_input_grant": (2, b"", DENIED_STDERR),
+                "parent_escape": (2, b"", ESCAPE_STDERR)}
 SOURCES = ("elf64", "namespace", "syscall", "subset_vm", "memory", "process", "cpu", "jobs", "jobs_probe")
 DIAGNOSTICS = re.compile(
     rb"(?m)^COMPACT_JOBS_RESULT status=(\d+) exited=([01]) exit=(\d+) steps=(\d+) "
@@ -58,7 +64,8 @@ def reference(binary, directory):
 def probe(runner, binary, directory):
     mount = ["-M", f"r:{GUEST_DIRECTORY}={directory}"]
     cases = {"version": ([], ["--version"]), "query": (mount, GUEST_QUERY),
-             "without_input_grant": ([], GUEST_QUERY)}
+             "without_input_grant": ([], GUEST_QUERY),
+             "parent_escape": (mount, [*QUERY_ARGS[:-1], GUEST_ESCAPE])}
     records = {}
     for name, (grants, argv) in cases.items():
         result = run([runner, "-r", "-b", "16777216", *grants, binary, *argv], directory)
@@ -87,6 +94,7 @@ def fetch_image():
 def native_fixtures(directory):
     (directory / "c1-jq-amd64").write_bytes(fetch_image())
     (directory / "c1-input.json").write_bytes(INPUT)
+    (directory / CANARY_NAME).write_bytes(CANARY)
 
 
 def native_commands():
@@ -95,20 +103,23 @@ def native_commands():
     commands = [
         f"mkdir -p {NATIVE_ROOT}; hget {url}/c1-input.json >{path}",
         f"hget {url}/c1-jq-amd64 >{NATIVE_JQ}; sha1sum -2 256 {NATIVE_JQ} {path}",
+        f"hget {url}/{CANARY_NAME} >{NATIVE_CANARY}; sha1sum -2 256 {NATIVE_CANARY}",
         "c1=/amd64/bin/compact-linux",
         f"c1filter='{QUERY_ARGS[1]}'",
     ]
     query = f"-c $c1filter {GUEST_INPUT}"
-    for name, argv in (("version", "--version"), ("query", query), ("without_input_grant", query)):
+    cases = (("version", "--version"), ("query", query), ("without_input_grant", query),
+             ("parent_escape", f"-c $c1filter {GUEST_ESCAPE}"))
+    for name, argv in cases:
         base = f"/tmp/c1-{name}"
-        grant = f"-M 'r:{GUEST_DIRECTORY}={NATIVE_ROOT}' " if name == "query" else ""
+        grant = f"-M 'r:{GUEST_DIRECTORY}={NATIVE_ROOT}' " if name in ("query", "parent_escape") else ""
         commands += [
             f"$c1 -r -b 16777216 {grant}{NATIVE_JQ} {argv} >{base}.out >[2]{base}.log",
             f"echo C1_{name}_BEGIN; grep '^COMPACT_LINUX_RESULT ' {base}.log",
             f"grep -v '^COMPACT_(LINUX_RESULT|JOBS_STATS|RESOURCE_STATS) ' {base}.log >{base}.err",
             f"sha1sum -2 256 {base}.out {base}.err; cat {base}.out {base}.err; echo C1_{name}_END",
         ]
-    commands += [f"sha1sum -2 256 {path}", "echo COMPACT_C1_LINUX_DONE"]
+    commands += [f"sha1sum -2 256 {path} {NATIVE_CANARY}", "echo COMPACT_C1_LINUX_DONE"]
     return commands
 
 
@@ -121,6 +132,7 @@ def inspect_native(serial, commit):
     checks = {
         "binary_sha256": digests(serial, NATIVE_JQ) == [SHA.encode()],
         "input_unchanged": digests(serial, path) == [input_digest.encode()] * 2,
+        "outside_canary_unchanged": digests(serial, NATIVE_CANARY) == [CANARY_SHA256.encode()] * 2,
         "completed": re.search(rb"(?m)^COMPACT_C1_LINUX_DONE\r?$", serial) is not None,
     }
     cases = {}
@@ -157,6 +169,8 @@ def main():
         share.mkdir()
         input_path = share / INPUT_NAME
         input_path.write_bytes(INPUT)
+        canary_path = directory / CANARY_NAME
+        canary_path.write_bytes(CANARY)
         binary = directory / "jq"
         binary.write_bytes(image)
         binary.chmod(0o700)
@@ -167,11 +181,12 @@ def main():
                         *(source / f"{name}.c" for name in SOURCES), "-o", runner],
                        check=True, timeout=120)
         hosted_cases = probe(runner, binary, share)
-        if input_path.read_bytes() != INPUT or binary.read_bytes() != image:
-            raise ValueError("C1 probe changed the pinned executable or input")
+        if (input_path.read_bytes(), canary_path.read_bytes(), binary.read_bytes()) != (INPUT, CANARY, image):
+            raise ValueError("Compact probe changed a fixture")
     report = dict(schema="compact-c1-linux-jq/v1", source_commit=commit, architecture="x86_64",
                   binary_url=URL, binary_sha256=SHA, input_sha256=sha(INPUT), input_unchanged=True,
-                  linux_reference=reference_cases, hosted_compact_interpreter=hosted_cases)
+                  outside_canary_sha256=CANARY_SHA256, linux_reference=reference_cases,
+                  hosted_compact_interpreter=hosted_cases)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     output = json.dumps(report, indent=2) + "\n"
     args.output.write_text(output, encoding="utf-8")

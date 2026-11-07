@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, 'phase7/**']
     paths:
+      - 'scripts/compact_c2_file_contract.py'
       - 'sys/src/9/**'
       - 'sys/include/**'
       - 'amd64/include/**'
@@ -28,8 +29,9 @@ on:
       - 'scripts/verify-foundation.sh'
       - '.github/workflows/phase3-native-build.yml'
   pull_request:
-    branches: [main]
+    branches: [main, 'feature/compact-c*-*']
     paths:
+      - 'scripts/compact_c2_file_contract.py'
       - 'sys/src/9/**'
       - 'sys/include/**'
       - 'amd64/include/**'

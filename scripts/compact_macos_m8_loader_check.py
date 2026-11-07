@@ -7,6 +7,7 @@ import random
 from pathlib import Path
 import struct
 
+from compact_c2_file_contract import PARENT_ESCAPE
 from compact_macos_m8_jq import INPUT, TARGETS, save_json, sha256, source_head, verified_image
 
 
@@ -217,6 +218,22 @@ def check_query(lib, arch, image, expected):
     return report
 
 
+def check_parent_escape(lib, arch, image, expected):
+    argv = [b'jq', *(arg.encode('ascii') for arg in expected['argv'][:-1]), PARENT_ESCAPE.encode()]
+    arguments = (C.c_char_p*len(argv))(*argv)
+    arena = C.create_string_buffer(ARENA)
+    payload = C.create_string_buffer(INPUT)
+    stop = Stop()
+    alias = expected['argv'][-1].encode()
+    status = lib.mac9_run(image, len(image), arena, len(arena), GUARD, len(argv), arguments,
+                          16777216, alias, payload, len(INPUT), C.byref(stop))
+    stderr = f'jq: error: Could not open file {PARENT_ESCAPE}: No such file or directory\n'.encode()
+    if (status, stop.exit_code, stop.file_opens, stop.file_reads, stop.stdout_bytes,
+            bytes(stop.stderr_data[:stop.stderr_bytes]), payload.raw) != (2, 2, 0, 0, 0, stderr, INPUT+b'\0'):
+        raise ValueError(f'{arch}: unexpected parent escape result with read-only grant')
+    return dict(exit_code=2, file_opens=0, bytes_read=0, stdout_hex='', stderr_hex=stderr.hex())
+
+
 def check_launcher(lib, arch, image):
     arena = C.create_string_buffer(ARENA)
     source = C.create_string_buffer(INPUT)
@@ -322,6 +339,7 @@ def main():
         report[arch]['startup'] = check_start(lib, arch, image)
         report[arch]['version'] = check_version(lib, arch, image, cases['version'])
         report[arch]['query'] = check_query(lib, arch, image, cases['query'])
+        report[arch]['parent_escape'] = check_parent_escape(lib, arch, image, cases['query'])
         report[arch]['launcher'] = check_launcher(lib, arch, image)
         print(f'{arch}: mapped {report[arch]["mapped_bytes"]} bytes, checked '
               f'{len(report[arch]["rejected"])} malformed images and traced '

@@ -13,8 +13,14 @@ import threading
 
 from compact_macos_m2_native import digest_line
 from compact_c1_jq_contract import INPUT, INPUT_NAME, QUERY
+from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, PARENT_ESCAPE
 from compact_macos_m8_jq import TARGETS, expected_cases, source_head, verified_image
 from compact_windows_w6_native import bootstrap_provenance, extract_kernel, session
+
+
+GUEST_INPUT = f"/tmp/c2m/{INPUT_NAME}"
+CANARY_PATH = f"/tmp/{CANARY_NAME}"
+DENIALS = {"missing_grant": INPUT_NAME, "parent_escape": PARENT_ESCAPE}
 
 
 def sha256(path):
@@ -45,6 +51,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
             binaries[arch] = name, digest
     else:
         (output/INPUT_NAME).write_bytes(INPUT)
+        (output/CANARY_NAME).write_bytes(CANARY)
         for arch, (name, _, digest, _, _) in TARGETS.items():
             ref = references/f'macos-m8-jq-{arch}'
             (output/name).write_bytes(verified_image(arch, (ref/name).read_bytes()))
@@ -95,7 +102,8 @@ def verify(image, bootstrap, references, output, sqlite=False):
                 commands.append(f"launch={program}")
             else:
                 commands.extend([
-                    f'hget {url}/{INPUT_NAME} >/tmp/m8-input; cp /tmp/m8-input /tmp/m8-input-original',
+                    f'mkdir -p /tmp/c2m; hget {url}/{INPUT_NAME} >{GUEST_INPUT}; cp {GUEST_INPUT} /tmp/m8-input-original',
+                    f'hget {url}/{CANARY_NAME} >{CANARY_PATH}; sha1sum -2 256 {CANARY_PATH}',
                     'sha1sum -2 256 /tmp/m8-input-original',
                     f"q='{QUERY}'",
                 ])
@@ -113,19 +121,21 @@ def verify(image, bootstrap, references, output, sqlite=False):
                         launch = f'$launch --run {path} -- sqlite3 {guest}'
                     else:
                         args = (f'--run {path} -- jq --version' if case == 'version' else
-                                f'--run --read-only {INPUT_NAME} /tmp/m8-input {path} -- jq -c $q {INPUT_NAME}')
+                                f'--run --read-only {INPUT_NAME} {GUEST_INPUT} {path} -- jq -c $q {INPUT_NAME}')
                         launch = f'{program} {args}'
                     commands.append(
                         f'if({launch} >{prefix}.out >[2]{prefix}.err) echo {marker}; '
                         f'if not cat {prefix}.err')
                     commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
                 if not sqlite:
-                    prefix = f'{path}-no-grant'
-                    launch = f'{program} --run {path} -- jq -c $q {INPUT_NAME}'
-                    commands.append(f'{launch} >{prefix}.out >[2]{prefix}.err; echo M8_{arch}_DENIED_STATUS $status')
-                    commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
+                    for case, filename in DENIALS.items():
+                        prefix = f'{path}-{case}'
+                        grant = f'--read-only {INPUT_NAME} {GUEST_INPUT} ' if case == 'parent_escape' else ''
+                        launch = f'{program} --run {grant}{path} -- jq -c $q {filename}'
+                        commands.append(f'{launch} >{prefix}.out >[2]{prefix}.err; echo M8_{arch}_{case}_STATUS $status')
+                        commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
             if not sqlite:
-                commands.append('sha1sum -2 256 /tmp/m8-input')
+                commands.append(f'sha1sum -2 256 {GUEST_INPUT} {CANARY_PATH}')
             run = session(image, commands, output, 'fresh', 120, markers)
         finally:
             server.shutdown()
@@ -144,13 +154,16 @@ def verify(image, bootstrap, references, output, sqlite=False):
                     raise ValueError(f'{arch}: native {case} {stream} differs')
         report[arch] = dict(sha256=digest, cases=cases_by_arch[arch])
         if not sqlite:
-            expected_stderr = f'jq: error: Could not open file {INPUT_NAME}: No such file or directory\n'.encode()
-            status = re.findall(rb'(?m)^M8_' + arch.encode() + rb'_DENIED_STATUS ([^\r\n]*)\r?$', run)
-            if (len(status) != 1 or not re.fullmatch(rb'compact-macos-m8 [1-9]\d*: guest exit 2', status[0]) or
-                    digest_line(run, f'{path}-no-grant.out') != hashlib.sha256(b'').hexdigest() or
-                    digest_line(run, f'{path}-no-grant.err') != hashlib.sha256(expected_stderr).hexdigest()):
-                raise ValueError(f'{arch}: native query without a grant did not exit with the expected error')
-            report[arch]['missing_grant'] = dict(exit_code=2, stdout_hex='', stderr_hex=expected_stderr.hex())
+            for case, filename in DENIALS.items():
+                stderr = f'jq: error: Could not open file {filename}: No such file or directory\n'.encode()
+                marker = f'M8_{arch}_{case}_STATUS '.encode()
+                status = re.findall(rb'(?m)^' + marker + rb'([^\r\n]*)\r?$', run)
+                prefix = f'{path}-{case}'
+                if (len(status) != 1 or not re.fullmatch(rb'compact-macos-m8 [1-9]\d*: guest exit 2', status[0]) or
+                        digest_line(run, f'{prefix}.out') != hashlib.sha256(b'').hexdigest() or
+                        digest_line(run, f'{prefix}.err') != hashlib.sha256(stderr).hexdigest()):
+                    raise ValueError(f'{arch}: unexpected native {case} result')
+                report[arch][case] = dict(exit_code=2, stdout_hex='', stderr_hex=stderr.hex())
 
     schema = 'compact-macos-m93-native-sqlite/v1' if sqlite else 'compact-macos-m8-native-jq/v1'
     receipt = dict(schema=schema, source_commit=commit,
@@ -161,9 +174,13 @@ def verify(image, bootstrap, references, output, sqlite=False):
         receipt['sqlite_profile_qualified'] = True
     else:
         input_digest = hashlib.sha256(INPUT).hexdigest()
-        if any(digest_line(run, name) != input_digest for name in ('/tmp/m8-input-original', '/tmp/m8-input')):
+        if any(digest_line(run, name) != input_digest for name in ('/tmp/m8-input-original', GUEST_INPUT)):
             raise ValueError('native input digest changed')
-        receipt.update(input_sha256=input_digest, input_unchanged=True, jq_profile_qualified=True,
+        canary_digests = re.findall(rb'(?m)^([0-9a-f]{64})[ \t]+' +
+                                    re.escape(CANARY_PATH.encode()) + rb'\r?$', run)
+        if canary_digests != [CANARY_SHA256.encode()] * 2:
+            raise ValueError('native C2 outside canary digest mismatch')
+        receipt.update(outside_canary_sha256=CANARY_SHA256, input_sha256=input_digest, input_unchanged=True, jq_profile_qualified=True,
                        guest_input_alias=INPUT_NAME)
     (output/'qualification.json').write_text(json.dumps(receipt, indent=2)+'\n')
     print(json.dumps(receipt))

@@ -12,6 +12,7 @@ import tarfile
 import threading
 
 from compact_c1_jq_contract import INPUT_NAME, VERSION_STDOUT
+from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, PARENT_ESCAPE
 from compact_windows_w2 import ROOT, PREFERRED
 from compact_windows_w6_native import bootstrap_provenance, digest, extract_kernel, parse_cases, session, standalone
 from compact_windows_w7_tls import tls_fixture, verify_reference
@@ -25,6 +26,8 @@ from compact_windows_w7_sync import verify_reference as verify_sync_reference, s
 JQ_ROOT = '/tmp/cw-w7-jq'
 JQ_INPUT_PATH = JQ_ROOT + '/' + INPUT_NAME
 JQ_DENIED = f'jq: error: Could not open file {INPUT_NAME}: Permission denied\n'.encode()
+JQ_ESCAPE_DENIED = f'jq: error: Could not open file {PARENT_ESCAPE}: Invalid argument\n'.encode()
+CANARY_PATH = f'/tmp/{CANARY_NAME}'
 JQ_READ_ONLY = 9  # CW_GRANT_READ | CW_GRANT_METADATA
 JQ_BUDGET = 16777216
 
@@ -114,11 +117,14 @@ def main():
     cases['jq-version'] = jq_case(dict(exit_code=0, stdout_hex=VERSION_STDOUT.hex(), stderr_hex=''),
                                   ['-b', '--version'])
     cases['jq-no-grant'] = jq_case(dict(exit_code=2, stdout_hex='', stderr_hex=JQ_DENIED.hex()), JQ_ARGS)
+    cases['jq-parent-escape'] = jq_case(dict(exit_code=2, stdout_hex='', stderr_hex=JQ_ESCAPE_DENIED.hex()),
+                                         [*JQ_ARGS[:-1], PARENT_ESCAPE], grant=True)
     (out/INPUT_NAME).write_bytes(JQ_INPUT)
+    (out/CANARY_NAME).write_bytes(CANARY)
     # Keep the serial command short. The full quoted Windows argv and policy
     # travel in a checked guest script instead of through the UART.
     launchers = {}
-    for name in ('jq-readonly', 'jq-version', 'jq-no-grant'):
+    for name in ('jq-readonly', 'jq-version', 'jq-no-grant', 'jq-parent-escape'):
         launcher = out/f'{name}.rc'
         launcher.write_text(f"/amd64/bin/compact-windows {cases[name]['args']} /tmp/cw-jq.exe\n",
                             encoding='ascii')
@@ -158,13 +164,14 @@ def main():
         for name in images:
             commands.append(f'hget http://10.0.2.2:8000/{name}.exe > /tmp/cw-{name}.exe; sha1sum -2 256 /tmp/cw-{name}.exe')
         commands.append(f'mkdir -p {JQ_ROOT}; hget http://10.0.2.2:8000/{INPUT_NAME} > {JQ_INPUT_PATH}; sha1sum -2 256 {JQ_INPUT_PATH}')
+        commands.append(f'hget http://10.0.2.2:8000/{CANARY_NAME} > {CANARY_PATH}; sha1sum -2 256 {CANARY_PATH}')
         for name in launchers:
             commands.append(f'hget http://10.0.2.2:8000/{name}.rc > /tmp/{name}.rc; sha1sum -2 256 /tmp/{name}.rc')
         for name, spec in cases.items():
             command = (f'rc /tmp/{name}.rc' if name in launchers else
                        f"/amd64/bin/compact-windows {spec.get('args', '')} /tmp/cw-{spec['image']}.exe")
             commands.append(f'echo CW_CASE_{name}_BEGIN; {command}; echo CW_CASE_{name}_END')
-        commands.append(f'sha1sum -2 256 {JQ_INPUT_PATH}')
+        commands.append(f'sha1sum -2 256 {JQ_INPUT_PATH} {CANARY_PATH}')
         fresh = session(args.image, commands, out, 'fresh', 180)
         if b'Ryzova Kernel 0.1.0-dev' not in fresh or b'9front-derived' not in fresh or not standalone(fresh, 'CW_IDENTITY_END'):
             raise ValueError('fresh source-built guest identity')
@@ -180,6 +187,10 @@ def main():
             if launcher_hashes != [launcher_sha.encode()]:
                 raise ValueError(f'native {name} launcher hash mismatch')
         verify_guest_input(fresh, jq_reference['input_sha256'])
+        canary_digests = re.findall(rb'(?m)^([0-9a-f]{64})[ \t]+' +
+                                    re.escape(CANARY_PATH.encode()) + rb'\r?$', fresh)
+        if canary_digests != [CANARY_SHA256.encode()] * 2:
+            raise ValueError('native C2 outside canary digest mismatch')
         records = parse_cases(fresh, cases)
         jq_record = records['jq-readonly']
         verify_jq_io(jq_record)
@@ -187,9 +198,11 @@ def main():
             case, record = cases[name], records[name]
             record.update(stdout_hex=case['out'], stderr_hex=case['err'])
             if name != 'jq-readonly':
-                if any(record.get(key) != 0 for key in ('rights', 'read_bytes', 'write_bytes', 'peak_handles')):
-                    raise ValueError(f'native {name} unexpectedly accessed a file capability')
-                if record['calls'].get('_wfopen', 0) != int(name == 'jq-no-grant'):
+                rights = JQ_READ_ONLY if name == 'jq-parent-escape' else 0
+                if record.get('rights') != rights or any(record.get(key) != 0 for key in (
+                        'read_bytes', 'write_bytes', 'peak_handles')):
+                    raise ValueError(f'native {name} unexpectedly accessed file bytes')
+                if record['calls'].get('_wfopen', 0) != int(name != 'jq-version'):
                     raise ValueError(f'native {name} did not take the expected file-open path')
         if records['api-set']['calls'] != EXPECTED_CALLS:
             raise ValueError('native API-set dispatch counts differ')
@@ -211,7 +224,8 @@ def main():
                       jq_reference=jq_reference, jq_input_sha256=jq_reference['input_sha256'],
                       jq_executable_sha256=hashes['jq'], jq_root_rights=JQ_READ_ONLY,
                       jq_launcher_sha256=launchers['jq-readonly'], jq_launcher_sha256_by_case=launchers,
-                      native_jq_missing_grant_verified=True,
+                      native_jq_missing_grant_verified=True, native_jq_parent_escape_denied=True,
+                      outside_canary_sha256=CANARY_SHA256,
                       jq_input_unchanged=True, native_jq_query_parity_verified=True,
                       physical_hardware_qualified=False, full_w7_complete=False)
         (out/'qualification.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
