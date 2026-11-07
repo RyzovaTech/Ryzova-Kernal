@@ -15,7 +15,7 @@ import hashlib
 import hmac
 import re
 
-from ryzova.remote.native_bridge import ALLOWED_9P, BridgeDenied, read_frame
+from ryzova.remote.native_bridge import ALLOWED_9P, BridgeDenied, bounded_io_timeout, read_frame
 from ryzova.remote.p9 import RERROR, frame, unframe
 
 DEFAULT_MAX_SESSIONS = 8
@@ -25,10 +25,10 @@ DEFAULT_MAX_FRAMES = 256
 class _NativeTLSHandler(socketserver.BaseRequestHandler):
     def handle(self):
         srv = self.server
-        self.request.settimeout(6)
+        self.request.settimeout(srv.io_timeout)
         try:
             with srv.context.wrap_socket(self.request, server_side=True) as tls:
-                tls.settimeout(6)
+                tls.settimeout(srv.io_timeout)
                 if tls.version() != "TLSv1.2":
                     raise BridgeDenied("native 9front TLS version mismatch")
                 if srv.guest_client_pin is not None:
@@ -46,9 +46,9 @@ class _NativeTLSHandler(socketserver.BaseRequestHandler):
                 # One upstream socket per admitted guest session. Never replay
                 # a 9P request after an EOF/timeout; a fresh mount must retry.
                 with socket.create_connection(
-                    ("127.0.0.1", srv.gateway_port), timeout=6
+                    ("127.0.0.1", srv.gateway_port), timeout=srv.io_timeout
                 ) as upstream:
-                    upstream.settimeout(6)
+                    upstream.settimeout(srv.io_timeout)
                     for _ in range(srv.max_frames_per_session):
                         packet = read_frame(tls)
                         kind, tag, _ = unframe(packet)
@@ -83,7 +83,7 @@ class NativeGuestTLS12Endpoint(socketserver.ThreadingTCPServer):
     def __init__(self, certificate, key, gateway_port, port=15641,
                  max_sessions=DEFAULT_MAX_SESSIONS,
                  max_frames_per_session=DEFAULT_MAX_FRAMES, *,
-                 guest_ca=None, guest_client_pin=None, guest_identity=None):
+                 guest_ca=None, guest_client_pin=None, guest_identity=None, io_timeout=6):
         if type(gateway_port) is not int or not 0 < gateway_port < 65536:
             raise ValueError("upstream gateway port required")
         if type(max_sessions) is not int or not 1 <= max_sessions <= 32:
@@ -107,6 +107,7 @@ class NativeGuestTLS12Endpoint(socketserver.ThreadingTCPServer):
         self.guest_client_pin = guest_client_pin
         self.guest_identity = guest_identity
         self.authenticated_guest_sessions = 0
+        self.io_timeout = bounded_io_timeout(io_timeout)
         self.context = ctx
         self.gateway_port = gateway_port
         self.max_sessions = max_sessions
