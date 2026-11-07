@@ -14,6 +14,7 @@ import threading
 from compact_c1_jq_contract import INPUT_NAME, VERSION_STDOUT
 from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, CREATED_NAME, MUTATION_OPERATIONS, PARENT_ESCAPE
 from compact_c2_windows_fixture import fixture as mutation_fixture
+from compact_c3_remote import FILENAME as REMOTE_FILE, MOUNT as REMOTE_ROOT, mount_commands, payload, route_fixture, transport_evidence
 from compact_windows_w2 import ROOT, PREFERRED
 from compact_windows_w6_native import bootstrap_provenance, digest, extract_kernel, parse_cases, session, standalone
 from compact_windows_w7_tls import tls_fixture, verify_reference
@@ -33,21 +34,21 @@ JQ_READ_ONLY = 9  # CW_GRANT_READ | CW_GRANT_METADATA
 JQ_BUDGET = 16777216
 
 
-def jq_case(reference, argv, *, grant=False):
+def jq_case(reference, argv, *, root=None):
     # The inner string follows Windows argv quoting. rc receives it as one word.
     command = subprocess.list2cmdline(['jq.exe', *argv])
     rc_command = "'" + command.replace("'", "''") + "'"
     words = api_grant_words()
     extra = ''.join(f' -g {i}:{mask}' for i, mask in enumerate(words) if i >= 2 and mask)
-    root = f'-r {JQ_ROOT} -R {JQ_READ_ONLY} ' if grant else ''
-    args = (f'-P trace -b {JQ_BUDGET} {root}'
+    grant = f'-r {root} -R {JQ_READ_ONLY} ' if root else ''
+    args = (f'-P trace -b {JQ_BUDGET} {grant}'
             f'-a {words[0]} -A {words[1]}{extra} -c {rc_command}')
     return dict(image='jq', status=0, code=reference['exit_code'],
                 out=reference['stdout_hex'], err=reference['stderr_hex'], args=args)
 
 
-def verify_jq_io(record):
-    expected = dict(rights=JQ_READ_ONLY, read_bytes=len(JQ_INPUT), write_bytes=0,
+def verify_jq_io(record, input_size):
+    expected = dict(rights=JQ_READ_ONLY, read_bytes=input_size, write_bytes=0,
                     profile=3, stop_import=0, peak_handles=1)
     for key, value in expected.items():
         if record.get(key) != value:
@@ -114,12 +115,15 @@ def main():
     receipt, api_receipt, startup_receipt, sync_receipt, images, cases = images_and_cases(args.reference)
     jq_reference = verify_jq_reference(args.reference)
     images['jq'] = (args.reference/'jq.exe').read_bytes()
-    cases['jq-readonly'] = jq_case(jq_reference, JQ_ARGS, grant=True)
+    cases['jq-readonly'] = jq_case(jq_reference, JQ_ARGS, root=JQ_ROOT)
     cases['jq-version'] = jq_case(dict(exit_code=0, stdout_hex=VERSION_STDOUT.hex(), stderr_hex=''),
                                   ['-b', '--version'])
     cases['jq-no-grant'] = jq_case(dict(exit_code=2, stdout_hex='', stderr_hex=JQ_DENIED.hex()), JQ_ARGS)
     cases['jq-parent-escape'] = jq_case(dict(exit_code=2, stdout_hex='', stderr_hex=JQ_ESCAPE_DENIED.hex()),
-                                         [*JQ_ARGS[:-1], PARENT_ESCAPE], grant=True)
+                                         [*JQ_ARGS[:-1], PARENT_ESCAPE], root=JQ_ROOT)
+    remote = payload(commit)
+    cases['jq-remote'] = jq_case(dict(exit_code=0, stdout_hex=remote.hex(), stderr_hex=''),
+                                 ['-b', '-c', '.', REMOTE_FILE], root=REMOTE_ROOT)
     images['mutation'] = mutation_fixture()
     cases['mutation'] = dict(image='mutation', status=0, code=0, out='', err='',
                              args=f'-r {JQ_ROOT} -R {JQ_READ_ONLY}')
@@ -128,7 +132,7 @@ def main():
     # Keep the serial command short. The full quoted Windows argv and policy
     # travel in a checked guest script instead of through the UART.
     launchers = {}
-    for name in ('jq-readonly', 'jq-version', 'jq-no-grant', 'jq-parent-escape'):
+    for name in ('jq-readonly', 'jq-version', 'jq-no-grant', 'jq-parent-escape', 'jq-remote'):
         launcher = out/f'{name}.rc'
         launcher.write_text(f"/amd64/bin/compact-windows {cases[name]['args']} /tmp/cw-jq.exe\n",
                             encoding='ascii')
@@ -171,13 +175,17 @@ def main():
         commands.append(f'hget http://10.0.2.2:8000/{CANARY_NAME} > {CANARY_PATH}; sha1sum -2 256 {CANARY_PATH}')
         for name in launchers:
             commands.append(f'hget http://10.0.2.2:8000/{name}.rc > /tmp/{name}.rc; sha1sum -2 256 /tmp/{name}.rc')
-        for name, spec in cases.items():
-            command = (f'rc /tmp/{name}.rc' if name in launchers else
-                       f"/amd64/bin/compact-windows {spec.get('args', '')} /tmp/cw-{spec['image']}.exe")
-            commands.append(f'echo CW_CASE_{name}_BEGIN; {command}; echo CW_CASE_{name}_END')
-        commands.append(f'if(! test -e {JQ_ROOT}/{CREATED_NAME}) echo CW_C2_CREATED_ABSENT')
-        commands.append(f'sha1sum -2 256 {JQ_INPUT_PATH} {CANARY_PATH}')
-        fresh = session(args.image, commands, out, 'fresh', 180)
+        with route_fixture(commit) as route:
+            for name, spec in cases.items():
+                if name == 'jq-remote':
+                    commands.extend(mount_commands(route))
+                command = (f'rc /tmp/{name}.rc' if name in launchers else
+                           f"/amd64/bin/compact-windows {spec.get('args', '')} /tmp/cw-{spec['image']}.exe")
+                commands.append(f'echo CW_CASE_{name}_BEGIN; {command}; echo CW_CASE_{name}_END')
+            commands.append(f'if(! test -e {JQ_ROOT}/{CREATED_NAME}) echo CW_C2_CREATED_ABSENT')
+            commands.append(f'sha1sum -2 256 {JQ_INPUT_PATH} {CANARY_PATH}')
+            fresh = session(args.image, commands, out, 'fresh', 180)
+            remote_route = transport_evidence(route, commit)
         if b'Ryzova Kernel 0.1.0-dev' not in fresh or b'9front-derived' not in fresh or not standalone(fresh, 'CW_IDENTITY_END'):
             raise ValueError('fresh source-built guest identity')
         if not re.search(rb'(?m)^'+runtimes[0]+rb'\s+/amd64/bin/compact-windows\r?$', fresh):
@@ -205,11 +213,12 @@ def main():
             raise ValueError('native C2 read-only mutation receipt mismatch')
         mutation.update(operations=MUTATION_OPERATIONS, fixture_sha256=hashes['mutation'])
         jq_record = records['jq-readonly']
-        verify_jq_io(jq_record)
+        verify_jq_io(jq_record, len(JQ_INPUT))
+        verify_jq_io(records['jq-remote'], len(remote))
         for name in launchers:
             case, record = cases[name], records[name]
             record.update(stdout_hex=case['out'], stderr_hex=case['err'])
-            if name != 'jq-readonly':
+            if name not in ('jq-readonly', 'jq-remote'):
                 rights = JQ_READ_ONLY if name == 'jq-parent-escape' else 0
                 if record.get('rights') != rights or any(record.get(key) != 0 for key in (
                         'read_bytes', 'write_bytes', 'peak_handles')):
@@ -227,7 +236,7 @@ def main():
         report = dict(schema='compact-windows-w7-native-tls/v1', source_commit=commit,
                       source_archive_sha256=archive_sha, bootstrap_image_sha256=base_sha,
                       kernel_sha256=kernels[0].decode(), runtime_sha256=runtimes[0].decode(),
-                      reference=receipt, api_set_reference=api_receipt, fixture_sha256=hashes, cases=records,
+                      remote_file_route=remote_route, reference=receipt, api_set_reference=api_receipt, fixture_sha256=hashes, cases=records,
                       startup_api_reference=startup_receipt, startup_api_policy=dict(low=LOW_MASK, high=HIGH_MASK),
                       native_startup_state_verified=True,
                       sync_api_reference=sync_receipt, native_sync_state_verified=True,

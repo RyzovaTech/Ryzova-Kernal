@@ -15,6 +15,7 @@ from compact_macos_m2_native import digest_line
 from compact_c1_jq_contract import INPUT, INPUT_NAME, QUERY
 from compact_c2_file_contract import CANARY, CANARY_NAME, CANARY_SHA256, CREATED_NAME, MUTATION_OPERATIONS, PARENT_ESCAPE
 from compact_c2_macos_fixture import fixture as mutation_fixture
+from compact_c3_remote import RESOURCE, mount_commands, payload, route_fixture, transport_evidence
 from compact_macos_m8_jq import TARGETS, expected_cases, source_head, verified_image
 from compact_windows_w6_native import bootstrap_provenance, extract_kernel, session
 
@@ -154,7 +155,21 @@ def verify(image, bootstrap, references, output, sqlite=False):
             if not sqlite:
                 commands.append(f'if(! test -e /tmp/c2m/{CREATED_NAME}) echo M8_C2_CREATED_ABSENT')
                 commands.append(f'sha1sum -2 256 {GUEST_INPUT} {CANARY_PATH}')
-            run = session(image, commands, output, 'fresh', 180 if not sqlite else 120, markers)
+            if sqlite:
+                run = session(image, commands, output, 'fresh', 120, markers)
+            else:
+                with route_fixture(commit) as route:
+                    commands.extend(mount_commands(route))
+                    commands.append(f'rg=(--read-only {INPUT_NAME} {RESOURCE})')
+                    for arch in binaries:
+                        prefix = f'/tmp/m8-{arch}-remote'
+                        marker = f'M8_{arch}_REMOTE_OK'
+                        markers[len(commands)] = marker
+                        launch = f'$m --run $rg /tmp/m8-{arch} -- jq -c . {INPUT_NAME}'
+                        commands.append(f'if({launch} >{prefix}.out >[2]{prefix}.err) echo {marker}; if not cat {prefix}.err')
+                        commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
+                    run = session(image, commands, output, 'fresh', 180, markers)
+                    remote_route = transport_evidence(route, commit)
         finally:
             server.shutdown()
 
@@ -182,6 +197,11 @@ def verify(image, bootstrap, references, output, sqlite=False):
                         digest_line(run, f'{prefix}.err') != hashlib.sha256(stderr).hexdigest()):
                     raise ValueError(f'{arch}: unexpected native {case} result')
                 report[arch][case] = dict(exit_code=2, stdout_hex='', stderr_hex=stderr.hex())
+            remote = payload(commit)
+            if (digest_line(run, f'{path}-remote.out') != hashlib.sha256(remote).hexdigest() or
+                    digest_line(run, f'{path}-remote.err') != hashlib.sha256(b'').hexdigest()):
+                raise ValueError(f'{arch}: native remote jq output differs')
+            report[arch]['remote_query'] = dict(exit_code=0, stdout_hex=remote.hex(), stderr_hex='')
             mutation_name, mutation_sha = mutations[arch]
             if digest_line(run, f'/tmp/{mutation_name}') != mutation_sha or any(
                     digest_line(run, f'{path}-mutation.{stream}') != hashlib.sha256(b'').hexdigest()
@@ -207,7 +227,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
             raise ValueError('native C2 outside canary digest mismatch')
         if not re.search(rb'(?m)^M8_C2_CREATED_ABSENT\r?$', run):
             raise ValueError('native C2 unexpected created file')
-        receipt.update(outside_canary_sha256=CANARY_SHA256, input_sha256=input_digest, input_unchanged=True, jq_profile_qualified=True,
+        receipt.update(remote_file_route=remote_route, outside_canary_sha256=CANARY_SHA256, input_sha256=input_digest, input_unchanged=True, jq_profile_qualified=True,
                        guest_input_alias=INPUT_NAME)
     (output/'qualification.json').write_text(json.dumps(receipt, indent=2)+'\n')
     print(json.dumps(receipt))

@@ -32,6 +32,7 @@ from ryzova.remote.phase7_fixture import Ephemeral9PTLSFixture
 from phase7_secure_closeout import gateway_metrics_report
 from phase7_native_guest_tls import commands as native_tls_commands, inspect as inspect_native_tls
 from phase8_guest_identity import commands as guest_identity_commands, inspect as inspect_guest_identity
+from compact_c3_remote import linux_commands as c3_commands, linux_result as inspect_c3, mount_commands as c3_mount, route_fixture as c3_fixture, transport_evidence as c3_transport
 from compact_c1_linux_jq import native_fixtures as c1_fixtures, native_commands as c1_commands, inspect_native as inspect_c1
 from phase9_compact_native import commands as compact_commands, fixtures as compact_fixtures, inspect as inspect_compact
 from phase9_linux_environment import commands as environment_commands, fixtures as environment_fixtures, payload as environment_payload, inspect as inspect_environment
@@ -370,6 +371,7 @@ print("PHASE7 native read-only 9P gateway and mutual TLS peer started", flush=Tr
 SER.unlink(missing_ok=True)
 MON.unlink(missing_ok=True)
 bootlog=bytearray()
+c3_route = c3_fixture(SOURCE_SHA).start()
 runtime_commands=[
     "mkdir -p /tmp/ryzova-9p; ramfs -m /tmp/ryzova-9p; echo RYZOVA_RUNTIME_STAGE_0",
     "echo RYZOVA_9P_DATA > /tmp/ryzova-9p/probe; grep RYZOVA_9P_DATA /tmp/ryzova-9p/probe > /dev/null && echo RYZOVA_9P_OK; echo RYZOVA_RUNTIME_STAGE_1",
@@ -378,7 +380,7 @@ runtime_commands=[
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
 ] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)] + list(guest_identity_commands()) + compact_commands() + environment_commands() + process_commands(SOURCE_SHA) + busybox_commands(SOURCE_SHA) + shell_commands(SOURCE_SHA) + jobs_commands(SOURCE_SHA) + vfs_commands(SOURCE_SHA) + application_commands(SOURCE_SHA)[:-1] + [application_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))}"] + thread_commands(SOURCE_SHA)[:-1] + [thread_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))+len(thread_commands(SOURCE_SHA))}"] + socket_commands(SOURCE_SHA)[:-1] + [socket_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))+len(thread_commands(SOURCE_SHA))+len(socket_commands(SOURCE_SHA))}"] + persistence_commands(SOURCE_SHA)[:-1] + [persistence_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))+len(thread_commands(SOURCE_SHA))+len(socket_commands(SOURCE_SHA))+len(persistence_commands(SOURCE_SHA))}"] + external_commands(SOURCE_SHA)[:-1] + [external_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{symlink_start(SOURCE_SHA)-1}"] + symlink_commands(SOURCE_SHA)[:-1] + [symlink_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{hardlink_start(SOURCE_SHA)-1}"] + hardlink_commands(SOURCE_SHA)[:-1] + [hardlink_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{map_start(SOURCE_SHA)-1}"] + map_commands(SOURCE_SHA)[:-1] + [map_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{rootfs_start(SOURCE_SHA)-1}"] + rootfs_commands(SOURCE_SHA)[:-1] + [rootfs_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{mount_start(SOURCE_SHA)-1}"] + mount_commands(SOURCE_SHA)[:-1] + [mount_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{private_start(SOURCE_SHA)-1}"] + private_commands(SOURCE_SHA)[:-1] + [private_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{process_resource_start(SOURCE_SHA)-1}"] + process_resource_commands(SOURCE_SHA)
 runtime_commands[-1] += f"; echo RYZOVA_RUNTIME_STAGE_{len(runtime_commands)-1}"
-for command in c1_commands():
+for command in c1_commands() + c3_mount(c3_route) + c3_commands():
     runtime_commands.append(f"{command}; echo RYZOVA_RUNTIME_STAGE_{len(runtime_commands)}")
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
@@ -464,7 +466,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                     bootstate["runtime_stage"]=i+1
                     guest.sendall((runtime_commands[i+1]+"\r").encode())
                     print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
-            if re.search(rb"(?:\r?\n)COMPACT_C1_LINUX_DONE(?:\r?\n)",bytes(bootlog)):
+            if re.search(rb"(?:\r?\n)COMPACT_C3_LINUX_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
@@ -493,7 +495,14 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
             "denied_guest_writes": tls_fixture.gateway.denied_writes,
         }
         tls_fixture.close()
+        try:
+            c3_evidence = c3_transport(c3_route, SOURCE_SHA)
+        finally:
+            c3_route.close()
 
+c3_evidence["query"] = inspect_c3(bytes(bootlog), SOURCE_SHA)
+(OUT / "compact-c3-linux-remote.json").write_text(json.dumps(c3_evidence, indent=2) + "\n")
+print("NATIVE COMPACT C3 LINUX REMOTE FILE PASS", flush=True)
 boottext=bytes(bootlog).decode("utf-8",errors="replace")
 guest_identity_evidence = inspect_guest_identity(
     bytes(bootlog), SOURCE_SHA, guest_client_pin,

@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'scripts/compact_c2_*.py'
+      - 'scripts/compact_c3_*.py'
       - 'scripts/compact_c1_jq_contract.py'
       - 'ryzova/compat/macos/**'
       - 'ryzova/compat/windows/**'
