@@ -188,7 +188,7 @@ def recovery_commands(route):
     return [
         "echo C3_PARTITION_BEGIN",
         f"hget http://10.0.2.2:{port}{route.partition_path}",
-        f"if(cat {RESOURCE} >/tmp/c3-dead.out >[2]/tmp/c3-dead.err) echo C3_UNEXPECTED_READ",
+        f"if(cat {RESOURCE} >/tmp/c3-dead.out >[2]/tmp/c3-dead.err) echo C3_UNEXPECTED_READ; if not echo C3_PRIMARY_READ_FAILED",
         "sha1sum -2 256 /tmp/c3-dead.out; cat /tmp/c3-dead.err; echo C3_PARTITION_END",
     ] + mount_commands(route, "b")
 
@@ -197,8 +197,10 @@ def transport_evidence(route, commit, serial):
     section = re.search(rb"(?ms)^C3_PARTITION_BEGIN\r?\n(.*?)^C3_PARTITION_END\r?$", serial)
     body = section[1] if section else b""
     if (not route.partitioned or not line(body, "C3_PRIMARY_LINK_DOWN") or
-            line(body, "C3_UNEXPECTED_READ") or digests(body, "/tmp/c3-dead.out") != [sha(b"")] or
-            not re.search(rb"(?m)^cat: .*?(?:hungup|timed out|I/O|i/o|connection)", body)):
+            line(body, "C3_UNEXPECTED_READ") or not line(body, "C3_PRIMARY_READ_FAILED") or
+            digests(body, "/tmp/c3-dead.out") != [sha(b"")] or
+            not re.search(rb"(?m)^cat: [^\r\n]*" + re.escape(RESOURCE.encode()) +
+                          rb"[^\r\n]*(?:mount rpc error|hungup|timed out|I/O|i/o|connection)", body)):
         raise ValueError("C3 did not demonstrate a failed primary read after link loss")
     routes = {}
     for node, identity in route.peers.items():
