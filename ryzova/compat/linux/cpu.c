@@ -154,16 +154,45 @@ static void vector_bytes(Cpu *c, Operand o, unsigned int reg, unsigned int opcod
     }
     else for(i=0;i<16;i++)c->xmm[reg][i]^=data[i];
 }
-/* Compact runs scalar floating point with masked exceptions. */
-static double scalar_double(Cpu *c,Operand operand)
+static uint64_t scalar_bits(Cpu *c,Operand operand)
+{
+    uint64_t bits;
+    if(operand.reg<0)return get(c,operand,8);
+    memcpy(&bits,c->xmm[operand.reg],8);
+    return bits;
+}
+
+static double bits_double(uint64_t bits)
 {
     double value;
-    if(operand.reg>=0)memcpy(&value,c->xmm[operand.reg],8);
-    else{
-        uint64_t bits=get(c,operand,8);
-        memcpy(&value,&bits,8);
-    }
+    memcpy(&value,&bits,8);
     return value;
+}
+
+/* Binary64 comparison without relying on the host compiler's NaN handling. */
+static unsigned int scalar_compare(uint64_t a,uint64_t b)
+{
+    const uint64_t sign=UINT64_C(0x8000000000000000);
+    const uint64_t infinity=UINT64_C(0x7ff0000000000000);
+    uint64_t left=a&~sign,right=b&~sign;
+    if(left>infinity || right>infinity)return CF|PF|ZF;
+    if(a==b || !(left|right))return ZF;
+    if((a^b)&sign)return a&sign?CF:0;
+    return ((left<right)!=((a&sign)!=0))?CF:0;
+}
+
+static uint64_t scalar_arithmetic(unsigned int op,uint64_t a,uint64_t b)
+{
+    double left=bits_double(a),right=bits_double(b),value;
+    uint64_t bits;
+    switch(op){
+    case 0x58:value=left+right;break;
+    case 0x59:value=left*right;break;
+    case 0x5c:value=left-right;break;
+    default:value=left/right;break;
+    }
+    memcpy(&bits,&value,8);
+    return bits;
 }
 static uint64_t resultflags(Cpu *c,uint64_t v,unsigned int size)
 {
@@ -641,7 +670,7 @@ static int step(Cpu *c)
         else if(op2==0x2c && c->repeat==0xf2 && !c->operand16 && size==4){
             double value;
             rm=decode(c,&reg,&group,8);
-            value=scalar_double(c,rm);
+            value=bits_double(scalar_bits(c,rm));
             if(!c->fault){
                 v=UINT32_C(0x80000000);
                 if(value>=-2147483648.0 && value<2147483648.0)v=(uint32_t)(int32_t)value;
@@ -649,29 +678,20 @@ static int step(Cpu *c)
             }
         }
         else if((op2==0x2e || op2==0x2f) && c->operand16 && !c->repeat){
-            double left,right;
             rm=decode(c,&reg,&group,8);
-            right=scalar_double(c,rm);
+            b=scalar_bits(c,rm);
             if(!c->fault){
-                memcpy(&left,c->xmm[reg],8);
-                c->flags&=~(uint64_t)(CF|PF|AF|ZF|SF|OF);
-                if(left!=left || right!=right)c->flags|=CF|PF|ZF;
-                else if(left==right)c->flags|=ZF;
-                else if(left<right)c->flags|=CF;
+                memcpy(&a,c->xmm[reg],8);
+                c->flags=(c->flags&~(uint64_t)(CF|PF|AF|ZF|SF|OF))|scalar_compare(a,b);
             }
         }
         else if((op2==0x58 || op2==0x59 || op2==0x5c || op2==0x5e || op2==0x5f) && c->repeat==0xf2 && !c->operand16){
-            double left,right;
             rm=decode(c,&reg,&group,8);
-            right=scalar_double(c,rm);
+            b=scalar_bits(c,rm);
             if(!c->fault){
-                memcpy(&left,c->xmm[reg],8);
-                if(op2==0x58)left+=right;
-                else if(op2==0x59)left*=right;
-                else if(op2==0x5c)left-=right;
-                else if(op2==0x5e)left/=right;
-                else if(!(left>right))left=right;
-                memcpy(c->xmm[reg],&left,8);
+                memcpy(&a,c->xmm[reg],8);
+                v=op2==0x5f?(scalar_compare(a,b)==0?a:b):scalar_arithmetic(op2,a,b);
+                memcpy(c->xmm[reg],&v,8);
             }
         }
         else if(op2==0x70 && c->operand16 && !c->repeat){

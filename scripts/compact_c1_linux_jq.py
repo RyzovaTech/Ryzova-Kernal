@@ -106,7 +106,7 @@ def native_commands():
             f"$c1 -r -b 16777216 {grant}{NATIVE_JQ} {argv} >{base}.out >[2]{base}.log",
             f"echo C1_{name}_BEGIN; grep '^COMPACT_LINUX_RESULT ' {base}.log",
             f"grep -v '^COMPACT_(LINUX_RESULT|JOBS_STATS|RESOURCE_STATS) ' {base}.log >{base}.err",
-            f"sha1sum -2 256 {base}.out {base}.err; echo C1_{name}_END",
+            f"sha1sum -2 256 {base}.out {base}.err; cat {base}.out {base}.err; echo C1_{name}_END",
         ]
     commands += [f"sha1sum -2 256 {path}", "echo COMPACT_C1_LINUX_DONE"]
     return commands
