@@ -1,5 +1,28 @@
 name: Compact Windows W7 jq baseline
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/compact_c2_*.py'
+      - 'scripts/compact_c3_*.py'
+      - 'scripts/compact_c1_jq_contract.py'
+      - 'scripts/compact_windows_w7_jq.py'
+      - 'scripts/compact_windows_w7_tls.py'
+      - 'scripts/compact_windows_w7_native.py'
+      - 'scripts/compact_windows_w7_imports.py'
+      - 'scripts/compact_windows_w7_startup.py'
+      - 'scripts/compact_windows_w7_sync.py'
+      - 'scripts/compact_windows_w7_trace.py'
+      - 'tests/test_compact_windows_w7.py'
+      - 'tests/test_compact_windows_w7_imports.py'
+      - 'tests/test_compact_windows_w7_startup.py'
+      - 'tests/test_compact_windows_w7_sync.py'
+      - 'tests/test_compact_windows_w7_trace.py'
+      - 'tests/test_compact_windows_w2.py'
+      - 'tests/test_compact_windows_w4.py'
+      - 'tests/fixtures/windows_w7_admission.c'
+      - 'ryzova/compat/windows/**'
+      - '.github/workflows/compact-windows-w7.yml'
   pull_request:
     paths:
       - 'scripts/compact_c2_*.py'
