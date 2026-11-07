@@ -701,6 +701,7 @@ static int64_t dispatch(RyzLinuxProcess *p, const RyzLinuxRegs *regs)
     case 41:case 42:case 43:case 44:case 45:case 46:case 47:case 48:case 49:case 50:case 51:case 52:case 53:case 54:case 55:case 288:
         return p->world?net_call(p,regs):-L_ENOSYS;
     case 40:return -L_ENOSYS; /* sendfile: callers can fall back to read/write. */
+    case 334:return -L_ENOSYS; /* rseq: libc can use its non-rseq fallback. */
     case 32:return duplicate_min(p,regs->rdi,0,0);
     case 33:
         if(regs->rdi==regs->rsi)return regs->rdi<RYZ_LINUX_FD_MAX && p->fds[regs->rdi].open?(int64_t)regs->rdi:-L_EBADF;

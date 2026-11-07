@@ -32,6 +32,7 @@ from ryzova.remote.phase7_fixture import Ephemeral9PTLSFixture
 from phase7_secure_closeout import gateway_metrics_report
 from phase7_native_guest_tls import commands as native_tls_commands, inspect as inspect_native_tls
 from phase8_guest_identity import commands as guest_identity_commands, inspect as inspect_guest_identity
+from compact_c1_linux_jq import native_fixtures as c1_fixtures, native_commands as c1_commands, inspect_native as inspect_c1
 from phase9_compact_native import commands as compact_commands, fixtures as compact_fixtures, inspect as inspect_compact
 from phase9_linux_environment import commands as environment_commands, fixtures as environment_fixtures, payload as environment_payload, inspect as inspect_environment
 from phase9_process import build as build_process, commands as process_commands, inspect as inspect_process
@@ -67,6 +68,7 @@ archive_hash = subprocess.check_output(["sha256sum", str(ARCHIVE)], text=True).s
     "Archive includes kernel, nusb user-space source, sys/include and amd64/include from exact commit.\n"
 )
 print("SOURCE_SHA", SOURCE_SHA, "ARCHIVE_SHA256", archive_hash, flush=True)
+c1_fixtures(OUT)
 fetch_busybox(OUT)
 fetch_shell(OUT)
 jobs_fixture_sha256=jobs_fixtures(OUT)
@@ -375,6 +377,9 @@ runtime_commands=[
     "ip/ipconfig -d ether /net/ether0; webfs; sleep 4; echo RYZOVA_RUNTIME_STAGE_3",
     "hget http://10.0.2.2:8000/network-probe.txt | grep RYZOVA_NETWORK_DATA > /dev/null && echo RYZOVA_NETWORK_OK; echo RYZOVA_RUNTIME_STAGE_4",
 ] + [command for _, command in PHASE41_STAGES] + [command for _, command in PHASE45_STAGES] + [command for _, command in guest_commands()] + [command for _, command in native_tls_commands(tls_fixture.guest_cert_sha256)] + list(guest_identity_commands()) + compact_commands() + environment_commands() + process_commands(SOURCE_SHA) + busybox_commands(SOURCE_SHA) + shell_commands(SOURCE_SHA) + jobs_commands(SOURCE_SHA) + vfs_commands(SOURCE_SHA) + application_commands(SOURCE_SHA)[:-1] + [application_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))}"] + thread_commands(SOURCE_SHA)[:-1] + [thread_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))+len(thread_commands(SOURCE_SHA))}"] + socket_commands(SOURCE_SHA)[:-1] + [socket_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))+len(thread_commands(SOURCE_SHA))+len(socket_commands(SOURCE_SHA))}"] + persistence_commands(SOURCE_SHA)[:-1] + [persistence_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{136+len(application_commands(SOURCE_SHA))+len(thread_commands(SOURCE_SHA))+len(socket_commands(SOURCE_SHA))+len(persistence_commands(SOURCE_SHA))}"] + external_commands(SOURCE_SHA)[:-1] + [external_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{symlink_start(SOURCE_SHA)-1}"] + symlink_commands(SOURCE_SHA)[:-1] + [symlink_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{hardlink_start(SOURCE_SHA)-1}"] + hardlink_commands(SOURCE_SHA)[:-1] + [hardlink_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{map_start(SOURCE_SHA)-1}"] + map_commands(SOURCE_SHA)[:-1] + [map_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{rootfs_start(SOURCE_SHA)-1}"] + rootfs_commands(SOURCE_SHA)[:-1] + [rootfs_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{mount_start(SOURCE_SHA)-1}"] + mount_commands(SOURCE_SHA)[:-1] + [mount_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{private_start(SOURCE_SHA)-1}"] + private_commands(SOURCE_SHA)[:-1] + [private_commands(SOURCE_SHA)[-1]+f"; echo RYZOVA_RUNTIME_STAGE_{process_resource_start(SOURCE_SHA)-1}"] + process_resource_commands(SOURCE_SHA)
+runtime_commands[-1] += f"; echo RYZOVA_RUNTIME_STAGE_{len(runtime_commands)-1}"
+for command in c1_commands():
+    runtime_commands.append(f"{command}; echo RYZOVA_RUNTIME_STAGE_{len(runtime_commands)}")
 bootstate=dict(bootargs=False,user=False,command=False,write_test=False,post_test=False,m0_probe_sent=False,runtime_test=False,runtime_stage=-1)
 with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
     second=subprocess.Popen(fresh_cmd,stdout=host,stderr=subprocess.STDOUT)
@@ -459,7 +464,7 @@ with (OUT/"fresh-kernel-qemu-host.log").open("wb") as host:
                     bootstate["runtime_stage"]=i+1
                     guest.sendall((runtime_commands[i+1]+"\r").encode())
                     print("FRESH KERNEL: 9P/storage/network stage",i+1,"sent after rc prompt",flush=True)
-            if re.search(rb"(?:\r?\n)FLEX_PROC_RESOURCE_DONE(?:\r?\n)",bytes(bootlog)):
+            if re.search(rb"(?:\r?\n)COMPACT_C1_LINUX_DONE(?:\r?\n)",bytes(bootlog)):
                 print("FRESH KERNEL: regression command sequence completed",flush=True)
                 break
     finally:
@@ -507,6 +512,9 @@ m4_legacy_enabled=(ROOT / "ryzova/drivers/m4-legacy-qualification.json").is_file
 m2_pci_ok=(not m2_enabled or run_probe(
     cmd, SER, MON, OUT, memory_mib=384 if m4_legacy_enabled else None
 ))
+c1_evidence = inspect_c1(bytes(bootlog), SOURCE_SHA)
+(OUT / "compact-c1-linux-jq.json").write_text(json.dumps(c1_evidence, indent=2) + "\n")
+print("NATIVE COMPACT C1 LINUX JQ", c1_evidence["passed"], flush=True)
 compact_evidence = inspect_compact(bytes(raw), bytes(bootlog), SOURCE_SHA)
 (OUT / "phase9-compact-native.json").write_text(json.dumps(compact_evidence, indent=2) + "\n")
 print("NATIVE COMPACT SUBSET", compact_evidence["passed"], flush=True)
@@ -618,7 +626,7 @@ for label,ok in native_9p_evidence["checks"].items():
     f"V7 native 9front tlsclient pinned TLS1.2 9P: {guest_tls_evidence['passed']}\n"
 )
 print("FRESH BOOT SERIAL TAIL:",boottext[-7000:],flush=True)
-if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"] and guest_identity_evidence["passed"] and compact_evidence["passed"] and environment_evidence["passed"] and process_evidence["passed"] and busybox_evidence["passed"] and shell_evidence["passed"] and jobs_evidence["passed"] and vfs_evidence["passed"] and application_evidence["passed"] and thread_evidence["passed"] and socket_evidence["passed"] and persistence_evidence["passed"] and external_evidence["passed"] and symlink_evidence["passed"] and hardlink_evidence["passed"] and map_evidence["passed"] and rootfs_evidence["passed"] and mount_evidence["passed"] and private_evidence["passed"] and process_resource_evidence["passed"]):
+if not (bootstate["bootargs"] and fresh_rc_ok and identity_ok and runtime_ok and m0_pci_ok and m2_pci_ok and write_denied and regression_ok and stability["passed"] and extended["passed"] and native_9p_evidence["passed"] and phase7_secure_evidence["passed"] and guest_tls_evidence["passed"] and guest_identity_evidence["passed"] and compact_evidence["passed"] and environment_evidence["passed"] and process_evidence["passed"] and busybox_evidence["passed"] and shell_evidence["passed"] and jobs_evidence["passed"] and vfs_evidence["passed"] and application_evidence["passed"] and thread_evidence["passed"] and socket_evidence["passed"] and persistence_evidence["passed"] and external_evidence["passed"] and symlink_evidence["passed"] and hardlink_evidence["passed"] and map_evidence["passed"] and rootfs_evidence["passed"] and mount_evidence["passed"] and private_evidence["passed"] and process_resource_evidence["passed"] and c1_evidence["passed"]):
     print("FAIL V3: no verifiable freshly built kernel-to-userspace boot",file=sys.stderr)
     sys.exit(1)
 print("PASS native 9front tlsclient pinned TLS1.2 guest ingress and host mutual TLS1.3 peer; native 9P guest SHA, M2/M4 preserved.",flush=True)

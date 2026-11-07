@@ -22,18 +22,8 @@ jobs:
           persist-credentials: false
       - run: python3 scripts/compact_c1_linux_jq.py evidence/linux-jq.json
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: compact-c1-linux-jq
           path: evidence/linux-jq.json
           if-no-files-found: error
-      - name: Collect pinned fixture for opcode diagnosis
-        run: |
-          curl -fsSL --max-time 60 https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64 -o evidence/jq-linux-amd64
-          echo '020468de7539ce70ef1bceaf7cde2e8c4f2ca6c3afb84642aabc5c97d9fc2a0d  evidence/jq-linux-amd64' | sha256sum -c
-          objdump -d --start-address=0x403a60 --stop-address=0x403a90 evidence/jq-linux-amd64
-      - uses: actions/upload-artifact@v4
-        with:
-          name: compact-c1-linux-debug-fixture
-          path: evidence/jq-linux-amd64
-          if-no-files-found: error
-          retention-days: 1

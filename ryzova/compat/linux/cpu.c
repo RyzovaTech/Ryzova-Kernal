@@ -104,19 +104,66 @@ static void vector_move(Cpu *c,Operand operand,unsigned int reg,int to_operand)
         for(i=0;i<16;i++)c->xmm[reg][i]=temporary[i];
     }
 }
-static void vector_xor(Cpu *c, Operand o, unsigned int reg)
+static uint32_t vector_u32(const unsigned char *p)
 {
-    unsigned char data[16];
+    return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
+}
+static int vector_read(Cpu *c,Operand o,unsigned char *data,int aligned)
+{
     uint64_t at;
-    unsigned int i;
-    if(c->fault)return;
+    if(c->fault)return 0;
     if(o.reg>=0)memcpy(data,c->xmm[o.reg],16);
     else{
         at=address(c,o)+c->segment;
-        if(!ryz_memory_access(c->m,at,16,RYZ_READ)){c->fault=1;return;}
+        if((aligned && (at&15)) || !ryz_memory_access(c->m,at,16,RYZ_READ)){c->fault=1;return 0;}
         memcpy(data,c->m->bytes+(size_t)(at-c->m->base),16);
     }
-    for(i=0;i<16;i++)c->xmm[reg][i]^=data[i];
+    return 1;
+}
+static void vector_bytes(Cpu *c, Operand o, unsigned int reg, unsigned int opcode)
+{
+    unsigned char data[16];
+    unsigned int i;
+    if(!vector_read(c,o,data,opcode!=0xef && opcode!=0x57))return;
+    if(opcode==0xd4 || opcode==0xfb){
+        for(i=0;i<16;i+=8){
+            unsigned int j;
+            uint64_t a=(uint64_t)vector_u32(c->xmm[reg]+i)|((uint64_t)vector_u32(c->xmm[reg]+i+4)<<32);
+            uint64_t b=(uint64_t)vector_u32(data+i)|((uint64_t)vector_u32(data+i+4)<<32);
+            uint64_t result=opcode==0xd4?a+b:a-b;
+            for(j=0;j<8;j++)c->xmm[reg][i+j]=(unsigned char)(result>>(8*j));
+        }
+    }
+    else if(opcode==0xf8)for(i=0;i<16;i++)c->xmm[reg][i]=(unsigned char)(c->xmm[reg][i]-data[i]);
+    else if(opcode==0xda){
+        for(i=0;i<16;i++)if(data[i]<c->xmm[reg][i])c->xmm[reg][i]=data[i];
+    }
+    else if(opcode==0xdb)for(i=0;i<16;i++)c->xmm[reg][i]&=data[i];
+    else if(opcode==0xeb)for(i=0;i<16;i++)c->xmm[reg][i]|=data[i];
+    else if(opcode==0x66){
+        for(i=0;i<16;i+=4){
+            uint32_t a=vector_u32(c->xmm[reg]+i)^UINT32_C(0x80000000);
+            uint32_t b=vector_u32(data+i)^UINT32_C(0x80000000);
+            memset(c->xmm[reg]+i,a>b?255:0,4);
+        }
+    }
+    else if(opcode==0x74 || opcode==0x76){
+        unsigned int width=opcode==0x74?1:4;
+        for(i=0;i<16;i+=width)
+            memset(c->xmm[reg]+i,memcmp(c->xmm[reg]+i,data+i,width)==0?255:0,width);
+    }
+    else for(i=0;i<16;i++)c->xmm[reg][i]^=data[i];
+}
+/* Compact runs scalar floating point with masked exceptions. */
+static double scalar_double(Cpu *c,Operand operand)
+{
+    double value;
+    if(operand.reg>=0)memcpy(&value,c->xmm[operand.reg],8);
+    else{
+        uint64_t bits=get(c,operand,8);
+        memcpy(&value,&bits,8);
+    }
+    return value;
 }
 static uint64_t resultflags(Cpu *c,uint64_t v,unsigned int size)
 {
@@ -263,7 +310,7 @@ static int guest_syscall(Cpu *c)
         c->r[1]=c->cur;c->r[11]=c->flags;c->r[0]=(uint64_t)answer;c->result->syscall_count++;return RYZ_VM_OK;
     }
     if(!(c->p->world && (nr==21 || nr==26 || nr==74 || nr==75 || nr==76 || nr==77 || nr==81 || nr==82 || nr==83 || nr==84 || nr==86 || nr==265 || nr==87 || nr==88 || nr==89 || nr==266 || nr==267 || nr==90 || nr==91 || nr==95 || nr==217 || nr==258 || nr==263 || nr==280 || nr==228 || nr==229 || nr==201 || nr==318 || nr==324 || nr==19 || (c->p->world->resources && (nr==17 || nr==18 || (nr==157 && r.rdi==RYZ_FS_RESTRICT))) || (nr>=41 && nr<=55) || nr==288)) && nr!=7 && nr!=32 && nr!=33 && nr!=292 && nr!=40 && nr!=2 && nr!=8 && nr!=80 && nr!=63 && nr!=79 && nr!=105 && nr!=106 && nr!=117 && nr!=119 && nr!=13 && nr!=14 && nr!=110 && nr!=111 && nr!=4 && nr!=5 && nr!=6 && nr!=262 && nr!=107 && nr!=108 && nr!=0 && nr!=1 && nr!=3 && nr!=9 && nr!=10 && nr!=11 && nr!=12 &&
-       nr!=16 && nr!=20 && nr!=72 && nr!=39 && nr!=60 && nr!=102 && nr!=104 && nr!=186 && nr!=231 && nr!=257)
+       nr!=16 && nr!=20 && nr!=72 && nr!=39 && nr!=60 && nr!=102 && nr!=104 && nr!=186 && nr!=231 && nr!=257 && nr!=334)
         return RYZ_VM_SYSCALL_UNSUPPORTED;
     r.rax=nr; r.rdi=c->r[7]; r.rsi=c->r[6]; r.rdx=c->r[2];
     r.r10=c->r[10]; r.r8=c->r[8]; r.r9=c->r[9];
@@ -274,11 +321,24 @@ static int guest_syscall(Cpu *c)
     c->result->syscall_count++;
     return RYZ_VM_OK;
 }
+/* Report the interpreter's baseline instead of the host CPU's features. */
+static void guest_cpuid(Cpu *c)
+{
+    uint32_t leaf=(uint32_t)c->r[0];
+
+    c->r[0]=c->r[1]=c->r[2]=c->r[3]=0;
+    if(leaf==0){
+        c->r[0]=1;
+        c->r[3]=UINT32_C(0x6f7a7952); /* Ryzo */
+        c->r[2]=UINT32_C(0x6f436176); /* vaCo */
+        c->r[1]=UINT32_C(0x7461706d); /* mpat */
+    }
+}
 static int step(Cpu *c)
 {
     unsigned int op, op2=0, n, reg=0, group=0, size, type, count;
     uint64_t a,b,v=0,target=0,saved;
-    int jump=0, rv, locked=0;
+    int jump=0, rv, locked=0, address32=0;
     Operand rm, rr;
     c->cur=c->ip; c->rex=c->rex_present=0; c->size=4;
     c->repeat=0;c->operand16=0; c->segment=0;
@@ -286,10 +346,11 @@ static int step(Cpu *c)
         op=(unsigned int)fetch(c,1);
         if(c->fault)return RYZ_VM_MAP_ERROR;
         if(op>=0x40 && op<=0x4f){c->rex=op&15;c->rex_present=1;continue;}
-        if(op==0xf0 || op==0x66 || op==0xf3 || op==0xf2 || op==0x2e || op==0x3e ||
+        if(op==0xf0 || op==0x67 || op==0x66 || op==0xf3 || op==0xf2 || op==0x2e || op==0x3e ||
            op==0x26 || op==0x36 || op==0x64 || op==0x65){
             c->rex=c->rex_present=0;
             if(op==0xf0)locked=1;
+            if(op==0x67)address32=1;
             if(op==0x66){c->size=2;c->operand16=1;}
             if(op==0xf3 || op==0xf2)c->repeat=(int)op;
             if(op==0x2e || op==0x3e || op==0x26 || op==0x36)c->segment=0;
@@ -302,6 +363,8 @@ static int step(Cpu *c)
     if(c->rex&8)c->size=8;
     if(c->fault) return RYZ_VM_MAP_ERROR;
     size=c->size;
+    /* Support addr32 only for direct CALL and LEA. */
+    if(address32 && op!=0xe8 && op!=0x8d)return RYZ_VM_OPCODE_UNSUPPORTED;
     if(locked && !(op<=0x31 && ((op&7)<=1)) && op!=0xfe && op!=0xff && op!=0x86 && op!=0x87 && op!=0x09 && op!=0x80 && op!=0x81 && op!=0x83 && op!=0x0f)return RYZ_VM_OPCODE_UNSUPPORTED;
     if(size==2 && ((op>=0x50 && op<=0x5f) || op==0x68 || op==0x6a ||
                    op==0xe8 || op==0xc3 || op==0xc9 || op==0x63))
@@ -347,7 +410,7 @@ static int step(Cpu *c)
         if(op==0x88 || op==0x8a) size=1;
         rm=decode(c,&reg,&group,size); rr=regop(c,reg,size);
         if(locked && rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED;
-        if(op==0x8d){ if(rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED; v=address(c,rm); put(c,rr,size,v); }
+        if(op==0x8d){ if(rm.reg>=0)return RYZ_VM_OPCODE_UNSUPPORTED; v=address(c,rm); put(c,rr,size,address32?(uint32_t)v:v); }
         else if(op==0x88 || op==0x89){ v=get(c,rr,size); if(!c->fault)put(c,rm,size,v); }
         else { v=get(c,rm,size); if(!c->fault)put(c,rr,size,v); }
     }else if(op==0xc6 || op==0xc7){
@@ -443,12 +506,26 @@ static int step(Cpu *c)
     else if(op==0xc9){ c->r[4]=c->r[5]; c->r[5]=pop(c); }
     else if(op==0x98){ v=size==8?(uint64_t)(int64_t)(int32_t)c->r[0]:(size==4?(uint64_t)(int64_t)(int16_t)c->r[0]:(uint64_t)(int64_t)(int8_t)c->r[0]); put(c,regop(c,0,size),size,v); }
     else if(op==0x99){ put(c,regop(c,2,size),size,(c->r[0]>>(size*8-1))&1?mask(size):0); }
-    else if(op==0x90){ }
+    else if(op>=0x90 && op<=0x97){
+        reg=op-0x90+((c->rex&1)?8:0);
+        if(reg){
+            rr=regop(c,reg,size);
+            rm=regop(c,0,size);
+            a=get(c,rr,size);b=get(c,rm,size);
+            put(c,rm,size,a);put(c,rr,size,b);
+        }
+    }
     else if(op==0x0f){
         op2=(unsigned int)fetch(c,1);
         if(locked && op2!=0xc0 && op2!=0xc1 && op2!=0xb0 && op2!=0xb1)return RYZ_VM_OPCODE_UNSUPPORTED;
         if(op2==5){ if(c->fault)return RYZ_VM_MAP_ERROR; rv=guest_syscall(c); if(rv!=RYZ_VM_OK)return rv; }
-        else if(op2==0x1e && c->repeat){if(fetch(c,1)!=0xfa)return RYZ_VM_OPCODE_UNSUPPORTED;}
+        else if(op2==0xa2)guest_cpuid(c);
+        else if(op2==0x1e && c->repeat){
+            n=(unsigned int)fetch(c,1);
+            /* RDSSP leaves the destination untouched when CET is disabled. */
+            if(n!=0xfa && !(c->repeat==0xf3 && !c->operand16 && (n&0xf8)==0xc8))
+                return RYZ_VM_OPCODE_UNSUPPORTED;
+        }
         else if(op2>=0x80 && op2<=0x8f){ v=(uint64_t)(int64_t)(int32_t)fetch(c,4); target=c->cur+v; jump=condition(c,op2); }
         else if(op2>=0xc8 && op2<=0xcf){
             if(size==2)return RYZ_VM_OPCODE_UNSUPPORTED;
@@ -499,15 +576,134 @@ static int step(Cpu *c)
             if(c->operand16 && rm.reg<0 && ((address(c,rm)+c->segment)&15))return RYZ_VM_MAP_ERROR;
             vector_move(c,rm,reg,op2==0x7f);
         }
-        else if(op2==0x6c && c->operand16 && !c->repeat){
-            unsigned char bytes[8];rm=decode(c,&reg,&group,16);
-            if(rm.reg>=0)memcpy(bytes,c->xmm[rm.reg],8);
-            else{v=load(c,address(c,rm)+c->segment,8,RYZ_READ);for(count=0;count<8;count++)bytes[count]=(unsigned char)(v>>(count*8));}
-            if(!c->fault)memcpy(c->xmm[reg]+8,bytes,8);
+        else if(((op2>=0x60 && op2<=0x62) || op2==0x6a || op2==0x6c) && c->operand16 && !c->repeat){
+            unsigned char bytes[8];
+            unsigned int half=op2==0x6a?8:0;
+            rm=decode(c,&reg,&group,16);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(rm.reg>=0)memcpy(bytes,c->xmm[rm.reg]+half,8);
+            else{
+                a=address(c,rm)+c->segment;
+                if(op2!=0x6c && ((a&15) || !ryz_memory_access(c->m,a,16,RYZ_READ)))return RYZ_VM_MAP_ERROR;
+                v=load(c,a+half,8,RYZ_READ);
+                for(count=0;count<8;count++)bytes[count]=(unsigned char)(v>>(count*8));
+            }
+            if(!c->fault && op2!=0x6c){
+                unsigned char left[8];
+                unsigned int width=op2==0x6a?4:1U<<(op2-0x60);
+                memcpy(left,c->xmm[reg]+half,8);
+                for(count=0;count<8;count+=width){
+                    memcpy(c->xmm[reg]+2*count,left+count,width);
+                    memcpy(c->xmm[reg]+2*count+width,bytes+count,width);
+                }
+            }else if(!c->fault)memcpy(c->xmm[reg]+8,bytes,8);
         }
-        else if(op2==0xef || op2==0x57){
-            if((op2==0xef && size!=2) || c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
-            rm=decode(c,&reg,&group,16);vector_xor(c,rm,reg);
+        else if((op2==0x10 || op2==0x11) && c->repeat==0xf2 && !c->operand16){
+            rm=decode(c,&reg,&group,8);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(rm.reg>=0){
+                if(op2==0x10)memmove(c->xmm[reg],c->xmm[rm.reg],8);
+                else memmove(c->xmm[rm.reg],c->xmm[reg],8);
+            }else if(op2==0x10){
+                v=get(c,rm,8);
+                if(!c->fault){
+                    for(count=0;count<8;count++)c->xmm[reg][count]=(unsigned char)(v>>(count*8));
+                    memset(c->xmm[reg]+8,0,8);
+                }
+            }else{
+                v=0;
+                for(count=0;count<8;count++)v|=(uint64_t)c->xmm[reg][count]<<(count*8);
+                put(c,rm,8,v);
+            }
+        }
+        else if((op2==0x12 || op2==0x16) && !c->repeat){
+            unsigned int half=op2==0x16?8:0;
+            rm=decode(c,&reg,&group,8);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(rm.reg>=0){
+                if(c->operand16)return RYZ_VM_OPCODE_UNSUPPORTED;
+                memcpy(c->xmm[reg]+half,c->xmm[rm.reg]+(8-half),8);
+            }
+            else{
+                v=load(c,address(c,rm)+c->segment,8,RYZ_READ);
+                if(!c->fault)for(count=0;count<8;count++)c->xmm[reg][half+count]=(unsigned char)(v>>(count*8));
+            }
+        }
+        else if(op2==0x2a && c->repeat==0xf2 && !c->operand16){
+            double value;
+            rm=decode(c,&reg,&group,size);
+            v=get(c,rm,size);
+            if(!c->fault){
+                value=size==8?(double)(int64_t)v:(double)(int32_t)v;
+                memcpy(c->xmm[reg],&value,8);
+            }
+        }
+        else if(op2==0x2c && c->repeat==0xf2 && !c->operand16 && size==4){
+            double value;
+            rm=decode(c,&reg,&group,8);
+            value=scalar_double(c,rm);
+            if(!c->fault){
+                v=UINT32_C(0x80000000);
+                if(value>=-2147483648.0 && value<2147483648.0)v=(uint32_t)(int32_t)value;
+                put(c,regop(c,reg,4),4,v);
+            }
+        }
+        else if((op2==0x2e || op2==0x2f) && c->operand16 && !c->repeat){
+            double left,right;
+            rm=decode(c,&reg,&group,8);
+            right=scalar_double(c,rm);
+            if(!c->fault){
+                memcpy(&left,c->xmm[reg],8);
+                c->flags&=~(uint64_t)(CF|PF|AF|ZF|SF|OF);
+                if(left!=left || right!=right)c->flags|=CF|PF|ZF;
+                else if(left==right)c->flags|=ZF;
+                else if(left<right)c->flags|=CF;
+            }
+        }
+        else if((op2==0x58 || op2==0x59 || op2==0x5c || op2==0x5e || op2==0x5f) && c->repeat==0xf2 && !c->operand16){
+            double left,right;
+            rm=decode(c,&reg,&group,8);
+            right=scalar_double(c,rm);
+            if(!c->fault){
+                memcpy(&left,c->xmm[reg],8);
+                if(op2==0x58)left+=right;
+                else if(op2==0x59)left*=right;
+                else if(op2==0x5c)left-=right;
+                else if(op2==0x5e)left/=right;
+                else if(!(left>right))left=right;
+                memcpy(c->xmm[reg],&left,8);
+            }
+        }
+        else if(op2==0x70 && c->operand16 && !c->repeat){
+            unsigned char bytes[16];
+            rm=decode(c,&reg,&group,16);
+            n=(unsigned int)fetch(c,1);
+            if(!vector_read(c,rm,bytes,1))return RYZ_VM_MAP_ERROR;
+            for(count=0;count<4;count++)memcpy(c->xmm[reg]+4*count,bytes+4*((n>>(2*count))&3),4);
+        }
+        else if(op2==0x73 && c->operand16 && !c->repeat){
+            rm=decode(c,&reg,&group,16);
+            if(rm.reg<0 || (group!=3 && group!=7))return RYZ_VM_OPCODE_UNSUPPORTED;
+            count=(unsigned int)fetch(c,1);
+            if(c->fault)return RYZ_VM_MAP_ERROR;
+            if(count>16)count=16;
+            if(group==3){
+                memmove(c->xmm[rm.reg],c->xmm[rm.reg]+count,16-count);
+                memset(c->xmm[rm.reg]+16-count,0,count);
+            }else{
+                memmove(c->xmm[rm.reg]+count,c->xmm[rm.reg],16-count);
+                memset(c->xmm[rm.reg],0,count);
+            }
+        }
+        else if(op2==0xd7 && c->operand16 && !c->repeat){
+            rm=decode(c,&reg,&group,16);
+            if(rm.reg<0)return RYZ_VM_OPCODE_UNSUPPORTED;
+            for(count=0;count<16;count++)v|=(uint64_t)(c->xmm[rm.reg][count]>>7)<<count;
+            put(c,regop(c,reg,4),4,v);
+        }
+        else if(op2==0x66 || op2==0x74 || op2==0x76 || op2==0xd4 || op2==0xda || op2==0xdb || op2==0xeb || op2==0xef || op2==0xf8 || op2==0xfb || op2==0x57){
+            if((op2!=0x57 && !c->operand16) || c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;
+            rm=decode(c,&reg,&group,16);vector_bytes(c,rm,reg,op2);
         }
         else if(op2==0x10 || op2==0x11 || op2==0x28 || op2==0x29){
             if(c->repeat)return RYZ_VM_OPCODE_UNSUPPORTED;

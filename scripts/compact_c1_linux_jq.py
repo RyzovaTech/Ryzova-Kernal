@@ -17,6 +17,14 @@ URL = f"{RELEASE}/jq-linux-amd64"
 SIZE = 2255816
 SHA = "020468de7539ce70ef1bceaf7cde2e8c4f2ca6c3afb84642aabc5c97d9fc2a0d"
 GUEST_DIRECTORY = "/home/share"
+GUEST_INPUT = f"{GUEST_DIRECTORY}/{INPUT_NAME}"
+GUEST_QUERY = [*QUERY_ARGS[:-1], GUEST_INPUT]
+DENIED_STDERR = f"jq: error: Could not open file {GUEST_INPUT}: No such file or directory\n".encode()
+NATIVE_ROOT = "/tmp/c1-share"
+NATIVE_JQ = "/tmp/c1-jq"
+NATIVE_CASES = {"version": (0, VERSION_STDOUT, b""),
+                "query": (0, QUERY_STDOUT, b""),
+                "without_input_grant": (2, b"", DENIED_STDERR)}
 SOURCES = ("elf64", "namespace", "syscall", "subset_vm", "memory", "process", "cpu", "jobs", "jobs_probe")
 DIAGNOSTICS = re.compile(
     rb"(?m)^COMPACT_JOBS_RESULT status=(\d+) exited=([01]) exit=(\d+) steps=(\d+) "
@@ -48,13 +56,11 @@ def reference(binary, directory):
 
 
 def probe(runner, binary, directory):
-    guest_query = [*QUERY_ARGS[:-1], f"{GUEST_DIRECTORY}/{INPUT_NAME}"]
     mount = ["-M", f"r:{GUEST_DIRECTORY}={directory}"]
-    cases = {"version": ([], ["--version"], VERSION_STDOUT),
-             "query": (mount, guest_query, QUERY_STDOUT),
-             "without_input_grant": ([], guest_query, None)}
+    cases = {"version": ([], ["--version"]), "query": (mount, GUEST_QUERY),
+             "without_input_grant": ([], GUEST_QUERY)}
     records = {}
-    for name, (grants, argv, expected) in cases.items():
+    for name, (grants, argv) in cases.items():
         result = run([runner, "-r", "-b", "16777216", *grants, binary, *argv], directory)
         match = DIAGNOSTICS.search(result.stderr)
         if match is None:
@@ -64,11 +70,77 @@ def probe(runner, binary, directory):
         record = receipt(argv, result, exit_code if exited else None, stderr)
         record.update(vm_status=status, steps=steps, syscalls=syscalls,
                       last_rip=match[6].decode(), runner_exit_code=result.returncode)
-        if expected is not None:
-            record["matches_reference"] = (status, exited, exit_code, result.stdout, stderr) == (
-                0, 1, 0, expected, b"")
+        record["matches_expected"] = (status, exited, exit_code, result.stdout, stderr) == (
+            0, 1, *NATIVE_CASES[name])
         records[name] = record
     return records
+
+
+def fetch_image():
+    with urlopen(URL, timeout=30) as response:
+        image = response.read(SIZE + 1)
+    if len(image) != SIZE or sha(image) != SHA:
+        raise ValueError("jq Linux executable size or SHA-256 mismatch")
+    return image
+
+
+def native_fixtures(directory):
+    (directory / "c1-jq-amd64").write_bytes(fetch_image())
+    (directory / "c1-input.json").write_bytes(INPUT)
+
+
+def native_commands():
+    url = "http://10.0.2.2:8000"
+    path = f"{NATIVE_ROOT}/{INPUT_NAME}"
+    commands = [
+        f"mkdir -p {NATIVE_ROOT}; hget {url}/c1-input.json >{path}",
+        f"hget {url}/c1-jq-amd64 >{NATIVE_JQ}; sha1sum -2 256 {NATIVE_JQ} {path}",
+        "c1=/amd64/bin/compact-linux",
+        f"c1filter='{QUERY_ARGS[1]}'",
+    ]
+    query = f"-c $c1filter {GUEST_INPUT}"
+    for name, argv in (("version", "--version"), ("query", query), ("without_input_grant", query)):
+        base = f"/tmp/c1-{name}"
+        grant = f"-M r:{GUEST_DIRECTORY}={NATIVE_ROOT} " if name == "query" else ""
+        commands += [
+            f"$c1 -r -b 16777216 {grant}{NATIVE_JQ} {argv} >{base}.out >[2]{base}.log",
+            f"echo C1_{name}_BEGIN; grep '^COMPACT_LINUX_RESULT ' {base}.log",
+            f"grep -v '^COMPACT_(LINUX_RESULT|JOBS_STATS|RESOURCE_STATS) ' {base}.log >{base}.err",
+            f"sha1sum -2 256 {base}.out {base}.err; echo C1_{name}_END",
+        ]
+    commands += [f"sha1sum -2 256 {path}", "echo COMPACT_C1_LINUX_DONE"]
+    return commands
+
+
+def inspect_native(serial, commit):
+    def digests(data, path):
+        return re.findall(rb"(?m)^([0-9a-f]{64})[ \t]+" + re.escape(path.encode()) + rb"\r?$", data)
+
+    path = f"{NATIVE_ROOT}/{INPUT_NAME}"
+    input_digest = sha(INPUT)
+    checks = {
+        "binary_sha256": digests(serial, NATIVE_JQ) == [SHA.encode()],
+        "input_unchanged": digests(serial, path) == [input_digest.encode()] * 2,
+        "completed": re.search(rb"(?m)^COMPACT_C1_LINUX_DONE\r?$", serial) is not None,
+    }
+    cases = {}
+    for name, (code, stdout, stderr) in NATIVE_CASES.items():
+        base = f"/tmp/c1-{name}"
+        label = f"C1_{name}".encode()
+        section = re.search(rb"(?ms)^" + label + rb"_BEGIN\r?\n(.*?)^" + label + rb"_END\r?$", serial)
+        body = section[1] if section else b""
+        state = re.findall(rb"(?m)^COMPACT_LINUX_RESULT status=(\d+) exited=([01]) exit=(\d+) "
+                           rb"steps=([1-9]\d*) syscalls=([1-9]\d*)\r?$", body)
+        out = digests(body, base + ".out")
+        err = digests(body, base + ".err")
+        passed = (len(state) == 1 and tuple(map(int, state[0][:3])) == (0, 1, code)
+                  and out == [sha(stdout).encode()] and err == [sha(stderr).encode()])
+        cases[name] = dict(passed=passed, result=[list(map(int, values)) for values in state],
+                           stdout_sha256=[value.decode() for value in out],
+                           stderr_sha256=[value.decode() for value in err])
+    return dict(schema="compact-c1-linux-native-jq/v1", source_commit=commit,
+                binary_sha256=SHA, input_sha256=input_digest, checks=checks, cases=cases,
+                passed=all(checks.values()) and all(case["passed"] for case in cases.values()))
 
 
 def main():
@@ -77,10 +149,7 @@ def main():
     args = parser.parse_args()
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("C1 Linux reference requires Linux x86_64")
-    with urlopen(URL, timeout=30) as response:
-        image = response.read(SIZE + 1)
-    if len(image) != SIZE or sha(image) != SHA:
-        raise ValueError("jq Linux executable size or SHA-256 mismatch")
+    image = fetch_image()
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     with tempfile.TemporaryDirectory() as work:
         directory = Path(work)
@@ -107,6 +176,8 @@ def main():
     output = json.dumps(report, indent=2) + "\n"
     args.output.write_text(output, encoding="utf-8")
     print(output, end="")
+    if not all(case["matches_expected"] for case in hosted_cases.values()):
+        raise SystemExit("Compact Linux hosted jq parity failed")
 
 
 if __name__ == "__main__":
