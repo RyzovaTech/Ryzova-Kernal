@@ -146,7 +146,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
         if not sqlite:
             expected_stderr = f'jq: error: Could not open file {INPUT_NAME}: No such file or directory\n'.encode()
             status = re.findall(rb'(?m)^M8_' + arch.encode() + rb'_DENIED_STATUS ([^\r\n]*)\r?$', run)
-            if (status != [b'guest exit 2'] or
+            if (len(status) != 1 or not re.fullmatch(rb'compact-macos-m8 [1-9]\d*: guest exit 2', status[0]) or
                     digest_line(run, f'{path}-no-grant.out') != hashlib.sha256(b'').hexdigest() or
                     digest_line(run, f'{path}-no-grant.err') != hashlib.sha256(expected_stderr).hexdigest()):
                 raise ValueError(f'{arch}: native query without a grant did not exit with the expected error')
