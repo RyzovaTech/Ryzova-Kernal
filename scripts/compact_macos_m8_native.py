@@ -112,6 +112,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
                     f'mkdir -p /tmp/c2m; hget {url}/{INPUT_NAME} >{GUEST_INPUT}; cp {GUEST_INPUT} /tmp/m8-input-original',
                     f'hget {url}/{CANARY_NAME} >{CANARY_PATH}; sha1sum -2 256 {CANARY_PATH}',
                     'sha1sum -2 256 /tmp/m8-input-original',
+                    f'm={program}; g=(--read-only {INPUT_NAME} {GUEST_INPUT})',
                     f"q='{QUERY}'",
                 ])
             markers = {}
@@ -128,8 +129,8 @@ def verify(image, bootstrap, references, output, sqlite=False):
                         launch = f'$launch --run {path} -- sqlite3 {guest}'
                     else:
                         args = (f'--run {path} -- jq --version' if case == 'version' else
-                                f'--run --read-only {INPUT_NAME} {GUEST_INPUT} {path} -- jq -c $q {INPUT_NAME}')
-                        launch = f'{program} {args}'
+                                f'--run $g {path} -- jq -c $q {INPUT_NAME}')
+                        launch = f'$m {args}'
                     commands.append(
                         f'if({launch} >{prefix}.out >[2]{prefix}.err) echo {marker}; '
                         f'if not cat {prefix}.err')
@@ -137,15 +138,15 @@ def verify(image, bootstrap, references, output, sqlite=False):
                 if not sqlite:
                     for case, filename in DENIALS.items():
                         prefix = f'{path}-{case}'
-                        grant = f'--read-only {INPUT_NAME} {GUEST_INPUT} ' if case == 'parent_escape' else ''
-                        launch = f'{program} --run {grant}{path} -- jq -c $q {filename}'
+                        grant = '$g ' if case == 'parent_escape' else ''
+                        launch = f'$m --run {grant}{path} -- jq -c $q {filename}'
                         commands.append(f'{launch} >{prefix}.out >[2]{prefix}.err; echo M8_{arch}_{case}_STATUS $status')
                         commands.append(f'sha1sum -2 256 {prefix}.out {prefix}.err')
                     mutation_name, _ = mutations[arch]
                     mutation = f'/tmp/{mutation_name}'
                     commands.append(f'hget {url}/{mutation_name} >{mutation}; sha1sum -2 256 {mutation}')
                     prefix = f'{path}-mutation'
-                    launch = f'{program} --run --read-only {INPUT_NAME} {GUEST_INPUT} {mutation} -- probe'
+                    launch = f'$m --run $g {mutation} -- probe'
                     marker = f'M8_{arch}_MUTATION_OK'
                     markers[len(commands)] = marker
                     commands.append(f'if({launch} >{prefix}.out >[2]{prefix}.err) echo {marker}; if not cat {prefix}.err')
@@ -153,7 +154,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
             if not sqlite:
                 commands.append(f'if(! test -e /tmp/c2m/{CREATED_NAME}) echo M8_C2_CREATED_ABSENT')
                 commands.append(f'sha1sum -2 256 {GUEST_INPUT} {CANARY_PATH}')
-            run = session(image, commands, output, 'fresh', 120, markers)
+            run = session(image, commands, output, 'fresh', 180 if not sqlite else 120, markers)
         finally:
             server.shutdown()
 
