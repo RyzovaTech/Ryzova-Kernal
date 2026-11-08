@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #include "api.h"
 #include "files_native.h"
 static int random_bytes(void *context,unsigned char *out,size_t n) {
