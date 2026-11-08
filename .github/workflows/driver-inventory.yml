@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 name: D0.1 AMD64 driver inventory (source-only)
 on:
   push:
