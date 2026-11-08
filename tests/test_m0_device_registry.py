@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Fail-closed M0 candidate matcher; synthetic devices are NOT hardware support."""
 import copy
 import sys

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #include "../windows/runtime.h"
 #include "m8_start.h"
 #include "m8_fma.h"

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 </$objtype/mkfile
 TARG=compact-windows
 OFILES=loader.$O cpu.$O api.$O crt.$O sync_objects.$O files.$O files_native.$O sync_protocol.$O native_runner.$O

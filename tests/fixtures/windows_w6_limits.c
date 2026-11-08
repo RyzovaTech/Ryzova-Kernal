@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Resource-profile probes: compiled on Windows, bounds are specific to Flex. */
 #if !defined(_WIN64) || !defined(W6_CASE)
 #error Windows AMD64 and W6_CASE required

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 name: D0.2 PCI and firmware evidence (source-only)
 on:
   push:

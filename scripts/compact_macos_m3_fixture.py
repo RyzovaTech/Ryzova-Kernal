@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Generate the project-owned, freestanding M3 Mach-O fixture."""
 from pathlib import Path
 import struct

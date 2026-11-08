@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 # Read-only inventory. This does not boot, install or certify Ryzova Kernel.
 [CmdletBinding()]
 param(

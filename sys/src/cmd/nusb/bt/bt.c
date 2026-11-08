@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * Opt-in USB Bluetooth HCI event transport diagnostic for Ryzova.
  * Not a Bluetooth host stack; no pairing, encryption, ACL, SCO or LE connection

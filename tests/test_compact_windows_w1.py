@@ -1,6 +1,7 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """W1 contract/boundary checks are not Windows execution qualification."""
 from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -82,7 +83,20 @@ class WindowsW1Tests(unittest.TestCase):
         self.assertFalse(plan['windows_execution_qualified']);self.assertFalse(plan['general_windows_compatibility_claim'])
         for gate in plan['requirements']:self.assertEqual(gate['state'],'pending')
         self.assertEqual(plan['limits'],LIMITS);self.assertEqual(plan['planned_apis'],APIS)
-    def test_audit_snapshot_pins_the_actual_baseline_sources(self):
+    def test_audit_snapshot_pins_historical_sources_after_spdx_only_change(self):
+        # W1 receipt is immutable historical evidence from AGPL-marked source.
+        # For comparison only, reconstruct the old license header to ensure the
+        # code bytes are otherwise identical. Current source SHA remains distinct.
         receipt=json.loads((ROOT/'docs/validation/compact-windows-w1-audit.json').read_text());current=audit()
-        self.assertEqual(receipt['source_sha256'],current['source_sha256']);self.assertEqual(receipt['cases'],current['cases']);self.assertFalse(receipt['windows_execution_qualified'])
+        historical={}
+        for name in receipt['source_sha256']:
+            data=(ROOT/name).read_bytes()
+            current_spdx=b'SPDX-License-Identifier: GPL-3.0-only'
+            old_spdx=b'SPDX-License-Identifier: AGPL-3.0-only'
+            self.assertEqual(data.count(current_spdx),1,name)
+            old_bytes=data.replace(current_spdx,old_spdx,1)
+            historical[name]=hashlib.sha256(old_bytes).hexdigest()
+        self.assertEqual(receipt['source_sha256'],historical)
+        self.assertEqual(receipt['cases'],current['cases'])
+        self.assertFalse(receipt['windows_execution_qualified'])
 if __name__=='__main__':unittest.main()

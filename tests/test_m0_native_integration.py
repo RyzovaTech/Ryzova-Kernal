@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """M0 native Ryzova pc64 read-only wiring and reviewed PCI rules."""
 import copy
 import sys

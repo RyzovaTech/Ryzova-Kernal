@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Descriptor-rooted Linux test transport. No guest string is a global host path.
    openat2 is mandatory: fail closed on kernels without required resolution flags. */
 #ifndef _GNU_SOURCE

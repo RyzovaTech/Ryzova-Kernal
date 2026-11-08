@@ -78,7 +78,7 @@ def main() -> int:
     spdx_files: list[dict[str, str]] = []
     for name in paths:
         # Bounded reads: inventory common source formats without scanning binary data.
-        if not name.endswith((".c", ".h", ".s", ".S", ".py", ".sh", ".mk", ".rs", ".go", ".y", ".l")):
+        if not (name.endswith((".c", ".h", ".s", ".S", ".py", ".sh", ".mk", ".rs", ".go", ".y", ".l", ".ps1", ".rc", ".yml", ".yaml")) or (name.startswith("ryzova/") and name.endswith("/mkfile"))):
             continue
         try:
             with (ROOT / name).open("rb") as handle:
@@ -103,16 +103,36 @@ def main() -> int:
         if matched == 0:
             errors.append(f"Expected upstream exception path has no tracked files: {prefix}")
 
+    # Candidate inventory only; these path prefixes do not establish ownership.
+    migration_candidates = [
+        item for item in spdx_files
+        if item["spdx"] == "AGPL-3.0-only" and (
+            item["path"].startswith(("ryzova/", "scripts/", "tests/", ".github/workflows/"))
+            or item["path"].startswith("sys/src/9/port/ryzova")
+            or item["path"].startswith("sys/src/9/port/virtgpuwire")
+            or item["path"].startswith("sys/src/9/arm64/m5ecam")
+            or item["path"].startswith("sys/src/cmd/nusb/bt/")
+            or item["path"].startswith("sys/src/cmd/nusb/lib/m1class")
+            or item["path"] == "sys/src/9/port/devryzova.c"
+        )
+    ]
+    if migration_candidates:
+        errors.append(
+            "Ryzova-origin files still carry AGPL-3.0-only headers: "
+            + ", ".join(item["path"] for item in migration_candidates)
+        )
+
     result = {
         "description": "Preliminary tracked-file license inventory; NOT legal clearance",
         "tracked_file_count": len(paths),
         "copyright_license_notice_paths": copyright_markers,
         "explicit_spdx_files": spdx_files,
+        "ryzova_agpl_migration_candidates": migration_candidates,
         "upstream_exceptions": mapped_exceptions,
         "warnings": [
             "SPDX identifiers are not a definitive determination of actual license rights.",
             "Unmarked third-party assets may have additional terms; manual review is required.",
-            "Commercial license applicability requires specific documented ownership and grants.",
+            "GPLv3 migration of Ryzova-origin AGPL files requires specific documented ownership and grants; no separate proprietary relicensing program is offered.",
             "Historical AGPL public grants and inherited third-party licenses remain in force.",
         ],
         "errors": errors,
@@ -123,6 +143,7 @@ def main() -> int:
     print(f"Tracked files: {len(paths)}")
     print(f"Files named LICENSE/COPYING/COPYRIGHT/NOTICE: {len(copyright_markers)}")
     print(f"Source files with detected SPDX headers: {len(spdx_files)}")
+    print(f"Ryzova AGPL migration candidates (not rights-cleared): {len(migration_candidates)}")
     print(f"Audit inventory written to {output.relative_to(ROOT)}")
     for item in mapped_exceptions:
         print(f"Known license exception {item['path_prefix']}: {item['tracked_file_count']} tracked file(s)")

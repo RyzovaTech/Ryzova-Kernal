@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """TLS executes guest instructions, preserves isolation and fails closed."""
 import ctypes as C
 import hashlib

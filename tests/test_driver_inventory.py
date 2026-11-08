@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Tests for the AMD64 pc64 configuration source inventory."""
 import hashlib
 import json

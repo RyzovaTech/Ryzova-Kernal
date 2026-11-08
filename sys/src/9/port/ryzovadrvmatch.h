@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* M0.3 portable driver-family matcher; prototype only, NOT kernel-linked. */
 #ifndef RYZOVA_DRVMATCH_H
 #define RYZOVA_DRVMATCH_H

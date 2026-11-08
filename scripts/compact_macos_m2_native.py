@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Build and execute the pinned M1 program in a source-built Flex QEMU guest."""
 import functools
 import hashlib

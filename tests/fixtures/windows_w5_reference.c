@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Six frozen MSVC workloads. Only explicit kernel32/UCRT exports, no CRT startup. */
 #if !defined(_WIN64) || !defined(W5_CASE)
 #error Windows AMD64 target and W5_CASE required

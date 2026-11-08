@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """D0.2: audit PCI probe evidence and firmware references in selected AMD64 drivers.
 
 No extracted ID is a promise that a physical device works. Source code is

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef MAC_ARM64_H
 #define MAC_ARM64_H
 #include "workload.h"

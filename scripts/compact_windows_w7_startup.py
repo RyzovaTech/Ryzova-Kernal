@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Stateful file-API mode and dynamic TLS with explicit extended API grants."""
 import argparse
 import hashlib

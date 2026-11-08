@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Reproducible PE with static TLS and ordered process-attach callbacks."""
 import argparse
 import hashlib
