@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Guest-owned bounded objects. Never pass handles/pointers to the host OS. */
 #include "api.h"
 #include "files.h"
