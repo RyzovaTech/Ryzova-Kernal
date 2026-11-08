@@ -1,5 +1,7 @@
 # Phase 2 completion report — policy and automation
 
+> **Historical report (superseded licensing policy).** This document records the original Phase 2 decisions at the time. The current project policy is GPLv3-only for eligible Ryzova-controlled code, with no separate proprietary relicensing program. See [`LICENSE.md`](../LICENSE.md) and [`GPLV3-MIGRATION-AUDIT.md`](GPLV3-MIGRATION-AUDIT.md). The original historical AGPL grants remain valid.
+
 **Scope:** contributor and outward-facing rights rules, brand/marks conventions, build standards and automated inventory. This is **not** a legal opinion, complete copyright clearance, native build or a boot certification.
 
 ## Deliverables
