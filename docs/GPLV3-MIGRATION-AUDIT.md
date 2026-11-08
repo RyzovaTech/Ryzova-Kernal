@@ -34,6 +34,16 @@ These headers were read from `main` during the 2026-11-08 preliminary audit. **T
 
 Already observed with `GPL-3.0-only` headers: `ryzova/compat/linux/cpu.c`, `ryzova/compat/macos/macho64.c`, `ryzova/remote/trust.py` and `scripts/audit_licenses.py`. These samples do not establish all files' status or authorship.
 
+## Proposed pilot conversions in this review branch
+
+The following files have proposed **header-only** `AGPL-3.0-only` → `GPL-3.0-only` changes on `policy/gplv3-community-first-20261108`, based on Ryzova-account git authorship checks:
+
+- `sys/src/9/port/devryzova.c`
+- `sys/src/9/port/ryzovadrvprobe.c`
+- `ryzova/compat/windows/loader.c`
+
+**Approval still required before merging:** the rights holder must confirm exclusive or sufficient rights for *all* contributions and any reused/generated material in these files. Git commit authorship alone is not conclusive evidence of copyright ownership. The other candidates above have not been changed in this branch.
+
 ## Per-file migration checklist
 
 1. **Inventory:** enumerate all tracked project files, including generated headers, scripts, docs, and tests; use `python3 scripts/audit_licenses.py` and inspect its `explicit_spdx_files`. An SPDX header is only one piece of evidence.
