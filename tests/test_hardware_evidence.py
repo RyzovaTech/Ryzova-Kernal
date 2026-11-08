@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """D0.2 source-evidence extraction regression checks."""
 import sys
 import unittest

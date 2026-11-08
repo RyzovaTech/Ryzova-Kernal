@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Real object state, transactional waits, bounded handles and recursive locks."""
 import ctypes as C
 from pathlib import Path
