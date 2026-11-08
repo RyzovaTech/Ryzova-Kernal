@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Execution and adversarial admission tests for a finite Windows AMD64 subset."""
 import ctypes as C
 import hashlib

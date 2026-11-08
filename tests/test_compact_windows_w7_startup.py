@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Extended grants, stateful startup APIs and per-environment dynamic TLS."""
 import ctypes as C
 from pathlib import Path
