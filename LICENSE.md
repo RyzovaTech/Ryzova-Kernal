@@ -10,7 +10,7 @@ The 9front Git history and [`lib/legal/NOTICE`](lib/legal/NOTICE), [`lib/legal/m
 
 Ryzova-controlled, newly authored source explicitly marked `SPDX-License-Identifier: GPL-3.0-only` is licensed under the [GNU General Public License version 3 only](LICENSES/GPL-3.0-only.txt). This is a **free and open-source license**, including for commercial use when its terms are followed. Redistribution, modifications and corresponding-source obligations follow the GPLv3 text.
 
-This change is limited to files for which Ryzova has sufficient outbound licensing authority. Identifying a file as Ryzova-specific does **not** prove every contribution is owned by one holder. Review file history, outside contributions and reused material before assuming a proprietary commercial alternative is available.
+This change is limited to files for which Ryzova has sufficient outbound licensing authority. Identifying a file as Ryzova-specific does **not** prove every contribution is owned by one holder. Review file history, outside contributions and reused material before treating any file as sufficiently rights-controlled for a new GPLv3 offer.
 
 ## Historical AGPL-3.0-only grants
 
