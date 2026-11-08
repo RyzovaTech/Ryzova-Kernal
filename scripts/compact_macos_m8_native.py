@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Verify Compact macOS M8 version and JSON query output after booting the source-built guest."""
 import argparse
 import functools

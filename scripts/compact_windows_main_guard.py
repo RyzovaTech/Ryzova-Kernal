@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Strict, opt-in W1-W6 main integration boundary. NOT a release certification.
 
 The single main PR must consist of independently engineered Windows

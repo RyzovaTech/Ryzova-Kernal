@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Exercise the M8 loader and startup boundary with exact macOS reference bytes."""
 import argparse
 import ctypes as C

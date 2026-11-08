@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Capture upstream jq macOS references and measure M6 image admission."""
 import argparse
 import hashlib

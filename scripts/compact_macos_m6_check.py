@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Compare the actual macOS binaries with the hosted Flex harness."""
 from pathlib import Path
 import subprocess

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """W3 import fixture construction, bounded hosted launcher and Windows comparison."""
 import argparse
 import hashlib
