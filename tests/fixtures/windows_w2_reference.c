@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* Leaf, import-free PE32+ reference: Windows and Flex must compute the same DWORD. */
 #if !defined(_WIN64)
 #error AMD64 Windows target required

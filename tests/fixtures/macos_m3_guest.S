@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* SysV main arguments. The Darwin-numbered traps use M3's bounded profile. */
 .text
 .globl start

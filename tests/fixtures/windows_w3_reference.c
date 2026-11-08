@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* No CRT: all nine W3 imports must behave before the success markers appear. */
 #if !defined(_WIN64)
 #error Windows AMD64 target required
