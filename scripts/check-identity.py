@@ -16,7 +16,7 @@ assert meta["version"] in driver
 assert meta["foundation"] in driver
 assert meta["abi"] in driver
 assert "ryzovadevtab" in driver
-assert "SPDX-License-Identifier: AGPL-3.0-only" in driver
+assert "SPDX-License-Identifier: GPL-3.0-only" in driver
 assert any(line.strip().startswith("ryzova") for line in config.splitlines())
 assert profile["architecture"]=="amd64"
 assert profile["native_tool"]=="mk"
