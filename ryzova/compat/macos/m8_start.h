@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef MAC_M8_START_H
 #define MAC_M8_START_H
 #include "m8_image.h"
