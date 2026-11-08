@@ -1,22 +1,29 @@
-## Change type
+## Summary and scope
 
-- [ ] 9front upstream import (include exact SHA)
-- [ ] Ryzova-authored code
+Describe what changed, why it is needed, and any alternatives or known limitations.
+
+## Source origin / change type
+
+- [ ] 9front upstream import (include the exact upstream commit SHA and upstream notices)
+- [ ] Ryzova-origin code
 - [ ] Third-party dependency or asset
 - [ ] Documentation / tooling only
 
-## Legal provenance
+## Licensing and provenance
 
-- [ ] Upstream / third-party copyright and license notices preserved.
-- [ ] New file SPDX markers are correct and I have rights to contribute this content.
-- [ ] License exceptions and potential dual-licensing rights are documented.
-- [ ] No claim of proprietary rights in 9front or other third-party code.
+- [ ] Existing upstream/third-party copyright and notices are preserved.
+- [ ] SPDX identifiers are appropriate for each **rights-controlled** new file; no source has been silently relicensed.
+- [ ] Any copied, generated or AI-assisted code is identified and rights/provenance checked.
+- [ ] I am authorized to contribute the proposed code. I understand that submitting a PR does **not** assign copyright to Ryzova.
+- [ ] No proprietary relicensing rights are presumed; the current Ryzova-origin project policy is GPL-3.0-only. Inherited 9front code retains its actual original licenses and exceptions.
 
-## Verification
+## Verification and safety
 
-- [ ] Source and license CI run.
-- [ ] Native build run **or documented as not yet available**.
-- [ ] QEMU/hardware smoke test run **or documented as not yet available**.
-- [ ] Interface and compatibility impact described.
+- [ ] Relevant source/license/test commands run; include output and commit SHA.
+- [ ] Native 9front build performed **or explicitly marked not run**.
+- [ ] QEMU/real-hardware checks performed **or explicitly marked not run**.
+- [ ] Interface, compatibility, performance and kernel/driver security impacts described.
+- [ ] No exploitable security details are disclosed publicly (see [SECURITY.md](../SECURITY.md)).
 
-**Source origin, test commands, relevant logs, known risks:**
+**Commands, relevant logs, source provenance, test results, untested scenarios and known risks:**
+
