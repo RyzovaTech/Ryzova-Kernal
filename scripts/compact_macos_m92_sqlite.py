@@ -36,6 +36,13 @@ CASES = {
     'version': ['--version'],
     'query': ['-batch', '-noheader', '-init', '/dev/null', ':memory:', 'SELECT 6*7;'],
 }
+TRANSACTION_SQL = (
+    'CREATE TABLE c4_items(id INTEGER PRIMARY KEY,value INTEGER NOT NULL);'
+    'BEGIN;INSERT INTO c4_items VALUES(1,2),(2,3),(3,5);COMMIT;'
+    'BEGIN;INSERT INTO c4_items VALUES(4,99);ROLLBACK;'
+    'SELECT count(*),sum(value) FROM c4_items;PRAGMA integrity_check;'
+)
+CASES['transactions'] = CASES['query'][:-1]+[TRANSACTION_SQL]
 DOWNLOAD_LIMIT = 8*1024*1024
 IMAGE_LIMIT = 8*1024*1024
 
@@ -104,7 +111,7 @@ def check_cases(cases):
             raise ValueError(f'SQLite {name} returned an unexpected status or stderr')
         if name == 'version' and not data.startswith(VERSION.encode()+b' '):
             raise ValueError(f'unexpected SQLite version: {data!r}')
-        if name == 'query' and data != b'42\n':
+        if name in ('query', 'transactions') and data != (b'42\n' if name == 'query' else b'3|10\nok\n'):
             raise ValueError(f'unexpected SQLite query result: {data!r}')
 
 
@@ -295,6 +302,9 @@ def audit(lib, references, output, execute=False):
         results[arch] = dict(reference=receipt, **mapped, guest_execution_verified=execute)
         if execute:
             results[arch]['hosted_cases'] = check_execution(lib, arch, image, receipt['cases'])
+            if arch == 'arm64':
+                from compact_c4_arm_instructions import check_arm_instructions
+                results[arch].update(check_arm_instructions(lib, image))
         print(f'{arch}: mapped {mapped["mapped_bytes"]} bytes, {mapped["binds"]} binds, '
               f'{mapped["rebases"]} rebases')
     output.parent.mkdir(parents=True, exist_ok=True)

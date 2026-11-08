@@ -6,6 +6,8 @@ on:
       - 'ryzova/compat/windows/cpu.c'
       - 'scripts/compact_macos_m8_native.py'
       - 'scripts/compact_macos_m92_sqlite.py'
+      - 'scripts/compact_c4_arm_instructions.py'
+      - 'tests/test_compact_c4_cpu.py'
       - '.github/workflows/compact-macos-m92.yml'
   workflow_dispatch:
 
@@ -51,6 +53,8 @@ jobs:
         with:
           pattern: macos-m92-sqlite-*
           path: references
+      - name: Check SSE4 flags, aliases, register sources and reserved encodings
+        run: python3 -m unittest discover -s tests -p test_compact_c4_cpu.py -v
       - name: Verify SQLite mapping and hosted execution parity
         run: |
           cc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -fPIC -shared \

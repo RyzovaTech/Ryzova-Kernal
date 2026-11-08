@@ -555,6 +555,23 @@ static int tick(CwMachine *m,int windows_bootstrap) {
             o=operand(&d,&reg,&group,8);
             d.error=scalar_double(&d,second,reg,o,n);
         }
+        else if(second==0x38 && d.prefix==0x66){
+            unsigned char source[16];
+            unsigned int third=(unsigned int)fetch(&d,1),i,any_and=0,any_andnot=0;
+            if(third!=0x17 && third!=0x31)return CW_OPCODE;
+            o=operand(&d,&reg,&group,third==0x31?4:16);
+            if(third==0x17 && o.reg<0 && (address(&d,o)&15))return CW_MEMORY;
+            d.error=xmm_read(&d,o,source,third==0x31?4:16);
+            if(!d.error && third==0x31){ /* PMOVZXBD */
+                for(i=0;i<4;i++)xmm_put(m->xmm[reg]+i*4,4,source[i]);
+            }else if(!d.error){
+                for(i=0;i<16;i++){
+                    any_and|=m->xmm[reg][i]&source[i];
+                    any_andnot|=(unsigned char)~m->xmm[reg][i]&source[i];
+                }
+                m->flags=(m->flags&~UINT64_C(0x8d5))|(any_and?0:ZF)|(any_andnot?0:CF);
+            }
+        }
         else if((second==0xe6 && (d.prefix==0x66 || d.prefix==0xf3)) ||
                 (second==0xc2 && d.prefix==0x66)){
             o=operand(&d,&reg,&group,8);
@@ -651,8 +668,10 @@ static int tick(CwMachine *m,int windows_bootstrap) {
         }
         else if(second==0x3a && d.prefix==0x66){
             unsigned int lane,width=(d.rex&8)?8:4;
-            if(fetch(&d,1)!=0x22)return CW_OPCODE; /* PINSRD/PINSRQ */
-            o=operand(&d,&reg,&group,width);
+            unsigned int third=(unsigned int)fetch(&d,1);
+            if(third==0x20)width=1; /* PINSRB */
+            else if(third!=0x22)return CW_OPCODE; /* PINSRD/PINSRQ */
+            o=operand(&d,&reg,&group,width==1?4:width);
             lane=(unsigned int)fetch(&d,1)&(16/width-1);
             v=get(&d,o,width);
             if(!d.error)xmm_put(m->xmm[reg]+lane*width,width,v);

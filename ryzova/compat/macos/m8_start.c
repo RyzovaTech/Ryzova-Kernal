@@ -1630,16 +1630,53 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
             if(mode&(bytes-1))
                 return 0;
             memmove(fp[rd]+(imm>>(cond+1))*bytes, fp[rn]+mode, bytes);
+        }else if((op&0xbfffe000U)==0x0d400000U){ /* LD1 byte lane, no writeback */
+            mode = ((op>>30)&1)*8+((op>>12)&1)*4+((op>>10)&3);
+            p = guest_read(plan, arena, stack, v, 1, services);
+            if(!p)
+                return 0;
+            fp[rd][mode] = *p;
+        }else if((op&0xbfffe400U)==0x0d404000U){ /* LD1 halfword lane, no writeback */
+            mode = ((op>>30)&1)*8+((op>>12)&1)*4+((op>>11)&1)*2;
+            p = guest_read(plan, arena, stack, v, 2, services);
+            if(!p)
+                return 0;
+            memcpy(fp[rd]+mode, p, 2);
         }else if((op&0xfffffc00U)==0x4d408400U){ /* LD1 D lane 1 */
             p = guest_read(plan, arena, stack, v, 8, services);
             if(!p)
                 return 0;
             memcpy(fp[rd]+8, p, 8);
-        }else if((op&0xffe0fc00U)==0x4e201c00U || (op&0xffe0fc00U)==0x6e201c00U){ /* AND/EOR V.16B */
+        }else if((op&0xbfe0fc00U)==0x0e201c00U || (op&0xbfe0fc00U)==0x2e201c00U){ /* AND/EOR V.8B/V.16B */
             rt2 = (op>>16)&31;
-            for(bytes=0; bytes<16; bytes++)
+            for(bytes=0; bytes<((op&(1U<<30)) ? 16U : 8U); bytes++)
                 fp[rd][bytes] = (op&(1U<<29)) ? fp[rn][bytes]^fp[rt2][bytes] :
                                                  fp[rn][bytes]&fp[rt2][bytes];
+            if(!(op&(1U<<30)))
+                memset(fp[rd]+8, 0, 8);
+        }else if((op&0x9f80fc00U)==0x0f00a400U && (op&0x00780000U)){ /* SSHLL/USHLL, including upper half */
+            imm = (op>>16)&127;
+            if(imm<8 || imm>=64)
+                return 0;
+            bytes = imm>=32 ? 4 : imm>=16 ? 2 : 1;
+            mode = imm-bytes*8;
+            access = (op&(1U<<30)) ? 8 : 0;
+            for(cond=0; cond<8/bytes; cond++){
+                v = read_le(fp[rn]+access+cond*bytes, bytes);
+                if(!(op&(1U<<29)))
+                    v = sign_extend(v, bytes*8);
+                write_le(vector+cond*bytes*2, bytes*2, v<<mode);
+            }
+            memcpy(fp[rd], vector, 16);
+        }else if((op&0xbf3ffc00U)==0x0e209800U){ /* CMEQ element, zero */
+            bytes = 1U<<((op>>22)&3);
+            access = (op&(1U<<30)) ? 16 : 8;
+            if(bytes==8 && access==8)
+                return 0;
+            memset(vector, 0, 16);
+            for(mode=0; mode<access; mode+=bytes)
+                memset(vector+mode, read_le(fp[rn]+mode, bytes) ? 0 : 255, bytes);
+            memcpy(fp[rd], vector, 16);
         }else if((op&0xffe0fc00U)==0x6ee08c00U){ /* CMEQ V.2D */
             rt2 = (op>>16)&31;
             for(bytes=0; bytes<16; bytes+=8)
@@ -1647,6 +1684,15 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
         }else if((op&0xfffffc00U)==0x6e205800U){ /* MVN V.16B */
             for(bytes=0; bytes<16; bytes++)
                 fp[rd][bytes] = ~fp[rn][bytes];
+        }else if((op&0xbfe0fc00U)==0x0e807800U){ /* ZIP2 V.2S/V.4S */
+            rt2 = (op>>16)&31;
+            bytes = (op&(1U<<30)) ? 16 : 8;
+            memset(vector, 0, 16);
+            for(mode=0; mode<bytes/8; mode++){
+                memcpy(vector+mode*8, fp[rn]+bytes/2+mode*4, 4);
+                memcpy(vector+mode*8+4, fp[rt2]+bytes/2+mode*4, 4);
+            }
+            memcpy(fp[rd], vector, 16);
         }else if((op&0xffe0fc00U)==0x4e801800U){ /* UZP1 V.4S */
             rt2 = (op>>16)&31;
             memcpy(vector, fp[rn], 4);
@@ -1654,19 +1700,41 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
             memcpy(vector+8, fp[rt2], 4);
             memcpy(vector+12, fp[rt2]+8, 4);
             memcpy(fp[rd], vector, 16);
-        }else if((op&0xdfe0fc00U)==0x4ea08400U){ /* ADD/SUB V.4S */
+        }else if((op&0xdfe0fc00U)==0x4e809400U){ /* MLA/MLS V.4S */
             rt2 = (op>>16)&31;
             for(bytes=0; bytes<16; bytes+=4){
+                v = read_le(fp[rn]+bytes, 4)*read_le(fp[rt2]+bytes, 4);
+                access = read_le(fp[rd]+bytes, 4);
+                write_le(vector+bytes, 4, (op&(1U<<29)) ? access-v : access+v);
+            }
+            memcpy(fp[rd], vector, 16);
+        }else if((op&0x9fe0fc00U)==0x0ea08400U){ /* ADD/SUB V.2S/V.4S */
+            rt2 = (op>>16)&31;
+            for(bytes=0; bytes<((op&(1U<<30)) ? 16U : 8U); bytes+=4){
                 v = read_le(fp[rn]+bytes, 4);
                 access = read_le(fp[rt2]+bytes, 4);
                 write_le(fp[rd]+bytes, 4, (op&(1U<<29)) ? v-access : v+access);
             }
+            if(!(op&(1U<<30)))
+                memset(fp[rd]+8, 0, 8);
         }else if((op&0xfffffc00U)==0x4eb1b800U){ /* ADDV S, V.4S */
             v = 0;
             for(bytes=0; bytes<16; bytes+=4)
                 v += read_le(fp[rn]+bytes, 4);
             memset(fp[rd], 0, 16);
             write_le(fp[rd], 4, v);
+        }else if((op&0xffe0fc00U)==0x4e001c00U){ /* INS Vd.element, Wn/Xn */
+            imm = (op>>16)&31;
+            if(!imm)
+                return 0;
+            bytes = 1;
+            while(!(imm&bytes))
+                bytes <<= 1;
+            if(bytes>8)
+                return 0;
+            mode = (imm/(bytes*2))*bytes;
+            v = rn==31 ? 0 : r[rn];
+            write_le(fp[rd]+mode, bytes, v);
         }else if((op&0xfffffc00U)==0x4e080c00U){ /* DUP Vd.2D, Xn */
             v = rn==31 ? 0 : r[rn];
             write_le(fp[rd], 8, v);
@@ -1785,11 +1853,13 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
                         fp[rd][bytes] = (imm&(1U<<(bytes%8))) ? 255 : 0;
                 }else
                     memset(fp[rd], imm, size);
-            }else if(mode<12 && !(mode&1) && !(op&(1U<<29))){
+            }else if(mode<12 && !(mode&1)){
                 bytes = mode<8 ? 4 : 2;
-                imm <<= (mode%(bytes*2))*4;
+                v = (Word)imm<<((mode%(bytes*2))*4);
+                if(op&(1U<<29))
+                    v = ~v;
                 for(cond=0; cond<size; cond+=bytes)
-                    write_le(fp[rd]+cond, bytes, imm);
+                    write_le(fp[rd]+cond, bytes, v);
             }else
                 return 0;
         }else if(((op&0xfe000000U)==0xac000000U || (op&0xfe000000U)==0x6c000000U) && (mode=(op>>23)&3)!=0){ /* STP/LDP D/Q */
@@ -1820,9 +1890,14 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
                 else
                     r[rn] = addr;
             }
-        }else if(((op&0xffa00000U)==0x3c800000U || (op&0xffa00000U)==0xfc000000U) &&
-                 (mode=(op>>10)&3)!=2){ /* D/Q unscaled/indexed */
-            bytes = op>>31 ? 8 : 16;
+        }else if((op&0x3f200000U)==0x3c000000U &&
+                 (mode=(op>>10)&3)!=2){ /* B/H/S/D/Q unscaled/indexed */
+            bytes = 1U<<((op>>30)&3);
+            if(op&(1U<<23)){
+                if(bytes!=1)
+                    return 0;
+                bytes = 16;
+            }
             addr = v+sign_extend((op>>12)&0x1ff, 9);
             access = mode==1 ? v : addr;
             if(mode && rn==31 && (addr%16 || !stack_span(addr, 0)))
@@ -1870,9 +1945,14 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
                     return 0;
                 memcpy(dst, fp[rd], bytes);
             }
-        }else if((op&0xff800000U)==0xfd000000U ||
-                 (op&0xff800000U)==0x3d800000U){ /* LDR/STR D/Q, unsigned offset */
-            bytes = (op>>31) ? 8 : 16;
+        }else if((op&0x3f000000U)==0x3d000000U){ /* LDR/STR B/H/S/D/Q, unsigned offset */
+            mode = (op>>30)&3;
+            if(op&(1U<<23)){
+                if(mode)
+                    return 0;
+                bytes = 16;
+            }else
+                bytes = 1U<<mode;
             addr = v+imm*bytes;
             if(op&(1U<<22)){
                 p = guest_read(plan, arena, stack, addr, bytes, services);
@@ -1943,6 +2023,16 @@ arm_start(const Mac8Image *plan, const unsigned char *image, unsigned char *aren
                 mode--;
             if(rd!=31)
                 r[rd] = bytes-mode;
+        }else if((op&0x7ffffc00U)==0x5ac00400U){ /* REV16 W/X */
+            v = rn==31 ? 0 : r[rn];
+            bytes = op>>31 ? 8 : 4;
+            access = 0;
+            for(mode=0; mode<bytes; mode+=2){
+                access |= ((v>>(8*mode))&255)<<(8*(mode+1));
+                access |= ((v>>(8*(mode+1)))&255)<<(8*mode);
+            }
+            if(rd!=31)
+                r[rd] = access;
         }else if((op&0xfffffc00U)==0x5ac00800U || (op&0xfffffc00U)==0xdac00c00U){ /* REV W/X */
             v = rn==31 ? 0 : r[rn];
             bytes = op>>31 ? 8 : 4;
