@@ -13,15 +13,15 @@
 
 ## File-level migration implementation
 
-The changes in pull request #118 replace `SPDX-License-Identifier: AGPL-3.0-only` with `GPL-3.0-only` on **154 identified Ryzova-origin source, tests, build scripts, and tooling files**, without otherwise rewriting their implementations.
+The changes in pull request #118 replace `SPDX-License-Identifier: AGPL-3.0-only` with `GPL-3.0-only` on **155 identified Ryzova-origin source, tests, build scripts, and tooling files**, without otherwise rewriting their implementations.
 
 | Ryzova-origin area | Migrated headers |
 | --- | ---: |
-| `ryzova/` compatibility runtimes and build scripts | 46 |
+| `ryzova/` compatibility runtimes and build scripts | 47 |
 | `scripts/` driver, reference and compatibility tooling | 43 |
 | `sys/` Ryzova-added kernel/device/USB helpers | 14 |
 | `tests/` Ryzova source fixtures and qualification tests | 51 |
-| **Total** | **154** |
+| **Total** | **155** |
 
 The `sys/` list includes explicitly added AMD64 kernel extensions, ARM64 `m5ecam`, USB `hciwire` and `m1class` files. This audit used tracked-file enumeration and a comparison against the pinned 9front upstream source commit `a0806493926c04ce90d4e4a46961dec30a1054dd` to identify Ryzova-added source paths. A new path in Git does **not** prove independent originality or ownership.
 
@@ -59,7 +59,7 @@ Inspect `artifacts/license-inventory.json`, especially `ryzova_agpl_migration_ca
 ## Checklist
 
 - [x] Identify new-source files relative to pinned upstream and inspect Ryzova-origin AGPL headers.
-- [x] Update 154 identified Ryzova AGPL source/test/tooling headers to GPLv3-only in the review branch.
+- [x] Update 155 identified Ryzova AGPL source/test/tooling headers to GPLv3-only in the review branch.
 - [x] Keep original Plan 9/9front sources and notices unchanged.
 - [x] Preserve historical AGPL license text and older grants.
 - [x] Correct generator template, identity assertion, license inventory and contributor-policy text.

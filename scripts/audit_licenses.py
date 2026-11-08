@@ -78,7 +78,7 @@ def main() -> int:
     spdx_files: list[dict[str, str]] = []
     for name in paths:
         # Bounded reads: inventory common source formats without scanning binary data.
-        if not (name.endswith((".c", ".h", ".s", ".S", ".py", ".sh", ".mk", ".rs", ".go", ".y", ".l", ".ps1", ".rc")) or (name.startswith("ryzova/") and name.endswith("/mkfile"))):
+        if not (name.endswith((".c", ".h", ".s", ".S", ".py", ".sh", ".mk", ".rs", ".go", ".y", ".l", ".ps1", ".rc", ".yml", ".yaml")) or (name.startswith("ryzova/") and name.endswith("/mkfile"))):
             continue
         try:
             with (ROOT / name).open("rb") as handle:
@@ -107,7 +107,7 @@ def main() -> int:
     migration_candidates = [
         item for item in spdx_files
         if item["spdx"] == "AGPL-3.0-only" and (
-            item["path"].startswith(("ryzova/", "scripts/", "tests/"))
+            item["path"].startswith(("ryzova/", "scripts/", "tests/", ".github/workflows/"))
             or item["path"].startswith("sys/src/9/port/ryzova")
             or item["path"].startswith("sys/src/9/port/virtgpuwire")
             or item["path"].startswith("sys/src/9/arm64/m5ecam")
