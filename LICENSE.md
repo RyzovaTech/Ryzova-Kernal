@@ -1,5 +1,17 @@
 # Ryzova Kernel — file-level license map
 
+## At a glance: MIT + GPLv3
+
+| Part of the repository | Applicable license |
+| --- | --- |
+| Original Plan 9 and 9front source | **MIT**, except where original notices specify another license or restriction |
+| Ryzova-authored source with valid `SPDX-License-Identifier: GPL-3.0-only` headers | **GNU GPL version 3 only** (for files the relevant rights holders are authorized to license) |
+| Third-party files, included programs, fonts, and other assets | **Their own original licenses and exceptions**, not automatically MIT or GPLv3 |
+| Previously distributed AGPLv3 versions | **Prior AGPLv3 rights remain valid**; current GPLv3 policy does not revoke them |
+
+**In short:** Ryzova Kernel combines MIT-licensed 9front/Plan 9 code with GPLv3-licensed Ryzova code. This is a **file-level license map**, not a statement that the entire repository is under one license. Preserve upstream attributions, exceptions and any historical grants.
+
+
 **This repository contains multiple inherited and Ryzova-origin licenses. No single license governs the entire inherited 9front / Plan 9 source tree.** Ryzova's current policy is GPL-3.0-only for newly authored source it is authorized to license, without a separate proprietary licensing program.
 
 ## Inherited 9front / Plan 9 sources
