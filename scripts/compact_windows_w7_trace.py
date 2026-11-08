@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Execute the pinned jq bytes in an explicit fail-stop diagnostic profile."""
 import argparse
 import hashlib

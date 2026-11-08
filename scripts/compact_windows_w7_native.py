@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Verify pinned jq and compatibility fixtures on a source-built Ryzova Kernel."""
 import argparse
 import functools

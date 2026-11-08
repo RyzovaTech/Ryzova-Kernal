@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Exact UCRT API-set imports using existing checked guest implementations."""
 import argparse
 import hashlib

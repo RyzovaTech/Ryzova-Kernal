@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 """Record a real jq Windows run and audit the same binary's W6 admission."""
 import argparse
 import hashlib
