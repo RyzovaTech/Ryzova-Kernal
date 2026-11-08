@@ -1,5 +1,5 @@
 #!/bin/rc
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: GPL-3.0-only
 if(! 6c -DMAC_PLAN9 -DCW_PLAN9 -I../windows m8_native.c m8_image.c m8_heap.c m8_fma.c m8_start.c)
     exit compile-macos
 cd ../windows
