@@ -109,13 +109,18 @@ def main() -> int:
         if item["spdx"] == "AGPL-3.0-only" and (
             item["path"].startswith(("ryzova/", "scripts/", "tests/"))
             or item["path"].startswith("sys/src/9/port/ryzova")
-            or item["path"] in (
-                "sys/src/9/port/devryzova.c",
-                "sys/src/9/port/virtgpuwire.c",
-                "sys/src/9/port/virtgpuwire.h",
-            )
+            or item["path"].startswith("sys/src/9/port/virtgpuwire")
+            or item["path"].startswith("sys/src/9/arm64/m5ecam")
+            or item["path"].startswith("sys/src/cmd/nusb/bt/")
+            or item["path"].startswith("sys/src/cmd/nusb/lib/m1class")
+            or item["path"] == "sys/src/9/port/devryzova.c"
         )
     ]
+    if migration_candidates:
+        errors.append(
+            "Ryzova-origin files still carry AGPL-3.0-only headers: "
+            + ", ".join(item["path"] for item in migration_candidates)
+        )
 
     result = {
         "description": "Preliminary tracked-file license inventory; NOT legal clearance",
