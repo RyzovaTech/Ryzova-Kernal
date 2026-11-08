@@ -120,7 +120,7 @@ def verify(image, bootstrap, references, output, sqlite=False):
             for arch, (name, _) in binaries.items():
                 path = f'/tmp/m8-{arch}'
                 commands.append(f'hget {url}/{name} > {path}; sha1sum -2 256 {path}')
-                for case in ('version', 'query'):
+                for case in cases_by_arch[arch]:
                     prefix = f'{path}-{case}'
                     marker = f'M8_{arch}_{case}_OK'
                     markers[len(commands)] = marker
