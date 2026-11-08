@@ -10,7 +10,7 @@ Ryzova Kernel is an **experimental 9front/Plan 9-derived kernel and systems-soft
 
 > **Current status (6 November 2026):** Native AMD64 kernel source builds and QEMU boots are demonstrated. Selected Linux ELF, Windows PE/Win32, and Intel/ARM64 macOS Mach-O workloads have experimental interpreter/runtime and native-guest evidence. Broader app compatibility, physical-hardware qualification, production security, release authorization, and an official public kernel binary remain **incomplete**.
 >
-> This summary was reviewed against `main` at [`e6e17d7`](https://github.com/RyzovaTech/Ryzova-Kernal/commit/e6e17d7feefb7b29df11f9dd07d4fa7f2e1aa596). Historical documents and CI receipts can refer to earlier commits or superseded stages; they are not blanket certification of current or future revisions.
+> This summary was reviewed against `main` at [`e6e17d7`](https://github.com/RyzovaTech/Ryzova-Kernel/commit/e6e17d7feefb7b29df11f9dd07d4fa7f2e1aa596). Historical documents and CI receipts can refer to earlier commits or superseded stages; they are not blanket certification of current or future revisions.
 
 ## More than an upstream 9front rebuild
 
@@ -98,7 +98,7 @@ Read [build evidence](docs/BUILD.md), [native 9P/TLS security limits](docs/PHASE
 - **Native AMD64 build:** on a supported 9front environment with the required native toolchain, follow [`docs/BUILD.md`](docs/BUILD.md) and `sys/src/9/pc64/mkfile`; the native build uses `mk`, **not GNU Make**.
 - **Reproducible QEMU evidence:** inspect [`.github/workflows/phase3-native-build.yml`](.github/workflows/phase3-native-build.yml) and [`scripts/phase3-native-build.py`](scripts/phase3-native-build.py). Additional selected Windows/macOS and Linux checks use their own workflows and test harnesses.
 - **Compatibility acceptance:** start with the environment-specific docs, exact pinned reference binaries, native logs, negative tests and recorded PR-head workflow results; do not substitute a local host success for native evidence.
-- **CI:** [GitHub Actions](https://github.com/RyzovaTech/Ryzova-Kernal/actions). At the source snapshot cited above, 28 push-triggered workflow runs for that exact `main` SHA reported success. This is **CI evidence for those jobs**, not physical-hardware or public-release certification.
+- **CI:** [GitHub Actions](https://github.com/RyzovaTech/Ryzova-Kernel/actions). At the source snapshot cited above, 28 push-triggered workflow runs for that exact `main` SHA reported success. This is **CI evidence for those jobs**, not physical-hardware or public-release certification.
 
 ## Source provenance and branches
 
@@ -106,7 +106,7 @@ Read [build evidence](docs/BUILD.md), [native 9P/TLS security limits](docs/PHASE
 - **`upstream/front`** retains a historical 9front source reference. **Automatic upstream synchronization is disabled**; no automatic upstream source or driver merge is configured.
 - **`integration/*`** branches may be used for reviewed integrations and independent upstream evaluations.
 
-The original 9front history was imported at `a0806493926c04ce90d4e4a46961dec30a1054dd` through [PR #1](https://github.com/RyzovaTech/Ryzova-Kernal/pull/1). Upstream: [9front.org](https://9front.org/) · [9front source](https://git.9front.org/) · [GitHub mirror](https://github.com/9front/9front).
+The original 9front history was imported at `a0806493926c04ce90d4e4a46961dec30a1054dd` through [PR #1](https://github.com/RyzovaTech/Ryzova-Kernel/pull/1). Upstream: [9front.org](https://9front.org/) · [9front source](https://git.9front.org/) · [GitHub mirror](https://github.com/9front/9front).
 
 For the frozen earlier AMD64 development reference and recovery protocol, see [Phase 4.0 baseline](docs/PHASE4-0.md) and [`ryzova/baselines/amd64-phase4.0.json`](ryzova/baselines/amd64-phase4.0.json). Historical phase documents remain useful for reproducing *their own* snapshots; the old Phase 4.1 status is no longer the project's complete roadmap.
 
