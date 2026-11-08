@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only
+/* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (c) 2026 Ryzova contributors.
  *
  * Ryzova-specific, read-only Plan 9 device interface. This source was
