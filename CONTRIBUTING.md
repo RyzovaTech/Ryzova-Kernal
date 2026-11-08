@@ -14,7 +14,7 @@ Ryzova Kernel is a 9front-derived source project. Please preserve upstream histo
 
 ## Contributor rights
 
-A code contribution must be yours to submit (or properly authorized) and accurately credited. **No assignment or commercial relicensing is silently assumed.** For new Ryzova-specific source explicitly marked GPL-3.0-only, the inbound license is GPLv3 unless a separate, explicit agreement is signed. Existing AGPL-marked files and earlier AGPL grants remain governed by their applicable terms. To incorporate a contribution into a separately commercially licensed component, a legally adequate additional grant is required before accepting it for that component. See [contributor licensing policy](docs/CONTRIBUTOR-LICENSING.md).
+A code contribution must be yours to submit (or properly authorized) and accurately credited. **No copyright assignment is required or silently assumed.** Ryzova's policy for new, rights-controlled project source is `GPL-3.0-only`, and there is **no separate proprietary relicensing program**. Existing AGPL-marked files must undergo a file-by-file rights check before any new GPLv3 offer; historical AGPL grants remain valid. Preserve inherited upstream and third-party licenses. See [contributor licensing policy](docs/CONTRIBUTOR-LICENSING.md) and the [GPLv3 migration audit](docs/GPLV3-MIGRATION-AUDIT.md).
 
 The upstream 9front project has its **own** [contribution conditions](lib/legal/contributing), including a restriction on computer-generated code submitted **to 9front**. Ryzova submissions are not automatically upstream submissions. Check and comply with upstream policy independently if proposing work upstream.
 
