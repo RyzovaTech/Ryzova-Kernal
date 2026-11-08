@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef RYZOVA_NUSB_BT_HCIWIRE_H
 #define RYZOVA_NUSB_BT_HCIWIRE_H
 
