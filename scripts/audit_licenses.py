@@ -78,7 +78,7 @@ def main() -> int:
     spdx_files: list[dict[str, str]] = []
     for name in paths:
         # Bounded reads: inventory common source formats without scanning binary data.
-        if not name.endswith((".c", ".h", ".s", ".S", ".py", ".sh", ".mk", ".rs", ".go", ".y", ".l")):
+        if not (name.endswith((".c", ".h", ".s", ".S", ".py", ".sh", ".mk", ".rs", ".go", ".y", ".l", ".ps1", ".rc")) or (name.startswith("ryzova/") and name.endswith("/mkfile"))):
             continue
         try:
             with (ROOT / name).open("rb") as handle:
