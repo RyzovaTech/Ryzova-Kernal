@@ -1,65 +1,71 @@
-# Ryzova GPLv3 migration — review ledger (Mission 1)
+# Ryzova Kernel — GPLv3 source migration (Mission 1)
 
-**Status:** IN PROGRESS. This is a review ledger, not a legal certification, a complete repository-wide SPDX inventory, or a grant of rights to third-party code.
+**Technical status (2026-11-08): migration implemented on the review branch.**
+**Legal status: no independent copyright-chain or binary-redistribution certification.** This document is a source-level migration report, not a legal opinion.
 
-## Decision and scope
+## Decision
 
-- Ryzova's chosen outbound policy for **new and appropriately rights-controlled Ryzova-origin** files is `GPL-3.0-only`.
-- The optional proprietary/commercial relicensing program is discontinued. GPLv3 continues to permit commercial use under its actual conditions.
-- The inherited 9front/Plan 9 tree, notices and git history are **not relicensed or replaced**. Third-party exceptions remain file-specific.
-- Previously distributed AGPLv3 copies retain valid existing grants. The full `LICENSES/AGPL-3.0-only.txt` text remains in the repository.
-- This policy does not by itself convert existing `AGPL-3.0-only` file headers; specific files require checks and a deliberate tracked commit.
+- Ryzova's outbound policy for appropriately rights-controlled **Ryzova-origin source** is `GPL-3.0-only`.
+- The optional proprietary/commercial code-relicensing program is discontinued.
+- GPLv3 permits commercial use under its terms; compliant GPLv3 users do not need to purchase another license.
+- The inherited 9front/Plan 9 tree and third-party copyrights, licenses and notices are **not** relicensed.
+- Already issued AGPLv3 versions keep their historical grants. `LICENSES/AGPL-3.0-only.txt` remains in the repository.
 
-## Initial confirmed AGPL-marked candidates
+## File-level migration implementation
 
-These headers were read from `main` during the 2026-11-08 preliminary audit. **The list is illustrative, not exhaustive.** They are *migration candidates*, not automatically cleared for relicensing.
+The changes in pull request #118 replace `SPDX-License-Identifier: AGPL-3.0-only` with `GPL-3.0-only` on **144 identified Ryzova-origin source, test, and tooling files**, without otherwise rewriting their implementations.
 
-| File | Current observed SPDX | Review requirement |
-| --- | --- | --- |
-| `sys/src/9/port/devryzova.c` | `AGPL-3.0-only` | Confirm full rights in Ryzova-original implementation and contributions |
-| `sys/src/9/port/ryzovadrvprobe.c` | `AGPL-3.0-only` | Check history and Ryzova-specific kernel adapter |
-| `sys/src/9/port/ryzovadrvmatch.c` | `AGPL-3.0-only` | Check history and dependencies |
-| `sys/src/9/port/ryzovadrvmatch.h` | `AGPL-3.0-only` | Check history and dependencies |
-| `sys/src/9/port/ryzovapcirules.h` | `AGPL-3.0-only` | Generated file: verify generator inputs and source rights |
-| `sys/src/9/port/virtgpuwire.c` | `AGPL-3.0-only` | Check wire-format provenance and history |
-| `ryzova/compat/windows/loader.c` | `AGPL-3.0-only` | Check file history and any external contributions |
-| `ryzova/compat/windows/api.c` | `AGPL-3.0-only` | Check file history and dependencies |
-| `ryzova/compat/windows/cpu.c` | `AGPL-3.0-only` | Check interpreter-origin history |
-| `ryzova/compat/windows/crt.c` | `AGPL-3.0-only` | Check source rights |
-| `ryzova/compat/windows/files.c` | `AGPL-3.0-only` | Check source rights |
-| `ryzova/compat/windows/pe64.c` | `AGPL-3.0-only` | Check source rights |
-| `ryzova/compat/windows/native_runner.c` | `AGPL-3.0-only` | Check source rights |
-| `ryzova/compat/windows/runtime.h` | `AGPL-3.0-only` | Check source rights |
-| `ryzova/compat/windows/sync_objects.c` | `AGPL-3.0-only` | Check source rights |
+| Ryzova-origin area | Migrated headers |
+| --- | ---: |
+| `ryzova/` compatibility runtimes | 43 |
+| `scripts/` driver and compatibility tooling | 36 |
+| `sys/` Ryzova-added kernel/device/USB helpers | 14 |
+| `tests/` Ryzova source fixtures and qualification tests | 51 |
+| **Total** | **144** |
 
-Already observed with `GPL-3.0-only` headers: `ryzova/compat/linux/cpu.c`, `ryzova/compat/macos/macho64.c`, `ryzova/remote/trust.py` and `scripts/audit_licenses.py`. These samples do not establish all files' status or authorship.
+The `sys/` list includes explicitly added AMD64 kernel extensions, ARM64 `m5ecam`, USB `hciwire` and `m1class` files. This audit used tracked-file enumeration and a comparison against the pinned 9front upstream source commit `a0806493926c04ce90d4e4a46961dec30a1054dd` to identify Ryzova-added source paths. A new path in Git does **not** prove independent originality or ownership.
 
-## Proposed pilot conversions in this review branch
+### Generated code and CI
 
-The following files have proposed **header-only** `AGPL-3.0-only` → `GPL-3.0-only` changes on `policy/gplv3-community-first-20261108`, based on Ryzova-account git authorship checks:
+- `scripts/m0_native_rules.py` now emits `GPL-3.0-only` in its generated `ryzovapcirules.h` header, so future generation is consistent with the migrated file.
+- `scripts/check-identity.py` now expects `GPL-3.0-only` on the native `devryzova.c` device source.
+- `scripts/audit_licenses.py` lists `ryzova_agpl_migration_candidates` and **fails** if identified Ryzova-source files still carry `AGPL-3.0-only` headers. This does not turn the inventory into legal title verification.
+- The original `lib/legal/NOTICE`, `lib/legal/mit`, upstream history, third-party license texts and their exceptions are retained.
+- Unmarked or inherited portions, including `ryzova/compat/windows/hjfs/` foundation files without Ryzova SPDX headers, are not blanket relicensed.
+- The historical Phase 2 report has a superseded-policy note instead of being rewritten to misstate history.
 
-- `sys/src/9/port/devryzova.c`
-- `sys/src/9/port/ryzovadrvprobe.c`
-- `ryzova/compat/windows/loader.c`
+## Reproducible checks
 
-**Approval still required before merging:** the rights holder must confirm exclusive or sufficient rights for *all* contributions and any reused/generated material in these files. Git commit authorship alone is not conclusive evidence of copyright ownership. The other candidates above have not been changed in this branch.
+From a full repository checkout, run:
 
-## Per-file migration checklist
+```sh
+python3 scripts/audit_licenses.py
+python3 scripts/check-identity.py
+python3 scripts/m0_native_rules.py --check
+bash scripts/verify-foundation.sh
+```
 
-1. **Inventory:** enumerate all tracked project files, including generated headers, scripts, docs, and tests; use `python3 scripts/audit_licenses.py` and inspect its `explicit_spdx_files`. An SPDX header is only one piece of evidence.
-2. **Ownership:** examine git history and every author or contributor, check copied/generated code and embedded third-party terms; seek written permission when Ryzova does not independently hold all required rights.
-3. **Compatibility:** verify the target source and its dependencies may be distributed as proposed. Retain inherited copyright and license notices.
-4. **Header update:** only after applicable rights checks, update the specific file's SPDX identifier to `GPL-3.0-only`, keep attribution, and record the paths/commit in the PR.
-5. **Evidence:** check license inventory output, source builds and relevant tests; a green CI run does not certify legal rights.
-6. **Release gate:** separately review the complete artifact and third-party fonts/programs before publishing an ISO, binary, or archive advertised as cleared.
+Inspect `artifacts/license-inventory.json`, especially `ryzova_agpl_migration_candidates`, `errors`, explicit SPDX headers and `upstream_exceptions`. Review the latest CI runs and actual logs. A green inventory proves only its configured assertions.
 
-## Review gates before declaring Mission 1 complete
+## Rights and redistribution boundaries
 
-- [ ] Complete tracked-file SPDX and ownership inventory (not just the examples above).
-- [ ] Obtain necessary human confirmation for AGPL-to-GPLv3 changes; note any files with missing rights.
-- [ ] Complete the authorized file-by-file migration; list unresolved AGPL material explicitly.
-- [ ] Verify documentation and automated checks no longer advertise a separate proprietary relicensing program.
-- [ ] Check all upstream notices and exceptions remain intact.
-- [ ] Run relevant CI and review PR; merge only when the rights holder approves.
+1. The Ryzova source policy is intended for code over which the relevant copyright holders have sufficient rights. **Git authorship, repository ownership and an SPDX header alone do not prove this.**
+2. For external contributions, copied/generated content or third-party portions, maintainers must verify all required grants before relying on a new GPLv3 offer.
+3. Historical AGPLv3 rights granted to earlier recipients are not cancelled or made conditional on accepting GPLv3.
+4. Combined images, boot media, fonts, Ghostscript and other assets require **separate artifact-level licensing and redistribution review**. This migration does not authorize a public binary or ISO.
+5. The no-proprietary-license policy is a project decision; it does not undo pre-existing third-party contracts, if any.
+6. Plan 9/9front code maintains its original copyright and license notices, including MIT and applicable exceptions; no claim of exclusive Ryzova ownership is made.
 
-**Release caution:** This audit does not authorize a public Ryzova Kernel binary, branded ISO or complete source redistribution. See [LICENSE-REVIEW.md](LICENSE-REVIEW.md) and [RELEASE-NOTES-DRAFT.md](RELEASE-NOTES-DRAFT.md).
+## Checklist
+
+- [x] Identify new-source files relative to pinned upstream and inspect Ryzova-origin AGPL headers.
+- [x] Update 144 identified Ryzova AGPL source/test/tooling headers to GPLv3-only in the review branch.
+- [x] Keep original Plan 9/9front sources and notices unchanged.
+- [x] Preserve historical AGPL license text and older grants.
+- [x] Correct generator template, identity assertion, license inventory and contributor-policy text.
+- [x] Retire separate proprietary/commercial code relicensing offer in policy documentation.
+- [ ] Confirm every relevant author/contributor and any copied or generated material has sufficient GPLv3 relicensing rights; external independent legal review if required.
+- [ ] Verify final CI results after all changes and record any exceptions.
+- [ ] Complete independent artifact-by-artifact rights review before publishing a kernel binary/ISO.
+
+**Source migration does not equal production or distribution release approval.** See [LICENSE-REVIEW.md](LICENSE-REVIEW.md), [LICENSE.md](../LICENSE.md) and [RELEASE-NOTES-DRAFT.md](RELEASE-NOTES-DRAFT.md).
