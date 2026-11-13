@@ -48,6 +48,7 @@ enum {
 	IMSC	=	0x38>>2,
 		TXIM	= 1<<5,
 		RXIM	= 1<<4,
+		RTIM	= 1<<6,	/* RX timeout: short input below FIFO trigger */
 
 	RIS	=	0x3c>>2,
 	MIS	=	0x40>>2,
@@ -149,7 +150,9 @@ enable(Uart *uart, int ie)
 	disable(uart);
 	if(ie){
 		intrenable(IRQuart, interrupt, uart, BUSUNKNOWN, uart->name);
-		reg[IMSC] = TXIM|RXIM;
+		/* QEMU can deliver short lines (e.g. !rc) below the RX FIFO
+		 * threshold. Unmask the PL011 receive-timeout IRQ as well. */
+		reg[IMSC] = TXIM|RXIM|RTIM;
 	}
 	uarton(uart);
 }
